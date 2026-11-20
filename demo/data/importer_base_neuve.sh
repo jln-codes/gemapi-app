@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DB="${1:-sig_milieux}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/../../model/schema.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/01_techniciens.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/03_communes.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/04_prestataires.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/05_types_prestations.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/09_ah.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/10_sites_terrestres.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/11_cours_eau.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/12_ah_sections.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/digues.sql"
+psql -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/15_prestations.sql"

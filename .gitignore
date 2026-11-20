@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+# Archives générées ; la construction utilise uniquement plugin/dist/.
+/plugin/dist/
+/dist/
+/audits/*
+!/audits/LIDAR-PLUGIN-01.md
+!/audits/LIDAR-PLUGIN-02.md
+!/audits/LIDAR-PLUGIN-03.md
+!/audits/LIDAR-PLUGIN-04.md
+# Registre local des accès CABBALR : ne jamais versionner les mots de passe.
+/CABBALR_IDENTIFIANTS.local.txt
+# Registre local des accès DEMO : ne jamais versionner les mots de passe.
+/DEMO_IDENTIFIANTS.local.txt
+/.env
+/.env.*
+*.log
+/docs/**/*.pdf
+/docs/**/*.png
+/docs/**/*.csv
+/docs/**/*.qgz
+/MISTRAL_API_KEY.txt
+
+# Rapports pérennes de transition.
+!/audits/GEMAPI-TRANSITION-01.md
+!/audits/LIDAR-EXTRACT-01.md

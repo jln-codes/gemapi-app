@@ -1,0 +1,76 @@
+# Rôles PostgreSQL du schéma `milieux`
+
+Matrice cible : chaque utilisateur PostgreSQL possède un compte individuel `LOGIN`. Les rôles collectifs `NOLOGIN` sont hiérarchiques : Consultation → Gestion des prestations → Gestion du patrimoine ; chaque rôle hérite des droits du précédent.
+
+HYDRO-ASSOC-01 ajoute le rattachement `prestations.ah_section_id` sans étendre ces
+permissions : Consultation lit les sections et leurs prestations ; Prestations
+écrit la prestation, y compris son rattachement, mais ne modifie pas la section ;
+Patrimoine conserve l'administration des sections. La FK `ON DELETE RESTRICT`
+protège les sections encore référencées. Le trigger privé d'admissibilité porte
+les verrous partagés nécessaires sans accorder UPDATE au profil Prestations.
+La géométrie propre est obligatoire pour ce septième mode ; ses huit mesures
+stockées décrivent l'intervention, jamais toute la section. Voir le
+[contrat et le déploiement](../docs/qgis_relations.md#hydro-assoc-01--septième-rattachement-direct).
+
+| Tables du [schéma courant](schema.sql) | Consultation | Gestion des prestations | Gestion du patrimoine |
+| --- | --- | --- | --- |
+| `prestations` | S | SIUD | SIUD |
+| `ah`, `ah_stockage`, `ah_ouvrage`, `ah_sections`, `sites_terrestres`, `sites_zones`, `cours_eau`, `digues`, `digues_reperes` | S | S | SIUD |
+| `techniciens`, `prestataires`, `communes`, `prestations_categorie`, `types_prestations`, `statuts_prestations` | S | S | S |
+| Vues `prestations_carte`, `prestations_fiches`, `digues_carte`, `ah_sections_carte`, `prestations__ah`, `prestations__sites_terrestres` | S | S | S |
+| `TRUNCATE` (toutes les tables) | — | — | — |
+
+S = `SELECT`, I = `INSERT`, U = `UPDATE`, D = `DELETE` ; — = aucun droit. Le service SIG administre l'installation PostgreSQL, les référentiels réservés et la structure des tables. PostgreSQL garantit ces droits, indépendamment du plugin QGIS. `DELETE` peut supprimer plusieurs lignes.
+
+Traçabilité : `modifie_par` enregistre le compte PostgreSQL authentifié (`session_user`). Le technicien responsable (`prestations.technicien_id`) est un attribut métier, qu'il dispose ou non d'un compte PostgreSQL ; il ne confère aucun droit.
+
+Les gardes internes `assert_prestation_relations(uuid)` et
+`assert_digue_repere(uuid)` ne sont pas exécutables directement par les profils
+métier : leur droit `EXECUTE` est retiré à `PUBLIC`. Leurs triggers les appellent
+avec les droits du propriétaire, sans élargir la matrice de lecture et d'écriture.
+
+`roles_milieux.sql` crée uniquement les trois rôles collectifs `NOLOGIN`. Les
+vues `prestations__*` sont des vues de consultation, pas des tables d'association
+à modifier. Le profil patrimoine possède aussi les droits de lecture et de
+verrouillage du support hydrographique nécessaires aux préparations serveur
+des digues et sections AH ; leurs géométries ne sont pas éditées librement.
+
+Les comptes `LOGIN` héritent d'un seul profil métier, sans option ADMIN,
+SUPERUSER, CREATEDB, CREATEROLE, REPLICATION ou BYPASSRLS. Leur `search_path`
+doit inclure `pg_catalog`, le schéma effectif de PostGIS puis `milieux` ; les
+paramètres de rôle ne sont pas hérités par simple appartenance à un groupe.
+Les mots de passe doivent être définis hors des SQL versionnés. Le poste CABBALR
+conserve ses trois mots de passe dans `CABBALR_IDENTIFIANTS.local.txt`, fichier
+texte privé à la racine, ignoré par Git. QGIS les demande à l'ouverture du projet,
+sans dépendance à `.pgpass`, aux services ou au coffre système ; voir le
+[registre d'accès](../CABBALR_ACCES.md).
+
+Pour CABBALR, les comptes fonctionnels validés sont `cabbalr_lecture`,
+`cabbalr_prestations` et `cabbalr_patrimoine`, respectivement associés aux trois
+profils ci-dessus. Une connexion partagée trace le compte fonctionnel utilisé,
+pas une personne. Ces comptes PostgreSQL ne sont pas des utilisateurs Supabase
+Auth et n'ont aucun droit d'administration du projet Supabase.
+
+L'installation CABBALR utilise le projet `cabbalr`
+(`fmgeqjspogvyhprvinnw`, organisation `jln-codes`, région `eu-west-1`),
+distinct du démonstrateur. Pour le pooler **Session**, port 5432, les noms de
+connexion sont respectivement
+`cabbalr_lecture.fmgeqjspogvyhprvinnw`,
+`cabbalr_prestations.fmgeqjspogvyhprvinnw` et
+`cabbalr_patrimoine.fmgeqjspogvyhprvinnw`. PostgreSQL conserve le nom court
+comme `session_user` ; le suffixe sert au routage du pooler.
+L'hôte validé est `aws-1-eu-west-1.pooler.supabase.com`.
+
+Le fichier local de mots de passe est exclu du suivi Git. Les anciennes entrées
+CABBALR du coffre système et des fichiers libpq ont été supprimées après validation
+des nouveaux accès. Aucune rotation n'est effectuée sans validation explicite ;
+le compte administrateur `postgres` n'est pas concerné.
+
+Les deux projets QGIS Démo et CABBALR, leurs connexions propres et leur
+synchronisation sont décrits dans [les instructions QGIS](../docs/qgis_relations.md#connexions-et-comptes).
+
+Les fonctions `digue_enregistrer` et `digue_supprimer` sont exécutables uniquement
+par Patrimoine et utilisent `SECURITY INVOKER`. Elles ne confèrent aucun droit
+supplémentaire sur les tables. La première contrôle aussi la signature du tracé
+prévisualisé, la révision du repère et la date de modification du parent. La
+seconde vérifie les prestations rattachées sous verrou avant toute suppression.

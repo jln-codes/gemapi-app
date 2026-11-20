@@ -1,0 +1,11 @@
+[general]
+name=GEMAPI-App
+qgisMinimumVersion=3.44
+version=0.8.1
+author=SIG Milieux
+email=
+description=Assistant Mistral et dictée Voxtral avec brouillon vérifié et création humaine ; création, consultation, édition et suppression des prestations ; rapports PDF avec cartes et photographies facultatives.
+category=Vector
+about=Gestion des prestations avec geometrie, associations, photographies et droits PostgreSQL ; rapports PDF filtres avec zero a trois niveaux de regroupement.
+experimental=True
+icon=icons/icon.png

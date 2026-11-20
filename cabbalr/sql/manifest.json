@@ -1,0 +1,46 @@
+{
+  "counts": {
+    "ah": 9,
+    "ah_ouvrage": 9,
+    "ah_sections": 8,
+    "ah_stockage": 8,
+    "communes": 100,
+    "cours_eau": 170,
+    "digues": 15,
+    "digues_reperes": 15,
+    "prestataires": 6,
+    "prestations_categorie": 4,
+    "sites_terrestres": 16,
+    "sites_zones": 41,
+    "techniciens": 10,
+    "types_prestations": 9
+  },
+  "model_sha256": "cd5471088fa1129ca68ce42866c67f79c12ef6984b436466f5bef92d9e898fd5",
+  "schema": "milieux",
+  "sources": {
+    "ah.gpkg": {
+      "sha256": "7c9043798c2f2f588a867429fc9edc5cc51a6abf05449d2b55be17de1a3ad4ff"
+    },
+    "communes.gpkg": {
+      "sha256": "2cb4e1e6e7d9f3b476123f4def4c60c3424e6c880bcc91b0281128a88b6df341"
+    },
+    "cours_eau.gpkg": {
+      "sha256": "ca57308cf212342e8f941d8d2120c8994baf95099fc9f96271daf3060cae27b9"
+    },
+    "digues.gpkg": {
+      "sha256": "9e2704f2f5e738cb171a259373ceb9c92806e12d8fbcd7b910369ca4d2d61da9"
+    },
+    "referentiels.gpkg": {
+      "sha256": "81345e1b4da25d1c18c743bc85279e94b6affddbd6eb6b8dbac56117bf7fc176"
+    },
+    "sites_terrestres.gpkg": {
+      "sha256": "135d0889d95dc7d6b3f38bb418e6bd7c363fd4cb6a352cc9c2d8f886e0d215bb"
+    },
+    "sites_zones.gpkg": {
+      "sha256": "0a1db53236e083d135afa552f52086703d5c95a48c8032375c7ad7fa6d30617f"
+    },
+    "techniciens.gpkg": {
+      "sha256": "6eadff1005e6fa9f0b414b6b1f84717480bd30f85ffcb56206454f3aa5b2aa2e"
+    }
+  }
+}

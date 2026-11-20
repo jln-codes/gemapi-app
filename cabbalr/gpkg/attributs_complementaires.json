@@ -1,0 +1,432 @@
+{
+  "layers": {
+    "sites_terrestres": {
+      "columns": {
+        "surface_ha": "MEDIUMINT",
+        "surface_m2": "MEDIUMINT"
+      },
+      "rows": [
+        {
+          "id": "0d59bb60-e32c-49dc-a35f-bf51eeb38bd1",
+          "surface_ha": 20,
+          "surface_m2": 197588
+        },
+        {
+          "id": "15344535-b5e9-4721-9447-908e4d4e0f77",
+          "surface_ha": 19,
+          "surface_m2": 186848
+        },
+        {
+          "id": "34aff253-456d-4c3f-ac75-cc0ea6bea94c",
+          "surface_ha": 16,
+          "surface_m2": 160280
+        },
+        {
+          "id": "3c149c30-08e3-4a51-aeb2-ea1fd854ed92",
+          "surface_ha": 31,
+          "surface_m2": 312614
+        },
+        {
+          "id": "6fc9f59c-3859-48b5-9521-7949db951348",
+          "surface_ha": 19,
+          "surface_m2": 189741
+        },
+        {
+          "id": "7944ec77-e14e-413f-8423-94f5a6ad7688",
+          "surface_ha": 2,
+          "surface_m2": 18809
+        },
+        {
+          "id": "801a8946-3d7d-4a52-a8fe-7f89c12edb89",
+          "surface_ha": 38,
+          "surface_m2": 382131
+        },
+        {
+          "id": "804762cf-ff63-457a-bd33-27bf78bde3c4",
+          "surface_ha": 6,
+          "surface_m2": 62175
+        },
+        {
+          "id": "9a85a16d-b33b-49f8-9433-e21dcbca4f71",
+          "surface_ha": 6,
+          "surface_m2": 58783
+        },
+        {
+          "id": "b2c65abc-5d78-4698-8abc-74ab41642e14",
+          "surface_ha": 28,
+          "surface_m2": 275024
+        },
+        {
+          "id": "c3fd4fb1-c864-4882-989d-de354dff0f1c",
+          "surface_ha": 13,
+          "surface_m2": 128785
+        },
+        {
+          "id": "d83dd6d6-2541-4a6d-97a9-36eb7faa4781",
+          "surface_ha": 8,
+          "surface_m2": 82520
+        },
+        {
+          "id": "e39548e4-8cc3-4e13-a5af-a58099b88de0",
+          "surface_ha": 5,
+          "surface_m2": 49836
+        },
+        {
+          "id": "e7834a53-d115-4255-ad2c-27246113d07b",
+          "surface_ha": 32,
+          "surface_m2": 322813
+        },
+        {
+          "id": "ed338cf4-6b3a-41df-baae-bbd95de26759",
+          "surface_ha": 25,
+          "surface_m2": 254499
+        },
+        {
+          "id": "f34a5c77-1180-4fd8-b23f-1c555312a144",
+          "surface_ha": 83,
+          "surface_m2": 831067
+        }
+      ]
+    },
+    "sites_zones": {
+      "columns": {
+        "entretien": "TEXT(256)",
+        "gestionnaire": "TEXT(256)",
+        "longueur": "MEDIUMINT",
+        "niveau": "MEDIUMINT",
+        "type": "TEXT(256)"
+      },
+      "rows": [
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "0509f706-258d-4e4b-9151-dec2e7e22282",
+          "longueur": 78,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "0d996a27-4cf1-4151-9e84-31bb08485c08",
+          "longueur": 108,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "11a1f6a7-16bb-45d9-8155-7278f779eee5",
+          "longueur": 221,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "189d022b-c237-4076-b8c0-1797ce579d22",
+          "longueur": 32,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "1932ae43-8510-4d5e-9484-3389a3773be4",
+          "longueur": 452,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "2692fd63-6d2d-4d27-b0d9-5bfaffb81c7a",
+          "longueur": 89,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "2e778d96-5a23-47c3-b614-cfb6cee5f4fb",
+          "longueur": 26,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "3b47e863-af19-48e2-b002-53a45d722b56",
+          "longueur": 561,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "43f4fe2d-de54-41d0-ab70-b72302d66e48",
+          "longueur": 185,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "4db081a0-d7af-4c43-a793-fdb89d487b4f",
+          "longueur": 1575,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "4f97aeed-cfce-4864-b72c-c8a9ad9088ad",
+          "longueur": 98,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "52306ce7-4e51-4f79-a886-7666749118ca",
+          "longueur": 593,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "52abf5af-7fa5-44e6-a560-8b291d3e3d83",
+          "longueur": 150,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "540b716e-8d1a-45e8-8e5b-d79a44363929",
+          "longueur": 40,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "5cc99d8d-4065-4f3d-b821-693c6de422f2",
+          "longueur": 65,
+          "niveau": 2,
+          "type": "Escalier"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "629c90e4-1333-442e-a3c5-252f2e1d7aa7",
+          "longueur": 276,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "644ce3c8-334c-40bc-8112-350d9c9e41f1",
+          "longueur": 91,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "6934df9e-c826-4c90-b12d-beb34112926d",
+          "longueur": 63,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "6e5fe1cf-45b5-49a6-ba21-94d3b8210d3c",
+          "longueur": 155,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "769888de-70f7-4caf-94de-fcecd28dd5e1",
+          "longueur": 884,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "8142e885-87ed-4f07-854a-59cd369dfcf9",
+          "longueur": 1250,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "866e206e-abfd-432e-b345-9f848c6b5308",
+          "longueur": 165,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "Patrimoine",
+          "id": "8b61b769-01c7-41f3-9bf9-c8ce577aa1c3",
+          "longueur": 287,
+          "niveau": 2,
+          "type": "Sentier randonnée"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "8da91a12-1157-4d66-a59a-8b850a9a1a9c",
+          "longueur": 549,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "91151834-9066-4d14-8b61-f34724fc51da",
+          "longueur": 705,
+          "niveau": 2,
+          "type": "Sentier randonnée"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "9346a660-ff10-4133-b4a9-9a1b147daa44",
+          "longueur": 590,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "98313186-57d6-4e39-bce4-3f09c0729439",
+          "longueur": 106,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "9c0f1d97-0bfb-4eb0-9db3-a4713abc579c",
+          "longueur": 581,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "9e1afa63-054c-4a23-b0a4-c7c95c4cafed",
+          "longueur": 55,
+          "niveau": 0,
+          "type": "Sentier VTT"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "a312b582-ffa5-4d1b-a522-0b3e0e68dbe0",
+          "longueur": 149,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "ae0987b4-6774-4c78-971d-e0d26e55fd8f",
+          "longueur": 201,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "b1c7e198-0a80-499a-8938-eeab05093ad7",
+          "longueur": 23,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "bc47b479-ca0d-4cba-b559-16bfd8fa9053",
+          "longueur": 275,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "bf44de73-4197-44bc-9c91-4c81c83db9ee",
+          "longueur": 281,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "c07a7449-309a-437e-81fe-f0972d6549d7",
+          "longueur": 45,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "c73a7e63-a90a-48ab-a485-e02976c2704c",
+          "longueur": 229,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "c78d9075-243a-426d-ad40-44faa74492da",
+          "longueur": 75,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "cb004b5a-8e65-4160-b1fb-432f1b1df342",
+          "longueur": 382,
+          "niveau": 2,
+          "type": "Sentier secondaire"
+        },
+        {
+          "entretien": "2 fois par mois entre 1 avril et le 31 octobre",
+          "gestionnaire": "DMNR",
+          "id": "ccf86261-4f9d-4d79-84cd-c228f6acdff4",
+          "longueur": 135,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "e174502b-a0f0-4e7c-b3a7-278ddd86f124",
+          "longueur": 1555,
+          "niveau": 0,
+          "type": "Grillage"
+        },
+        {
+          "entretien": null,
+          "gestionnaire": null,
+          "id": "fc8cc743-4226-4ad1-a4ca-c0f8976d8bc4",
+          "longueur": 462,
+          "niveau": 2,
+          "type": "Sentier pédestre"
+        }
+      ]
+    }
+  },
+  "scope": "Attributs hors modèle canonique ; destination à valider, aucun SQL de conservation appliqué."
+}

@@ -1,0 +1,7 @@
+demo/data/importer_base_neuve.sh text eol=lf
+cabbalr/sql/* text eol=lf
+cabbalr/gpkg/attributs_complementaires.json text eol=lf
+
+# Unified diff context lines require a leading space, including empty lines.
+audits/PERF-QGIS-06/*.patch whitespace=-blank-at-eol
+audits/PERF-QGIS-06/*.csv text eol=lf

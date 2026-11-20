@@ -1,0 +1,181 @@
+J'ai examiné les exports SQL de **CABBALR** et de **Démo** dans le dépôt `sig-prestations`, branche `development`.
+
+Voici 20 phrases utilisant des **noms réellement présents dans les jeux de données** : patrimoines, types de prestations, prestataires et techniciens.
+
+Les interventions et leurs observations sont des scénarios fictifs de test, pas des opérations historiques attestées. J'ai volontairement varié les formulations, les dates et les informations destinées au champ `description`.
+
+## **1. CABBALR — 10 phrases**
+
+**Test 1**
+
+Date de fin manquante
+
+Je veux créer une intervention de débroussaillage sur le Talus ZEC Ourton. C'était le onze novembre deux mille vingt-six, l'entreprise Noeux Environnement est intervenue et le suivi était assuré par Benoît Quentin. Le chantier est terminé. Il y avait beaucoup de ronces au pied du talus, ce qui gênait les inspections.
+
+&#x20;Copier
+
+**Test 2**
+
+Chantier planifié
+
+Il faut programmer un chantier de fauche sur le Talus 1 ZEC Comté, du 3 au 5 décembre 2026. La Régie réalisera les travaux sous la responsabilité de Laurent Massart. Statut planifié. L'objectif est de dégager la végétation qui empêche de voir correctement le pied de l'ouvrage.
+
+&#x20;Copier
+
+**Test 3**
+
+Informations désordonnées
+
+Réagir, Laeticia Lamiaux, du 19 au 22 novembre 2026, c'est en cours. Ah oui, je parle de l'élagage sur le Talus 2 ZEC Comté. Plusieurs branches surplombent le chemin d'accès et doivent être retirées.
+
+&#x20;Copier
+
+**Test 4**
+
+Expression métier libre
+
+Forêt et Paysages a terminé le retrait d'embâcles sur le Talus RC Caucourt le 15 octobre 2026. C'est Aline Pruvost qui suivait l'intervention. On avait notamment des branchages accumulés près de l'accès de maintenance.
+
+&#x20;Copier
+
+**Test 5**
+
+Stockage hydraulique
+
+Créer une prestation de curage sur le Stockage ZEC Bellerive, prévue du 1er au 8 décembre 2026. Le prestataire sera AVIEE et le technicien Mickael Macquet. Statut planifié. Une accumulation de sédiments est signalée près de la sortie du bassin.
+
+&#x20;Copier
+
+**Test 6**
+
+Hésitations et reformulation
+
+Alors, pour le bassin de la Comté, enfin le Stockage ZEC La Comté, il faut enregistrer un suivi de milieu du 19 au 25 novembre 2026. C'est en cours, avec Chemins vers l'Emploi et Vincent Canoen. On a observé des traces de ruissellement dans la partie basse.
+
+&#x20;Copier
+
+**Test 7**
+
+Description complémentaire
+
+Je voudrais prévoir une restauration écologique sur le Stockage ZEC Paradis, du 7 au 18 décembre 2026, confiée à Noeux Environnement. Jérémie Duval sera responsable du suivi. La prestation est planifiée. Il faudra favoriser la reprise de la végétation sur les zones dénudées.
+
+&#x20;Copier
+
+**Test 8**
+
+Zone terrestre
+
+Une étude a été réalisée sur l'Escalier du Site de la Vallée Carreau les 4 et 5 novembre 2026. C'était AVIEE, avec Julien Lorion comme technicien responsable. Statut terminé. Plusieurs marches semblent dégradées et nécessitent une vérification de leur stabilité.
+
+&#x20;Copier
+
+**Test 9**
+
+Synonymes et contexte
+
+La société Régie a débroussaillé le Sentier VTT du Site de la Vallée Carreau les 15 et 16 novembre 2026. Tony Rolland assurait le suivi. C'est terminé. La végétation débordait largement sur le passage et gênait les usagers.
+
+&#x20;Copier
+
+**Test 10**
+
+Homonymie volontaire
+
+Je voudrais enregistrer un chantier d'élagage sur le Sentier pédestre du Site de la Vallée Carreau, du 19 au 23 novembre 2026. Le travail est en cours avec Forêt et Paysages et Benoît Sauvage. Plusieurs branches basses doivent être supprimées.
+
+&#x20;Copier
+
+Le test 10 est volontairement ambigu : CABBALR comporte 24 zones nommées « Sentier pédestre ». Dystopic doit demander de choisir l'objet exact, et non sélectionner arbitrairement un UUID.
+
+## **2. Démo — 10 phrases**
+
+**Test 1**
+
+Phrase naturelle
+
+Je voudrais créer une intervention de débroussaillage sur le Remblai1 ZEC Nave. Paysages et Milieux a effectué les travaux le 11 novembre 2026, sous la responsabilité de Jean Dupont. Le chantier est terminé. Les broussailles empêchaient de circuler facilement le long du remblai.
+
+&#x20;Copier
+
+**Test 2**
+
+Chantier en cours
+
+Sur le Remblai2 ZEC Clarence, la Régie technique des milieux réalise un chantier d'élagage du 19 au 21 novembre 2026. David Petit est responsable, le statut est en cours. Plusieurs branches mortes menacent de tomber sur le passage.
+
+&#x20;Copier
+
+**Test 3**
+
+Vocabulaire libre
+
+Travaux hydrauliques du bassin est intervenu les 8 et 9 octobre 2026 sur le Remblai RC Bois des Aulnes pour retirer des embâcles. Eric Martin suivait le chantier, maintenant terminé. Les branches accumulées gênaient les accès d'entretien.
+
+&#x20;Copier
+
+**Test 4**
+
+Curage planifié
+
+Programmer une prestation de curage du Bassin ZEC Nave entre le 5 et le 12 décembre 2026. Entreprise Rivage Nord, technicien Julien Dubois, statut planifié. Des dépôts de vase sont visibles dans le fond du bassin et doivent être évacués.
+
+&#x20;Copier
+
+**Test 5**
+
+Dates prononcées
+
+La société Atelier des Eaux a fait une fauche sur le Bassin RC Pré Vert du onze zéro neuf deux mille vingt-six au douze zéro neuf deux mille vingt-six. David Petit était chargé du suivi. C'est terminé. L'herbe était particulièrement haute près de l'entrée.
+
+&#x20;Copier
+
+**Test 6**
+
+Étude et description
+
+Prévoir une étude sur le Bassin ZEC Val des Prés du 1er au 3 février 2027. L'entreprise Écologie Terrain réalisera cette prestation, avec Eric Martin comme technicien responsable. Statut planifié. Il faudra examiner les possibilités d'amélioration de l'infiltration dans le bassin.
+
+&#x20;Copier
+
+**Test 7**
+
+Zone et site parent
+
+Je souhaite planifier une restauration écologique sur la Zone naturelle du secteur 01, dans l'Espace naturel du Bois des Aulnes, du 15 au 26 décembre 2026. La Régie technique des milieux interviendra avec Julien Dubois comme responsable. Plusieurs secteurs présentent une végétation dégradée.
+
+&#x20;Copier
+
+**Test 8**
+
+Phrase non structurée
+
+La haie du secteur 06, dans le Bois du Petit Marais, on l'a fait élaguer par Paysages et Milieux. C'était du 10 au 12 novembre 2026, avec Jean Dupont pour le suivi. C'est terminé. Certaines branches débordaient sur le chemin voisin.
+
+&#x20;Copier
+
+**Test 9**
+
+Suivi de milieu
+
+Un suivi de milieu est en cours sur la Zone naturelle du secteur 03 du Terril du Bois des Dames. Écologie Terrain intervient du 19 au 30 novembre 2026, sous la responsabilité de David Petit. On souhaite surveiller l'évolution de la végétation spontanée et les éventuelles espèces invasives.
+
+&#x20;Copier
+
+**Test 10**
+
+Statut annulé
+
+L'étude prévue sur le Point d'observation du secteur 07 dans le Parc du Moulin Vert a finalement été annulée. Elle était programmée du 12 au 13 novembre 2026, avec Atelier des Eaux et Eric Martin. L'accès était impraticable à cause de l'état du terrain et l'équipe n'a pas pu intervenir.
+
+&#x20;Copier
+
+## **Ce que le corpus permettra d'évaluer**
+
+Les 20 phrases couvrent les trois familles autorisées : `ah_ouvrage`, `ah_stockage` et `sites_zones`, ainsi que les neuf types de prestations du référentiel.
+
+Les critères principaux seront **la résolution exacte des UUID**, l'identification des champs structurés et la génération d'une `description` contenant uniquement les informations métier complémentaires.
+
+J'ai volontairement inclus des informations manquantes, des dates parlées, des formulations désordonnées et une homonymie réelle pour vérifier que Dystopic sait demander une précision plutôt qu'inventer une réponse.
+
+Les référentiels sont vérifiés dans les exports SQL versionnés. Leur correspondance avec le contenu actuel des bases connectées reste à confirmer lors des essais.

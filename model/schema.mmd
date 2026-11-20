@@ -1,0 +1,216 @@
+%% SIG Prestations — reflet du schema SQL fourni, hors vues et triggers
+%% EPSG:3950. Les champs facultatifs sont notes dans les commentaires.
+%% Relations spatiales par intersection non representees.
+erDiagram
+    direction TB
+
+    TECHNICIENS {
+        uuid id PK
+        text nom
+        text prenom "nullable"
+        text login UK "nullable"
+        boolean actif
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    COMMUNES {
+        uuid id PK
+        text insee UK
+        text nom
+        geometry geom "MultiPolygon 3950 NOT NULL"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    COURS_EAU {
+        uuid id PK
+        text nom "obligatoire; non blanc"
+        text type_ecoulement "nullable"
+        boolean direction "nullable; validation humaine"
+        integer section "calculé ST_NumGeometries"
+        boolean valide "calculé direction IS TRUE et monosection"
+        text source
+        geometry geom "MultiLineString 3950 NOT NULL"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH {
+        uuid id PK
+        text nom
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH_STOCKAGE {
+        uuid id PK
+        uuid ah_id FK,UK
+        text nom
+        text categorie "nullable"
+        numeric surface_ha "nullable"
+        geometry geom "Polygon 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH_OUVRAGE {
+        uuid id PK
+        uuid ah_id FK
+        text nom "nullable"
+        geometry geom "LineString 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH_SECTIONS {
+        uuid id PK
+        uuid ah_id FK "parent obligatoire"
+        uuid cours_eau_id FK "cours d'eau qualifié à la validation"
+        double debut_fraction "0 <= début < fin <= 1"
+        double fin_fraction
+        geometry geom_reference "LineString 3950 2D positive figée"
+        text geom_cours_eau_signature "MD5 EWKB"
+        integer revision_validation "1 puis incrément explicite pour revalider"
+        text valide_par "compte PostgreSQL"
+        timestamptz date_validation
+        text commentaire "nullable"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    SITES_TERRESTRES {
+        uuid id PK
+        text nom
+        geometry geom "MultiPolygon 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    SITES_ZONES {
+        uuid id PK
+        uuid site_terrestre_id FK
+        text nom
+        text type_site "nullable"
+        numeric surface_ha "nullable"
+        geometry geom "MultiPoint/MultiLineString/MultiPolygon 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    PRESTATAIRES {
+        uuid id PK
+        text nom
+        boolean actif
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    PRESTATIONS_CATEGORIE {
+        uuid id PK
+        text libelle UK
+        integer ordre
+    }
+    PRESTATIONS_CATEGORIE ||..o{ TYPES_PRESTATIONS : regroupe
+    TYPES_PRESTATIONS {
+        uuid categorie_id FK
+        uuid id PK
+        text code UK
+        text libelle
+        boolean actif
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    STATUTS_PRESTATIONS {
+        uuid id PK
+        text code UK
+        text libelle UK
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    PRESTATIONS {
+        uuid cours_eau_id FK "nullable"
+        uuid digue_id FK "nullable"
+        uuid ah_stockage_id FK "nullable"
+        uuid ah_ouvrage_id FK "nullable"
+        uuid ah_section_id FK "nullable; geometrie propre obligatoire"
+        uuid site_terrestre_id FK "nullable"
+        uuid site_zone_id FK "nullable"
+        uuid id PK
+        text intitule "nullable"
+        uuid prestataire_id FK
+        uuid type_prestation_id FK
+        uuid statut_id FK
+        date date_debut
+        date date_fin
+        numeric quantite "nullable"
+        text unite "nullable"
+        text position "NOT NULL, défaut Indéfini ; cinq valeurs"
+        text rive "NOT NULL, défaut Indéfinie ; quatre valeurs"
+        text description "nullable"
+        text photo_1 "nullable"
+        text photo_1_commentaire "nullable"
+        text photo_2 "nullable"
+        text photo_2_commentaire "nullable"
+        geometry geom "3950 2D, obligatoire cours d'eau et digues, Multi* obligatoire sur site, NULL sur zone"
+        uuid technicien_id FK "NOT NULL"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+        integer nombre_points "mesure enregistrée nullable"
+        double longueur_m "mesure enregistrée nullable"
+        double surface_m2 "mesure enregistrée nullable"
+        double surface_ha "générée depuis surface_m2"
+        text type_geometrie "mesure enregistrée nullable"
+        text type_geometrie_postgis "nullable"
+        boolean possede_geometrie "calcul serveur"
+        text origine_mesures "Prestation ou Patrimoine ou Aucune géométrie"
+    }
+    DIGUES {
+        uuid id PK
+        text nom
+        text identifiant_externe "nullable"
+        text commentaire "nullable"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    DIGUES_REPERES {
+        uuid id PK
+        uuid digue_id FK,UK "un repère obligatoire par digue"
+        uuid riviere_id FK
+        text rive "G ou D"
+        double debut_fraction "0..1"
+        double fin_fraction "0..1 ; debut < fin"
+        geometry geom_reference "LineString 3950 figee"
+        text geom_riviere_signature
+        integer revision_validation "1 puis +1 à chaque validation explicite"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    TECHNICIENS ||..o{ PRESTATIONS : responsable
+    PRESTATAIRES ||..o{ PRESTATIONS : realise
+    TYPES_PRESTATIONS ||..o{ PRESTATIONS : classifie
+    STATUTS_PRESTATIONS ||..o{ PRESTATIONS : qualifie
+    AH ||--o| AH_STOCKAGE : stockage_facultatif
+    AH ||--o{ AH_OUVRAGE : ouvrages
+    AH ||--o{ AH_SECTIONS : sections_acceptees
+    COURS_EAU ||--o{ AH_SECTIONS : support
+    %% AH_SECTIONS : unique (ah_id,cours_eau_id,debut_fraction,fin_fraction).
+    %% AH_SECTIONS_CARTE expose la conformité sans réécrire les instantanés.
+    SITES_TERRESTRES ||--o{ SITES_ZONES : zones
+    SITES_ZONES |o--o{ PRESTATIONS : "site_zone_id"
+    DIGUES ||--|| DIGUES_REPERES : contient
+    COURS_EAU ||--o{ DIGUES_REPERES : repere
+
+    %% Toute prestation choisit exactement une des sept FK patrimoniales.
+    %% date_fin >= date_debut est obligatoire.
+    %% Position et rive non indefinies sont reservees aux modes cours d eau,
+    %% digue, ouvrage AH et section AH ; stockage et sites gardent les defauts.
+    %% ah_section_id reference AH_SECTIONS.id (RESTRICT), jamais AH.id.
+    %% Section AH : geometrie propre obligatoire ; mesures de l'intervention.
+    %% PRESTATIONS_CARTE utilise SITES_ZONES.geom pour le mode zone ; PRESTATIONS.geom reste NULL.
+    %% modifie_par est renseigne automatiquement avec session_user.
+    %% Les sections exigent une seule partie LineString simple dans
+    %% la MultiLineString du cours d eau.
+    %% Digues et sections AH : direction TRUE ET valide TRUE avant tout calcul.
+    %% Les references existantes non qualifiees restent figees et signalees.
+
+    COURS_EAU |o--o{ PRESTATIONS : "cours_eau_id"
+    DIGUES |o--o{ PRESTATIONS : "digue_id"
+    AH_STOCKAGE |o--o{ PRESTATIONS : "ah_stockage_id"
+    AH_OUVRAGE |o--o{ PRESTATIONS : "ah_ouvrage_id"
+    AH_SECTIONS |o--o{ PRESTATIONS : "ah_section_id"
+    %% prestations_carte : zone.geom imposee ; AH : geom propre prioritaire,
+    %% sinon geom du stockage/ouvrage. Aucune copie dans PRESTATIONS.geom.
+    %% MESURES-07 : les huit valeurs de PRESTATIONS sont exposees directement
+    %% par prestations_carte et prestations_fiches, sans recalcul dans les vues.
+    SITES_TERRESTRES |o--o{ PRESTATIONS : "site_terrestre_id"
