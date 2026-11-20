@@ -1,0 +1,39 @@
+name: Politique des branches
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+    branches: [development, main, sirs]
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: branch-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tester les scénarios Git isolés
+        run: python3 tools/test_git_sirs.py
+      - name: Vérifier le sens de propagation et la fusion proposée
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          TARGET: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          SOURCE: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          if [[ "$TARGET" == sirs ]]; then
+            python3 tools/git_sirs.py validate --sirs "$BASE"
+          else
+            COMMON=origin/development
+            if [[ "$TARGET" == development ]]; then COMMON="$BASE"; fi
+            python3 tools/git_sirs.py guard --base "$BASE" --head "$HEAD" \
+              --common "$COMMON" --sirs origin/sirs --source "$SOURCE"
+          fi

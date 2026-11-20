@@ -1,0 +1,61 @@
+name: Synchroniser development vers SIRS
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+# A pending run may be replaced by a newer push; each run fetches the latest tip
+# and therefore includes all preceding commits, regardless of queue ordering.
+concurrency:
+  group: development-to-sirs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  direct:
+    if: vars.SIRS_SYNC_MODE == '' || vars.SIRS_SYNC_MODE == 'direct'
+    name: sync-sirs-direct
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Tester les scénarios Git isolés
+        run: python3 tools/test_git_sirs.py
+      - name: Fusionner, contrôler, publier et vérifier origin/sirs
+        run: python3 tools/git_sirs.py sync
+
+  protected:
+    if: vars.SIRS_SYNC_MODE == 'pull-request'
+    name: sync-sirs-protected
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Tester les scénarios Git isolés
+        run: python3 tools/test_git_sirs.py
+      - name: Préparer et contrôler la fusion puis proposer une PR conditionnelle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/git_sirs.py sync --mode pull-request
+
+  configuration:
+    if: vars.SIRS_SYNC_MODE != '' && vars.SIRS_SYNC_MODE != 'direct' && vars.SIRS_SYNC_MODE != 'pull-request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '::error::SIRS_SYNC_MODE doit être direct ou pull-request.'
+          exit 1
