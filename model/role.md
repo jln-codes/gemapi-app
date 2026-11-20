@@ -24,11 +24,6 @@ S = `SELECT`, I = `INSERT`, U = `UPDATE`, D = `DELETE` ; — = aucun droit. Le s
 
 Traçabilité : `modifie_par` enregistre le compte PostgreSQL authentifié (`session_user`). Le technicien responsable (`prestations.technicien_id`) est un attribut métier, qu'il dispose ou non d'un compte PostgreSQL ; il ne confère aucun droit.
 
-Les gardes internes `assert_prestation_relations(uuid)` et
-`assert_digue_repere(uuid)` ne sont pas exécutables directement par les profils
-métier : leur droit `EXECUTE` est retiré à `PUBLIC`. Leurs triggers les appellent
-avec les droits du propriétaire, sans élargir la matrice de lecture et d'écriture.
-
 `roles_milieux.sql` crée uniquement les trois rôles collectifs `NOLOGIN`. Les
 vues `prestations__*` sont des vues de consultation, pas des tables d'association
 à modifier. Le profil patrimoine possède aussi les droits de lecture et de

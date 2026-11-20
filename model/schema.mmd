@@ -192,9 +192,6 @@ erDiagram
     COURS_EAU ||--o{ DIGUES_REPERES : repere
 
     %% Toute prestation choisit exactement une des sept FK patrimoniales.
-    %% date_fin >= date_debut est obligatoire.
-    %% Position et rive non indefinies sont reservees aux modes cours d eau,
-    %% digue, ouvrage AH et section AH ; stockage et sites gardent les defauts.
     %% ah_section_id reference AH_SECTIONS.id (RESTRICT), jamais AH.id.
     %% Section AH : geometrie propre obligatoire ; mesures de l'intervention.
     %% PRESTATIONS_CARTE utilise SITES_ZONES.geom pour le mode zone ; PRESTATIONS.geom reste NULL.

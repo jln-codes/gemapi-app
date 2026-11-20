@@ -88,7 +88,6 @@ BEGIN
         RAISE EXCEPTION 'Position ou rive incompatible avec le rattachement patrimonial' USING ERRCODE='23514';
     END IF;
 END $relations_assert$;
-REVOKE EXECUTE ON FUNCTION milieux.assert_prestation_relations(uuid) FROM PUBLIC;
 CREATE FUNCTION milieux.prestation_relations_complete() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, milieux AS $relations_trigger$
 BEGIN
@@ -272,7 +271,6 @@ BEGIN
         RAISE EXCEPTION 'Digue % sans repère', digue_uuid USING ERRCODE = '23514';
     END IF;
 END $$;
-REVOKE EXECUTE ON FUNCTION milieux.assert_digue_repere(uuid) FROM PUBLIC;
 CREATE FUNCTION milieux.digue_repere_complete() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, milieux AS $$
 BEGIN

@@ -17,7 +17,7 @@ gemapi-app/
 │   ├── schema.mmd
 │   └── role.md                # matrice des rôles PostgreSQL
 ├── demo/
-│   ├── data/                  # 10 imports SQL et importer_base_neuve.sh
+│   ├── data/                  # 15 imports SQL et importer_base_neuve.sh
 │   ├── gpkg/                  # 8 GeoPackages
 │   ├── prestations_demo.qgz
 │   └── README.md
@@ -37,9 +37,11 @@ gemapi-app/
 └── .gitignore
 ```
 
-Le schéma canonique est `model/schema.sql` et son diagramme est
-`model/schema.mmd`. Les données réelles CABBALR sont conservées dans
-`cabbalr/gpkg/` ; leurs SQL d'import initial sont dans `cabbalr/sql/`.
+Le schéma et ses illustrations ont été déplacés depuis `demo/` vers `model/`.
+Le diagramme Mermaid suit le schéma canonique actuel.
+`cabbalr/schema.sql` reste une ressource historique
+des données réelles ; il n'est pas le schéma canonique et n'est utilisé ni par
+la démonstration ni par les tests. Aucun fichier de `cabbalr/` n'a été modifié.
 
 Le projet du plugin est sous `plugin/` : code dans `gemapi_app/`, tests
 dans `tests/` et construction dans `tools/`. Les sorties locales des tests

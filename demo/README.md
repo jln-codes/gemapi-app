@@ -129,9 +129,8 @@ transaction. Aucun droit sur les cours d’eau n’est accordé automatiquement.
 Les opérations respectent commit/rollback ; le code ne valide aucune transaction
 du client. Aucun rôle applicatif ni accès public supplémentaire n’est créé.
 
-Le référencement ne change pas les six modes directs antérieurs ni LOC-03 ;
-le modèle courant en possède sept, dont le rattachement direct à une section AH.
-Les rapports des parents AH utilisent uniquement les sections conformes
+Le référencement ne change ni les six rattachements directs des prestations,
+ni LOC-03. Les rapports des parents AH utilisent uniquement les sections conformes
 sur cours d’eau qualifié et l’intersection exacte avec la géométrie propre de la
 prestation directement rattachée à ce cours d’eau. Les rapports enfants restent directs.
 
@@ -142,8 +141,7 @@ Tableau du `Relation Editor` affiche leurs colonnes. Les actions d’acceptation
 de modification et de revalidation sont fournies par le plugin **0.7.19**,
 sans macro. Voir [le parcours utilisateur](../plugin/README.md#sections-hydrographiques-ah-0719).
 Les propositions restent temporaires jusqu’à confirmation explicite ; les
-57 cours d’eau non qualifiés de Supabase n’en produisent aucune admissible
-(constat du 20 novembre 2026 ; une rivière est qualifiée).
+58 cours d’eau non qualifiés de Supabase n’en produisent aucune admissible.
 
 Tests reproductibles sur un PostGIS jetable :
 `/usr/bin/python3 plugin/tests/test_ah_sections.py`.
@@ -272,8 +270,7 @@ Les 100 prestations conservent leurs UUID, attributs et rattachements. Les 12
 prestations sur zone n'ont aucune géométrie propre ; celles des autres modes
 restent conservées. Leurs 100 rattachements sont
 répartis en 62 cours d'eau, 1 digue, 13 stockages, 6 ouvrages, 6 sites parents et
-12 zones. Les sept FK figurent dans `15_prestations.sql` ; celle des sections AH
-reste `NULL` pour ces 100 prestations initiales.
+12 zones. Les six FK figurent dans `15_prestations.sql`.
 
 ## Politique de consolidation des données fictives
 

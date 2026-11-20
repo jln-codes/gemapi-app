@@ -293,11 +293,9 @@ restent identiques.
 
 ## HYDRO-ASSOC-01 — Septième rattachement direct
 
-État courant : le schéma et les bases Démo et CABBALR possèdent les sept modes.
-Les étapes de transition ci-dessous décrivent le chantier de novembre 2026 ;
-elles sont conservées comme historique et ne doivent pas être rejouées sur les
-bases actuelles. Le plugin courant est la version indiquée dans
-`plugin/gemapi_app/metadata.txt`.
+État du chantier : **schéma et plugin 0.7.30 préparés ; migration réelle non
+appliquée**. Les bases Démo et CABBALR restent sur les six modes précédents.
+Ne pas installer ce paquet sur ces bases avant leur transition autorisée.
 
 ### Contrat métier et PostgreSQL
 
@@ -425,10 +423,7 @@ Le filtre propre au widget est conservé : il peut permettre la lecture de
 références masquées par le filtre cartographique. Une référence vers une autre
 table est refusée.
 
-### Historique — préparation et ordre du déploiement de novembre 2026
-
-Les étapes suivantes documentent la transition passée ; elles ne constituent
-pas une procédure opérationnelle pour les bases Démo et CABBALR actuelles.
+### Préparation et ordre du déploiement
 
 1. Vérifier en lecture seule le schéma effectif, les dépendances, les rôles,
    les signatures et les sections conformes. Le diagnostic du 17 novembre 2026

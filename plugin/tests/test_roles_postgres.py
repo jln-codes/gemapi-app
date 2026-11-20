@@ -67,18 +67,6 @@ def main():
                     c.execute("SELECT has_schema_privilege('milieux','CREATE')");assert not c.fetchone()[0]
                     c.execute('SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=current_user')
                     assert c.fetchone()==(False,False,False,False,False)
-                    for guard in ('assert_prestation_relations(uuid)', 'assert_digue_repere(uuid)'):
-                        c.execute("SELECT has_function_privilege(current_user,%s,'EXECUTE')", ("milieux."+guard,))
-                        assert c.fetchone()[0] is False, (extension, login, guard)
-                        c.execute('SAVEPOINT guard_denied')
-                        try:
-                            c.execute('SELECT milieux.'+guard.split('(')[0]+'(NULL::uuid)')
-                        except psycopg2.Error as error:
-                            assert error.pgcode == '42501', (extension, login, guard, error.pgcode)
-                            c.execute('ROLLBACK TO SAVEPOINT guard_denied')
-                        else:
-                            raise AssertionError((extension, login, guard, 'direct execution allowed'))
-                        c.execute('RELEASE SAVEPOINT guard_denied')
                     c.execute('SELECT count(*) FROM milieux.ah_sections_candidates(%s)',(ids['ah'],));assert c.fetchone()[0]==1
             # Native sessions verify session_user stamping, not SET ROLE impersonation.
             for login in ('roles_editor','roles_manager'):

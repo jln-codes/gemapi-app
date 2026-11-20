@@ -6,7 +6,6 @@
 - [ ] Vérifier le plugin installé, les projets Démo/CABBALR après migration et l'activation du QGZ CABBALR **sans filtre des cours d'eau anonymes**.
 
 ## Après démonstration
-- [ ] **NULLABLE** — AH ouvrage ne devrait pas etre nullable. verifier autres. ah_section geometrie devrait etre facultatif
 - [ ] **PERF-QGIS-09C** — Retirer `prestations_fiches` des deux QGZ après remplacement des relations et navigations nécessaires ; conserver la vue SQL ; mesurer le gain.
 - [ ] **DIGITIZE-TRACE-01** — Ajouter le *tracé automatique* QGIS (reprise des sommets intermédiaires), distinct de l'accrochage qui fonctionne déjà.
 - [ ] **AH** — Ajouter « Créer une section AH… » dans **Extensions > Prestations DMNR**, sur le modèle de « Créer une digue… » ; réutiliser les contrôles de validation existants.
