@@ -68,3 +68,87 @@ migration des données métier.
 Le ZIP standard embarque uniquement le package `gemapi_app/`, ses modules, les
 interfaces Qt, l'icône et le logo institutionnel. Il n'embarque aucune donnée,
 aucun schéma, test, outil ou rapport généré.
+
+## Branches et synchronisation SIRS
+
+`development` porte le socle courant ; `main` reçoit seulement les versions
+validées, normalement par fast-forward. `sirs` reçoit automatiquement chaque push
+sur `development`, par fusion normale préservant ses propres commits. La production
+n'intervient pas dans ce flux. Les développements SIRS restent spécialisés, de
+préférence sous `sirs/`, avec des bases PostgreSQL/PostGIS locales ; ils ne modifient
+ni Supabase, ni les données, ni le plugin commun. Voir [AGENTS.md](AGENTS.md).
+
+Avant une session SIRS sous Ubuntu, depuis n'importe quel répertoire :
+
+```bash
+python3 ~/Projects/gemapi-app/tools/git_sirs.py update
+```
+
+Cette commande vérifie le worktree lié `~/Projects/gemapi-app-sirs`, sa branche
+`sirs` et sa propreté, récupère `origin`, puis avance uniquement par fast-forward.
+Elle affiche le retard, la synchronisation ou la divergence et refuse les fichiers
+modifiés/non suivis et les commits locaux non poussés, sans toucher aux fichiers.
+Autre emplacement : `python3 tools/git_sirs.py update --worktree CHEMIN`.
+Prérequis : Python 3 et Git 2.31 ou ultérieur, avec accès à `origin`. Aucun service
+résident n'est nécessaire ; GitHub ne peut pas mettre à jour un ordinateur hors ligne.
+
+Le workflow [sync-sirs.yml](.github/workflows/sync-sirs.yml) sérialise les exécutions,
+récupère les pointes récentes et retente une fusion si un push concurrent sur `sirs`
+refuse la publication. Il teste les mécanismes Git avant publication, puis contrôle
+l'ascendance, l'identité d'`AGENTS.md` et l'absence de fichiers du socle supprimés
+par SIRS sous `demo/`, `cabbalr/` et `plugin/`. Il vérifie ensuite réellement :
+
+```bash
+git fetch origin
+git merge-base --is-ancestor origin/development origin/sirs
+```
+
+Un conflit échoue visiblement, affiche les fichiers et laisse la branche distante
+SIRS inchangée. Dans un worktree SIRS propre, récupérer `origin`, lancer
+`git merge origin/development`, résoudre chaque conflit en préservant les deux
+développements, tester, committer et pousser `sirs`. Ne pas utiliser de choix global
+`ours`/`theirs`, de force-push ou de réinitialisation. Relancer ensuite l'exécution
+en échec depuis GitHub Actions. Le déclenchement manuel `workflow_dispatch` ne sera
+disponible dans l'interface qu'après arrivée du workflow dans la branche par défaut
+`main` ; le déclenchement par push fonctionne directement depuis `development`.
+
+Les trois branches étaient sans protection ni ruleset lors de la qualification
+GIT-SIRS-SYNC-01. Le mode par défaut est donc le push direct avec seulement
+`contents: write` pour le job de publication. Si une protection de `sirs` exige une
+PR, définir la variable de dépôt `SIRS_SYNC_MODE=pull-request`, autoriser la création
+de PR par Actions et l'auto-merge dans les paramètres du dépôt, puis rendre le
+contrôle `branch-policy` obligatoire sur `sirs`. Autoriser les commits de fusion :
+un squash ou rebase ne satisfait pas la relation d'ancêtre attendue. Ce mode ajoute
+seulement au job PR la permission `pull-requests: write`, réutilise une PR
+`development → sirs` et demande une intégration conditionnelle sans contournement
+administrateur. Une PR encore ouverte produit un échec explicite « en attente » ;
+après son intégration, relancer l'exécution pour confirmer l'état distant.
+Ce mode doit être qualifié avec les protections réellement configurées avant usage.
+
+Un push effectué avec `GITHUB_TOKEN` ne déclenche normalement pas les workflows
+`push` suivants : les contrôles de synchronisation sont donc exécutés avant le push.
+Pour les PR créées par ce jeton, prévoir les éventuelles approbations de workflows
+demandées par GitHub ; ne jamais contourner des contrôles obligatoires bloqués.
+Voir la [documentation GitHub sur les déclenchements](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+Aucun jeton personnel n'est nécessaire.
+
+Le workflow [branch-policy.yml](.github/workflows/branch-policy.yml) refuse les PR
+`sirs → development/main`, l'ascendance spécifique SIRS même depuis une autre
+branche et les changements sous `sirs/` visant le socle. Les commits communs de
+`development` hérités par SIRS restent autorisés vers `main`.
+Pour bloquer avant fusion, rendre `branch-policy` obligatoire sur `development` et
+`main`, imposer les PR et interdire les contournements ainsi que les pushes directs.
+Cette proposition de protection modifie le travail direct sur `development` : elle
+nécessite une décision de gouvernance et n'est pas activée par ce chantier.
+Sans elle, le contrôle des pushes ne fait qu'alerter après publication. Les
+administrateurs et les cherry-picks/réécritures hors `sirs/` restent des limites :
+Git ne peut pas déduire automatiquement la nature métier d'un changement. Une
+revue des modifications des workflows et outils de contrôle est également nécessaire.
+`main` conserve son état jusqu'à une livraison autorisée ; les nouvelles instructions
+et les workflows y seront installés lors de cette intégration, pas par ce chantier.
+
+Tests Git sans accès aux bases, dans des dépôts isolés sous `audits/` supprimés à la fin :
+
+```bash
+python3 tools/test_git_sirs.py
+```

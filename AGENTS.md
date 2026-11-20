@@ -8,13 +8,17 @@ La simplicité, la cohérence et la reproductibilité priment sur la conservatio
 
 ## 2. Source unique de vérité
 
-- `model/schema.sql` est le schéma PostgreSQL/PostGIS canonique pour une installation neuve.
+- `model/schema.sql` est le schéma PostgreSQL/PostGIS canonique du socle GEMAPI-App pour une installation neuve.
 - `model/schema.mmd` représente ce schéma.
 - `demo/` contient uniquement les données fictives et les outils nécessaires à la démonstration actuelle.
 - `plugin/` doit fonctionner exclusivement avec le schéma courant.
 - Les tests doivent valider prioritairement une installation neuve et le fonctionnement actuel.
 
 **Aucune fonctionnalité courante ne doit dépendre d'un ancien schéma ou d'anciennes données.**
+
+SIRS est une extension spécialisée du socle, pas une version historique. Son modèle
+peut disposer d'un schéma autonome dans `sirs/`, sans imposer sa structure aux bases
+Démo et CABBALR ni de changements au plugin ou aux projets QGIS communs.
 
 ## 3. Interdiction du legacy
 
@@ -35,7 +39,10 @@ L'historique Git constitue le moyen de retrouver les anciennes versions.
 
 **Ne pas accumuler de migrations SQL dans le dépôt.**
 
-Toute évolution du modèle doit être intégrée directement dans `model/schema.sql`.
+Toute évolution du modèle commun doit être intégrée directement dans `model/schema.sql`.
+Le modèle SIRS évolue dans son propre schéma courant ; ses migrations et transitions
+utilisent exclusivement des bases PostgreSQL/PostGIS locales, indépendantes de Supabase.
+Les changements SIRS ne déclenchent aucune intervention sur Supabase.
 
 Pour mettre à jour la base Supabase existante :
 
@@ -54,7 +61,8 @@ Ne pas modifier rétroactivement des migrations déjà exécutées pour simuler 
 
 Supabase est la base PostgreSQL/PostGIS permanente de démonstration.
 
-Les bases PostgreSQL jetables sont réservées aux tests automatisés.
+Les bases PostgreSQL jetables sont réservées aux tests automatisés. Les bases métier
+SIRS sont locales et permanentes ; elles ne sont pas des bases de test.
 
 - Ne jamais supposer que Supabase a été mis à jour parce que les tests locaux réussissent.
 - Ne pas modifier Supabase sans autorisation explicite.
@@ -70,10 +78,12 @@ Les bases PostgreSQL jetables sont réservées aux tests automatisés.
 - Ne jamais utiliser les données réelles pour fabriquer les fixtures de démonstration.
 - Préserver les UUID des objets existants lorsqu'une évolution ne change pas leur identité.
 - Les générateurs fictifs doivent être déterministes et reproductibles.
+- `demo/` et `cabbalr/` restent versionnés dans les trois branches permanentes.
+- Aucun développement SIRS ne doit supprimer les données Démo parce qu'il ne les utilise pas.
 
 ## 7. Évolutions du modèle
 
-Lors d'une modification du schéma :
+Lors d'une modification du schéma commun :
 
 1. Identifier les dépendances réelles.
 2. Modifier le schéma canonique.
@@ -83,7 +93,10 @@ Lors d'une modification du schéma :
 6. Supprimer les références devenues obsolètes.
 7. Vérifier une installation neuve complète.
 
-Ne pas laisser plusieurs modèles concurrents actifs.
+Ne pas laisser plusieurs modèles concurrents actifs pour une même application.
+Le schéma autonome SIRS est une extension spécialisée, isolée autant que possible
+dans `sirs/`. Son évolution ne doit pas modifier le plugin et les projets QGIS du
+socle commun dans le périmètre initial SIRS.
 
 Ne pas conserver un ancien mécanisme simplement parce qu'un test historique en dépend.
 
@@ -128,17 +141,66 @@ Windows est la plateforme cible prioritaire du plugin (environ 90 % des usages),
 
 ## 12. Politique Git
 
-- Travailler directement sur `main` par défaut pour les évolutions courantes, corrections, migrations et petits chantiers définitifs.
+- Le dépôt actif est `jln-codes/gemapi-app`, jamais `gemapi-app-legacy`.
+- Trois branches permanentes : `development` pour le développement commun courant,
+  `main` pour la production validée, `sirs` pour le développement spécialisé SIRS.
+- Travailler directement sur `development` pour les évolutions du socle et sur
+  `sirs` pour les évolutions spécialisées. Préserver les modifications locales préexistantes.
+- Intégrer `development` dans `main` après validation, normalement par fast-forward.
+  Si cela est impossible, signaler le blocage sans réécrire l'historique.
+- Chaque push réussi sur `development` déclenche sa synchronisation vers `sirs`,
+  indépendamment de `main`. Lorsque SIRS a ses propres commits, utiliser une fusion
+  normale ; le fast-forward n'est pas une exigence pour ce flux.
+- Les flux `sirs → development` et `sirs → main` sont interdits, y compris par
+  cherry-pick de changements spécifiques. Extraire une idée commune en la
+  redéveloppant et en la validant sur `development`, sans importer l'ascendance SIRS.
+- Ne jamais synchroniser par force-push, `reset --hard`, réécriture d'historique,
+  remplacement de SIRS par une copie de `development`, ou suppression des changements SIRS.
+- Un conflit arrête la synchronisation sans publication. Résoudre explicitement
+  les fichiers sur `sirs` après examen des deux côtés, puis tester et pousser `sirs` ;
+  ne pas choisir globalement `ours`/`theirs` ni effacer des fichiers pour contourner le conflit.
+- Après synchronisation, vérifier les références distantes récentes avec
+  `git merge-base --is-ancestor origin/development origin/sirs` (code attendu : 0).
+  Une fusion locale ou une PR ouverte ne prouve pas la publication sur `origin/sirs`.
 - Ne pas créer de branche simplement pour isoler un chantier destiné à être immédiatement intégré.
 - Réserver les branches dédiées aux expérimentations, développements réellement parallèles ou modifications présentant un risque particulier.
 - Conserver des commits cohérents et clairement identifiés par chantier.
-- Intégrer une branche temporaire validée par `git merge --ff-only`, sans commit de fusion ; si le fast-forward est impossible, signaler le blocage sans forcer l’historique.
-- Ne supprimer une branche locale qu’après vérification que tous ses commits sont intégrés dans `main`.
+- Intégrer une branche temporaire validée dans sa branche de destination par
+  `git merge --ff-only` lorsque possible ; ne pas forcer l'historique en cas de blocage.
+- Ne supprimer une branche locale qu'après vérification que tous ses commits sont
+  intégrés dans sa destination (`development` pour le commun, `sirs` pour le spécialisé).
 - Ne pas effectuer de push distant sans instruction explicite.
+- Conserver ce fichier identique sur les branches lors des intégrations autorisées.
+  Ne pas modifier `main` hors d'une livraison autorisée pour y recopier les instructions.
 
-### Exception temporaire — PERF-QGIS-03
+### Synchronisation GitHub et protections
 
-- Travailler exclusivement sur la branche `development` pour PERF-QGIS-03 ; conserver `main` intacte jusqu'à la recette fonctionnelle complète.
-- Les commits locaux cohérents avec ce chantier sont autorisés sur `development`.
-- Ne pas pousser `development` ni la fusionner dans `main` sans validation explicite.
-- Préserver les modifications locales préexistantes et les exclure des commits PERF-QGIS-03.
+- `.github/workflows/sync-sirs.yml` sérialise les synchronisations. Les contrôles
+  Git et leurs tests sont exécutés avant publication, car un push avec
+  `GITHUB_TOKEN` ne déclenche normalement pas les autres workflows `push`.
+- Ne jamais contourner une protection GitHub. Le mode direct est destiné à une
+  branche `sirs` autorisant ces pushes ; si une protection les interdit, configurer
+  le mode PR décrit dans le README, ses contrôles obligatoires et l'auto-merge.
+- Le contrôle `branch-policy` signale les PR inverses, les commits portant
+  l'ascendance propre à SIRS et les changements sous `sirs/` visant le socle.
+  Il doit devenir obligatoire avec interdiction des pushes directs pour bloquer
+  les PR avant fusion. Un workflow `push` seul ne peut qu'alerter après publication.
+- Le Markdown n'est pas une protection technique. Les administrateurs, contournements
+  de règles et réécritures/cherry-picks hors `sirs/` restent des limites explicites ;
+  une revue humaine reste nécessaire pour identifier la nature métier d'un changement.
+
+### Début d'une session locale SIRS
+
+Depuis n'importe quel répertoire sous Ubuntu :
+
+```bash
+python3 ~/Projects/gemapi-app/tools/git_sirs.py update
+```
+
+La commande cible par défaut `~/Projects/gemapi-app-sirs` ; un autre emplacement
+se fournit par `update --worktree CHEMIN`. Elle vérifie le worktree lié au même
+dépôt, la branche `sirs` et la propreté (y compris les fichiers non suivis), récupère
+`origin`, puis n'autorise que `git merge --ff-only origin/sirs`. Elle refuse les
+commits locaux non poussés et les divergences sans déplacer ni supprimer de fichiers.
+GitHub Actions met à jour le dépôt distant, pas un ordinateur éteint ou déconnecté :
+cette récupération locale est volontaire, à la demande, sans service résident.
