@@ -143,43 +143,46 @@ Windows est la plateforme cible prioritaire du plugin (environ 90 % des usages),
 
 - Le dépôt actif est `jln-codes/gemapi-app`, jamais `gemapi-app-legacy`.
 - Trois branches permanentes : `development` pour le développement commun courant,
-  `main` pour la production validée, `sirs` pour le développement spécialisé SIRS.
+  `main` pour la production validée, `sig-fusion` pour le développement spécialisé SIRS.
+- `sig-fusion` est le nom définitif de la branche spécialisée. Le modèle métier
+  peut conserver le nom SIRS et le répertoire `sirs/` ; le chemin du worktree
+  `~/Projects/gemapi-app-sirs` reste inchangé.
 - Travailler directement sur `development` pour les évolutions du socle et sur
-  `sirs` pour les évolutions spécialisées. Préserver les modifications locales préexistantes.
+  `sig-fusion` pour les évolutions spécialisées. Préserver les modifications locales préexistantes.
 - Intégrer `development` dans `main` après validation, normalement par fast-forward.
   Si cela est impossible, signaler le blocage sans réécrire l'historique.
-- Chaque push réussi sur `development` déclenche sa synchronisation vers `sirs`,
+- Chaque push réussi sur `development` déclenche sa synchronisation vers `sig-fusion`,
   indépendamment de `main`. Lorsque SIRS a ses propres commits, utiliser une fusion
   normale ; le fast-forward n'est pas une exigence pour ce flux.
-- Les flux `sirs → development` et `sirs → main` sont interdits, y compris par
+- Les flux `sig-fusion → development` et `sig-fusion → main` sont interdits, y compris par
   cherry-pick de changements spécifiques. Extraire une idée commune en la
   redéveloppant et en la validant sur `development`, sans importer l'ascendance SIRS.
 - Ne jamais synchroniser par force-push, `reset --hard`, réécriture d'historique,
   remplacement de SIRS par une copie de `development`, ou suppression des changements SIRS.
 - Un conflit arrête la synchronisation sans publication. Résoudre explicitement
-  les fichiers sur `sirs` après examen des deux côtés, puis tester et pousser `sirs` ;
+  les fichiers sur `sig-fusion` après examen des deux côtés, puis tester et pousser `sig-fusion` ;
   ne pas choisir globalement `ours`/`theirs` ni effacer des fichiers pour contourner le conflit.
 - Après synchronisation, vérifier les références distantes récentes avec
-  `git merge-base --is-ancestor origin/development origin/sirs` (code attendu : 0).
-  Une fusion locale ou une PR ouverte ne prouve pas la publication sur `origin/sirs`.
+  `git merge-base --is-ancestor origin/development origin/sig-fusion` (code attendu : 0).
+  Une fusion locale ou une PR ouverte ne prouve pas la publication sur `origin/sig-fusion`.
 - Ne pas créer de branche simplement pour isoler un chantier destiné à être immédiatement intégré.
 - Réserver les branches dédiées aux expérimentations, développements réellement parallèles ou modifications présentant un risque particulier.
 - Conserver des commits cohérents et clairement identifiés par chantier.
 - Intégrer une branche temporaire validée dans sa branche de destination par
   `git merge --ff-only` lorsque possible ; ne pas forcer l'historique en cas de blocage.
 - Ne supprimer une branche locale qu'après vérification que tous ses commits sont
-  intégrés dans sa destination (`development` pour le commun, `sirs` pour le spécialisé).
+  intégrés dans sa destination (`development` pour le commun, `sig-fusion` pour le spécialisé).
 - Ne pas effectuer de push distant sans instruction explicite.
 - Conserver ce fichier identique sur les branches lors des intégrations autorisées.
   Ne pas modifier `main` hors d'une livraison autorisée pour y recopier les instructions.
 
 ### Synchronisation GitHub et protections
 
-- `.github/workflows/sync-sirs.yml` sérialise les synchronisations. Les contrôles
+- `.github/workflows/sync-sig-fusion.yml` sérialise les synchronisations. Les contrôles
   Git et leurs tests sont exécutés avant publication, car un push avec
   `GITHUB_TOKEN` ne déclenche normalement pas les autres workflows `push`.
 - Ne jamais contourner une protection GitHub. Le mode direct est destiné à une
-  branche `sirs` autorisant ces pushes ; si une protection les interdit, configurer
+  branche `sig-fusion` autorisant ces pushes ; si une protection les interdit, configurer
   le mode PR décrit dans le README, ses contrôles obligatoires et l'auto-merge.
 - Le contrôle `branch-policy` signale les PR inverses, les commits portant
   l'ascendance propre à SIRS et les changements sous `sirs/` visant le socle.
@@ -194,13 +197,13 @@ Windows est la plateforme cible prioritaire du plugin (environ 90 % des usages),
 Depuis n'importe quel répertoire sous Ubuntu :
 
 ```bash
-python3 ~/Projects/gemapi-app/tools/git_sirs.py update
+python3 ~/Projects/gemapi-app/tools/git_sig_fusion.py update
 ```
 
 La commande cible par défaut `~/Projects/gemapi-app-sirs` ; un autre emplacement
 se fournit par `update --worktree CHEMIN`. Elle vérifie le worktree lié au même
-dépôt, la branche `sirs` et la propreté (y compris les fichiers non suivis), récupère
-`origin`, puis n'autorise que `git merge --ff-only origin/sirs`. Elle refuse les
+dépôt, la branche `sig-fusion` et la propreté (y compris les fichiers non suivis), récupère
+`origin`, puis n'autorise que `git merge --ff-only origin/sig-fusion`. Elle refuse les
 commits locaux non poussés et les divergences sans déplacer ni supprimer de fichiers.
 GitHub Actions met à jour le dépôt distant, pas un ordinateur éteint ou déconnecté :
 cette récupération locale est volontaire, à la demande, sans service résident.
