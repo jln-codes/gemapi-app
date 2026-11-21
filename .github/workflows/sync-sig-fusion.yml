@@ -1,4 +1,4 @@
-name: Synchroniser development vers SIRS
+name: Synchroniser development vers sig-fusion
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 # A pending run may be replaced by a newer push; each run fetches the latest tip
 # and therefore includes all preceding commits, regardless of queue ordering.
 concurrency:
-  group: development-to-sirs
+  group: development-to-sig-fusion
   cancel-in-progress: false
 
 permissions:
@@ -16,8 +16,8 @@ permissions:
 
 jobs:
   direct:
-    if: vars.SIRS_SYNC_MODE == '' || vars.SIRS_SYNC_MODE == 'direct'
-    name: sync-sirs-direct
+    if: vars.SIG_FUSION_SYNC_MODE == '' || vars.SIG_FUSION_SYNC_MODE == 'direct'
+    name: sync-sig-fusion-direct
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -28,13 +28,13 @@ jobs:
           ref: development
           fetch-depth: 0
       - name: Tester les scénarios Git isolés
-        run: python3 tools/test_git_sirs.py
-      - name: Fusionner, contrôler, publier et vérifier origin/sirs
-        run: python3 tools/git_sirs.py sync
+        run: python3 tools/test_git_sig_fusion.py
+      - name: Fusionner, contrôler, publier et vérifier origin/sig-fusion
+        run: python3 tools/git_sig_fusion.py sync
 
   protected:
-    if: vars.SIRS_SYNC_MODE == 'pull-request'
-    name: sync-sirs-protected
+    if: vars.SIG_FUSION_SYNC_MODE == 'pull-request'
+    name: sync-sig-fusion-protected
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -46,16 +46,16 @@ jobs:
           ref: development
           fetch-depth: 0
       - name: Tester les scénarios Git isolés
-        run: python3 tools/test_git_sirs.py
+        run: python3 tools/test_git_sig_fusion.py
       - name: Préparer et contrôler la fusion puis proposer une PR conditionnelle
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/git_sirs.py sync --mode pull-request
+        run: python3 tools/git_sig_fusion.py sync --mode pull-request
 
   configuration:
-    if: vars.SIRS_SYNC_MODE != '' && vars.SIRS_SYNC_MODE != 'direct' && vars.SIRS_SYNC_MODE != 'pull-request'
+    if: vars.SIG_FUSION_SYNC_MODE != '' && vars.SIG_FUSION_SYNC_MODE != 'direct' && vars.SIG_FUSION_SYNC_MODE != 'pull-request'
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo '::error::SIRS_SYNC_MODE doit être direct ou pull-request.'
+          echo '::error::SIG_FUSION_SYNC_MODE doit être direct ou pull-request.'
           exit 1

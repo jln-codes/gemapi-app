@@ -4,7 +4,7 @@ on:
   push:
     branches: [development, main]
   pull_request:
-    branches: [development, main, sirs]
+    branches: [development, main, sig-fusion]
 
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Tester les scénarios Git isolés
-        run: python3 tools/test_git_sirs.py
+        run: python3 tools/test_git_sig_fusion.py
       - name: Vérifier le sens de propagation et la fusion proposée
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -29,11 +29,11 @@ jobs:
           SOURCE: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
-          if [[ "$TARGET" == sirs ]]; then
-            python3 tools/git_sirs.py validate --sirs "$BASE"
+          if [[ "$TARGET" == sig-fusion ]]; then
+            python3 tools/git_sig_fusion.py validate --sig-fusion "$BASE"
           else
             COMMON=origin/development
             if [[ "$TARGET" == development ]]; then COMMON="$BASE"; fi
-            python3 tools/git_sirs.py guard --base "$BASE" --head "$HEAD" \
-              --common "$COMMON" --sirs origin/sirs --source "$SOURCE"
+            python3 tools/git_sig_fusion.py guard --base "$BASE" --head "$HEAD" \
+              --common "$COMMON" --sig-fusion origin/sig-fusion --source "$SOURCE"
           fi
