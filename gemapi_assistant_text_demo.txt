@@ -1,0 +1,153 @@
+GEMAPI-App — CORPUS DE TEST TEXTUEL — DÉMO
+10 scénarios | sans microphone, sans Voxtral, sans TTS
+
+MODE D’EMPLOI
+Copier le texte placé sous « PHRASE À TESTER » dans le champ de saisie de l’assistant.
+Utiliser un brouillon neuf pour chaque scénario.
+Les résultats attendus servent à vérifier l’interprétation et ne doivent pas être
+envoyés à Mistral en même temps que la phrase.
+Aucune écriture dans PostgreSQL. Les objets et UUID doivent être validés
+contre le référentiel réel, sans sélection arbitraire.
+Date « non renseignée » = ne pas inventer de date.
+
+==============================================================================
+
+TEST 01 — Phrase naturelle
+Identifiant : DEMO-01
+
+PHRASE À TESTER
+Je voudrais créer une intervention de débroussaillage sur le Remblai1 ZEC Nave. Paysages et Milieux a effectué les travaux le 11 novembre 2026, sous la responsabilité de Jean Dupont. Le chantier est terminé. Les broussailles empêchaient de circuler facilement le long du remblai.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-11-11
+- Date de fin   : non renseignée
+- Statut explicite : Terminé
+- Point de vigilance : Une seule date de travaux est donnée. Ne pas créer de date de fin à partir du statut Terminé.
+
+==============================================================================
+
+TEST 02 — Chantier en cours
+Identifiant : DEMO-02
+
+PHRASE À TESTER
+Sur le Remblai2 ZEC Clarence, la Régie technique des milieux réalise un chantier d'élagage du 19 au 21 novembre 2026. David Petit est responsable, le statut est en cours. Plusieurs branches mortes menacent de tomber sur le passage.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-11-19
+- Date de fin   : 2026-11-21
+- Statut explicite : En cours
+- Point de vigilance : La fin de période peut être prévisionnelle bien que le chantier soit en cours.
+
+==============================================================================
+
+TEST 03 — Vocabulaire libre
+Identifiant : DEMO-03
+
+PHRASE À TESTER
+Travaux hydrauliques du bassin est intervenu les 8 et 9 octobre 2026 sur le Remblai RC Bois des Aulnes pour retirer des embâcles. Eric Martin suivait le chantier, maintenant terminé. Les branches accumulées gênaient les accès d'entretien.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-10-08
+- Date de fin   : 2026-10-09
+- Statut explicite : Terminé
+- Point de vigilance : Deux jours d'intervention explicitement cités.
+
+==============================================================================
+
+TEST 04 — Curage planifié
+Identifiant : DEMO-04
+
+PHRASE À TESTER
+Programmer une prestation de curage du Bassin ZEC Nave entre le 5 et le 12 décembre 2026. Entreprise Rivage Nord, technicien Julien Dubois, statut planifié. Des dépôts de vase sont visibles dans le fond du bassin et doivent être évacués.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-12-05
+- Date de fin   : 2026-12-12
+- Statut explicite : Planifié
+- Point de vigilance : Aucune géométrie propre demandée ; ne pas activer geometrie_demandee.
+
+==============================================================================
+
+TEST 05 — Dates prononcées
+Identifiant : DEMO-05
+
+PHRASE À TESTER
+La société Atelier des Eaux a fait une fauche sur le Bassin RC Pré Vert du onze zéro neuf deux mille vingt-six au douze zéro neuf deux mille vingt-six. David Petit était chargé du suivi. C'est terminé. L'herbe était particulièrement haute près de l'entrée.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-09-11
+- Date de fin   : 2026-09-12
+- Statut explicite : Terminé
+- Point de vigilance : Les dates sont écrites comme une expression orale, sans Voxtral : le modèle doit les interpréter depuis le texte.
+
+==============================================================================
+
+TEST 06 — Étude et description
+Identifiant : DEMO-06
+
+PHRASE À TESTER
+Prévoir une étude sur le Bassin ZEC Val des Prés du 1er au 3 février 2027. L'entreprise Écologie Terrain réalisera cette prestation, avec Eric Martin comme technicien responsable. Statut planifié. Il faudra examiner les possibilités d'amélioration de l'infiltration dans le bassin.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2027-02-01
+- Date de fin   : 2027-02-03
+- Statut explicite : Planifié
+- Point de vigilance : Description complémentaire à conserver, sans inventer de résultats.
+
+==============================================================================
+
+TEST 07 — Zone et site parent
+Identifiant : DEMO-07
+
+PHRASE À TESTER
+Je souhaite planifier une restauration écologique sur la Zone naturelle du secteur 01, dans l'Espace naturel du Bois des Aulnes, du 15 au 26 décembre 2026. La Régie technique des milieux interviendra avec Julien Dubois comme responsable. Plusieurs secteurs présentent une végétation dégradée.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-12-15
+- Date de fin   : 2026-12-26
+- Statut explicite : non mentionné explicitement
+- Point de vigilance : Zone et parent fournis ; si la source de nom ne correspond pas exactement, ne pas rejeter les champs indépendants. Statut non nommé littéralement.
+
+==============================================================================
+
+TEST 08 — Phrase non structurée
+Identifiant : DEMO-08
+
+PHRASE À TESTER
+La haie du secteur 06, dans le Bois du Petit Marais, on l'a fait élaguer par Paysages et Milieux. C'était du 10 au 12 novembre 2026, avec Jean Dupont pour le suivi. C'est terminé. Certaines branches débordaient sur le chemin voisin.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-11-10
+- Date de fin   : 2026-11-12
+- Statut explicite : Terminé
+- Point de vigilance : Conserver une description factuelle ; si référence incertaine, demander une sélection sans rejet global.
+
+==============================================================================
+
+TEST 09 — Suivi de milieu
+Identifiant : DEMO-09
+
+PHRASE À TESTER
+Un suivi de milieu est en cours sur la Zone naturelle du secteur 03 du Terril du Bois des Dames. Écologie Terrain intervient du 19 au 30 novembre 2026, sous la responsabilité de David Petit. On souhaite surveiller l'évolution de la végétation spontanée et les éventuelles espèces invasives.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-11-19
+- Date de fin   : 2026-11-30
+- Statut explicite : En cours
+- Point de vigilance : Zone terrestre ; période explicitement donnée.
+
+==============================================================================
+
+TEST 10 — Statut annulé
+Identifiant : DEMO-10
+
+PHRASE À TESTER
+L'étude prévue sur le Point d'observation du secteur 07 dans le Parc du Moulin Vert a finalement été annulée. Elle était programmée du 12 au 13 novembre 2026, avec Atelier des Eaux et Eric Martin. L'accès était impraticable à cause de l'état du terrain et l'équipe n'a pas pu intervenir.
+
+RÉSULTATS ATTENDUS
+- Date de début : 2026-11-12
+- Date de fin   : 2026-11-13
+- Statut explicite : Annulé
+- Point de vigilance : Dates de programmation : ne pas affirmer que les travaux ont effectivement eu lieu ; conserver la cause de l'annulation.
+
+==============================================================================
