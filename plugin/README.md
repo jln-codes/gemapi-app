@@ -469,6 +469,13 @@ La même commande avec `-p 'test_voice.py'` vérifie la capture simulée, le mul
 Voxtral, les erreurs, les échanges mixtes et l'annulation sans envoi. Elle couvre
 aussi les requêtes TTS, le WAV Base64, la préférence, la relecture en mémoire,
 les interruptions concurrentes et le nettoyage des threads et tampons audio.
+`/usr/bin/python3 plugin/tests/test_voice_stability.py` lance quatre processus
+PyQGIS isolés avec limites de temps : sessions répétées, destruction du propriétaire,
+remplacement rapide des lectures et callbacks après fermeture. Le réseau et l'audio
+sont simulés ; aucun appel payant ni accès aux bases métier. Un seul worker de lecture
+reste actif par assistant, même pendant une annulation. Ces tests détectent des
+défauts de cycle de vie sans prouver l'absence de tout plantage natif ; la recette
+Windows reste nécessaire.
 `QT_QPA_PLATFORM=offscreen /usr/bin/python3 plugin/tests/test_assistant_integration.py`
 valide le ZIP avec une base PostGIS Docker neuve, les trois rattachements et
 l'enregistrement standard déclenché explicitement par le test. La base est supprimée

@@ -9,7 +9,7 @@ import sys
 from uuid import uuid4
 import wave
 
-from qgis.PyQt.QtCore import (QBuffer, QElapsedTimer, QIODevice, QMetaObject, QObject,
+from qgis.PyQt.QtCore import (QBuffer, QElapsedTimer, QIODevice, QObject,
                              QThread, QTimer, Qt, QUrl, pyqtSignal, pyqtSlot)
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
@@ -29,6 +29,13 @@ MAX_SPEECH_BYTES = 2 * 1024 * 1024
 MAX_SPEECH_RESPONSE = 3 * 1024 * 1024
 SPEECH_TIMEOUT_MS = 30000
 _PLAYBACKS = set()
+
+
+class _AudioThread(QThread):
+    @pyqtSlot()
+    def interrupt(self):
+        # Unlike requestInterruption(), a Qt slot safely discards destroyed(QObject*)'s argument.
+        self.requestInterruption()
 
 
 def speech_payload(text):
@@ -166,6 +173,8 @@ class Speaker(QObject):
         self.raw = bytearray()
         self.failure = ''
         self._playback_failed = False
+        self._playing = False
+        self._pending_play = False
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
 
@@ -195,8 +204,8 @@ class Speaker(QObject):
             self.reply = network.post(request, json.dumps(payload, ensure_ascii=False).encode('utf-8'))
             reply = self.reply
             reply.setReadBufferSize(MAX_SPEECH_RESPONSE + 1)
-            reply.readyRead.connect(lambda current=reply: self._read(current))
-            reply.finished.connect(lambda current=reply: self._finished(current))
+            reply.readyRead.connect(self._read)
+            reply.finished.connect(self._finished)
             try:
                 self.timer.timeout.disconnect()
             except TypeError:
@@ -210,13 +219,14 @@ class Speaker(QObject):
             self.status.emit("Réponse vocale indisponible. Le texte reste disponible.")
 
     def stop(self, clear=False):
+        self._playing = self._pending_play = False
         self.timer.stop()
         if self.reply is not None:
             reply, self.reply = self.reply, None
             reply.abort()
             reply.deleteLater()
         if self.thread is not None:
-            thread, self.thread = self.thread, None
+            thread = self.thread
             try:
                 thread.requestInterruption()
                 self.cancel_playback.emit()
@@ -228,7 +238,9 @@ class Speaker(QObject):
             self.text, self.audio = '', None
         self.changed.emit()
 
-    def _read(self, reply):
+    @pyqtSlot()
+    def _read(self, reply=None):
+        reply = reply if reply is not None else self.sender()
         if reply is self.reply:
             self.raw.extend(bytes(reply.readAll()))
             if len(self.raw) > MAX_SPEECH_RESPONSE and not self.failure:
@@ -240,7 +252,9 @@ class Speaker(QObject):
             self.failure = "Délai de réponse vocale dépassé (30 s). Le texte reste disponible."
             self.reply.abort()
 
-    def _finished(self, reply):
+    @pyqtSlot()
+    def _finished(self, reply=None):
+        reply = reply if reply is not None else self.sender()
         if reply is not self.reply:
             return
         self._read(reply)
@@ -263,16 +277,22 @@ class Speaker(QObject):
             self.changed.emit()
 
     def _play(self):
-        thread = QThread()
+        if self.thread is not None:
+            self._pending_play = True  # Only the latest sentence survives cancellation.
+            return
+        thread = _AudioThread()
         worker = _PlaybackWorker(self.audio)
         thread.worker = worker
         worker.moveToThread(thread)
         self.cancel_playback.connect(worker.cancel, Qt.QueuedConnection)
+        self.destroyed.connect(thread.interrupt)
+        self.destroyed.connect(worker.cancel, Qt.QueuedConnection)
         self._playback_failed = False
+        self._playing = True
         worker.status.connect(self._play_status)
         worker.failed.connect(self._play_failed)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit, Qt.DirectConnection)  # quit() is thread-safe.
+        thread.finished.connect(worker.deleteLater)
         thread.started.connect(worker.start)
         thread.finished.connect(self._played)
         thread.finished.connect(lambda: _PLAYBACKS.discard(thread))
@@ -284,12 +304,12 @@ class Speaker(QObject):
 
     @pyqtSlot(str)
     def _play_status(self, text):
-        if self.thread is not None and self.sender() is self.thread.worker:
+        if self._playing and self.thread is not None and self.sender() is self.thread.worker:
             self.status.emit(text)
 
     @pyqtSlot(str)
     def _play_failed(self, text):
-        if self.thread is not None and self.sender() is self.thread.worker:
+        if self._playing and self.thread is not None and self.sender() is self.thread.worker:
             self._playback_failed = True
             self.status.emit(text)
 
@@ -297,8 +317,13 @@ class Speaker(QObject):
     def _played(self):
         if self.sender() is self.thread:
             self.thread = None
-            if not self._playback_failed:
+            if self._pending_play and self.audio is not None and self.text:
+                self._pending_play = False
+                self._play()
+            elif self._playing and not self._playback_failed:
                 self.status.emit("Lecture terminée. Vous pouvez relire la réponse.")
+            if self.thread is None:
+                self._playing = False
             self.changed.emit()
 
 
@@ -536,6 +561,8 @@ class Recorder(QObject):
     failed = pyqtSignal(str)
     status = pyqtSignal(str)
     finished = pyqtSignal()
+    stop_capture = pyqtSignal()
+    cancel_capture = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -544,15 +571,19 @@ class Recorder(QObject):
     def start(self):
         if self.thread is not None:
             return
-        thread = QThread()  # Outlives a closing dialog until native capture has stopped.
+        thread = _AudioThread()  # Outlives a closing dialog until native capture has stopped.
         worker = _CaptureWorker()
         thread.worker = worker
         worker.moveToThread(thread)
+        self.stop_capture.connect(worker.stop, Qt.QueuedConnection)
+        self.cancel_capture.connect(worker.cancel, Qt.QueuedConnection)
+        self.destroyed.connect(thread.interrupt)
+        self.destroyed.connect(worker.cancel, Qt.QueuedConnection)
         worker.ready.connect(self.ready)
         worker.failed.connect(self.failed)
         worker.status.connect(self.status)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit, Qt.DirectConnection)
+        thread.finished.connect(worker.deleteLater)
         thread.started.connect(worker.start)
         thread.finished.connect(self._finished)
         thread.finished.connect(lambda: _CAPTURES.discard(thread))
@@ -564,7 +595,7 @@ class Recorder(QObject):
     def stop(self):
         if self.thread is not None:
             try:
-                QMetaObject.invokeMethod(self.thread.worker, 'stop', Qt.QueuedConnection)
+                self.stop_capture.emit()
             except RuntimeError:  # Native teardown may precede delivery of thread.finished.
                 pass
 
@@ -572,7 +603,7 @@ class Recorder(QObject):
         if self.thread is not None:
             try:
                 self.thread.requestInterruption()
-                QMetaObject.invokeMethod(self.thread.worker, 'cancel', Qt.QueuedConnection)
+                self.cancel_capture.emit()
             except RuntimeError:
                 pass
 

@@ -4,7 +4,8 @@ import json
 
 from pathlib import Path
 
-from qgis.PyQt.QtCore import QSettings, QTimer, Qt, QUrl
+from qgis.PyQt import sip
+from qgis.PyQt.QtCore import QSettings, QTimer, Qt, QUrl, pyqtSlot
 from qgis.PyQt.QtGui import QColor, QIcon, QTextCharFormat, QTextCursor
 from qgis.PyQt.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from qgis.PyQt.QtWidgets import (QAction, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -156,6 +157,9 @@ class AssistantDialog(QDialog):
         self.timer.setSingleShot(True)
         self.voice_timer = QTimer(self)
         self.voice_timer.setSingleShot(True)
+        self.corrections_timer = QTimer(self)
+        self.corrections_timer.setSingleShot(True)
+        self.corrections_timer.timeout.connect(self._scroll_corrections_top)
         self._sync_speech_controls()
         initialize_window(self, "assistant", parent)
         self._append("Assistant IA", "Décrivez une prestation sur un ouvrage hydraulique, un stockage hydraulique "
@@ -323,11 +327,13 @@ class AssistantDialog(QDialog):
         self._reply = self.network.post(
             request, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
         reply = self._reply
-        reply.readyRead.connect(lambda current=reply: self._read_response(current))
-        reply.finished.connect(lambda current=reply: self._finished(current))
+        reply.readyRead.connect(self._read_response)
+        reply.finished.connect(self._finished)
         self._arm_timer(self.timer, 30000, lambda current=reply: self._timeout(current))
 
+    @pyqtSlot()
     def _read_response(self, reply=None):
+        reply = reply if reply is not None else self.sender() or self._reply
         if self._reply is None or reply is not None and reply is not self._reply:
             return
         self._raw.extend(bytes(self._reply.readAll()))
@@ -340,12 +346,16 @@ class AssistantDialog(QDialog):
             self._network_failure = "Délai Mistral dépassé (30 s). Réessayez votre message ; le brouillon est conservé."
             self._reply.abort()
 
+    @pyqtSlot()
     def _finished(self, reply=None):
+        reply = reply if reply is not None else self.sender() or self._reply
         if self._reply is None or reply is not None and reply is not self._reply:
             return
         reply = self._reply
         self.timer.stop()
         self._read_response(reply)
+        if reply is not self._reply:  # abort() may emit finished synchronously.
+            return
         raw, message, references, failure = bytes(self._raw), self._request_message, self._request_references, self._network_failure
         self._reply = None
         self._raw = bytearray()
@@ -425,7 +435,7 @@ class AssistantDialog(QDialog):
             self._capture_slots.append((signal, slot))
 
     def _capture_event(self, generation, method, value):
-        if generation == self._capture_generation:
+        if not sip.isdeleted(self) and generation == self._capture_generation:
             method(value)
 
     def _voice_status(self, message):
@@ -468,13 +478,15 @@ class AssistantDialog(QDialog):
         request.setTransferTimeout(60000)
         self._voice_reply = self.network.post(request, data)
         reply = self._voice_reply
-        reply.readyRead.connect(lambda current=reply: self._read_voice_response(current))
-        reply.finished.connect(lambda current=reply: self._voice_response_finished(current))
+        reply.readyRead.connect(self._read_voice_response)
+        reply.finished.connect(self._voice_response_finished)
         self._arm_timer(self.voice_timer, 60000, lambda current=reply: self._voice_timeout(current))
         self.voice_status.setText("Transcription Voxtral en cours. Le vocabulaire est limité au brouillon, à quelques candidats et aux termes métier (24 maximum).")
         self._set_busy(self._reply is not None)
 
+    @pyqtSlot()
     def _read_voice_response(self, reply=None):
+        reply = reply if reply is not None else self.sender() or self._voice_reply
         if self._voice_reply is not None and (reply is None or reply is self._voice_reply):
             self._voice_raw.extend(bytes(self._voice_reply.readAll()))
             if len(self._voice_raw) > 1024 * 1024 and not self._voice_failure:
@@ -486,12 +498,16 @@ class AssistantDialog(QDialog):
             self._voice_failure = "Délai Voxtral dépassé (60 s). La conversation est conservée ; vous pouvez poursuivre au clavier."
             self._voice_reply.abort()
 
+    @pyqtSlot()
     def _voice_response_finished(self, reply=None):
+        reply = reply if reply is not None else self.sender() or self._voice_reply
         if self._voice_reply is None or reply is not None and reply is not self._voice_reply:
             return
         reply = self._voice_reply
         self.voice_timer.stop()
         self._read_voice_response(reply)
+        if reply is not self._voice_reply:
+            return
         raw, failure = bytes(self._voice_raw), self._voice_failure
         self._voice_reply = None
         self._voice_raw = bytearray()
@@ -559,10 +575,14 @@ class AssistantDialog(QDialog):
         self.summary.setText("\n".join(lines))
         self._build_corrections(catalog)
         self.corrections_area.verticalScrollBar().setValue(0)
-        QTimer.singleShot(0, lambda: self.corrections_area.verticalScrollBar().setValue(0))
+        self.corrections_timer.start(0)
         self._set_busy(self._reply is not None)
         if log:
             self._append("Assistant IA — vérification locale", "\n".join(lines))
+
+    @pyqtSlot()
+    def _scroll_corrections_top(self):
+        self.corrections_area.verticalScrollBar().setValue(0)
 
     def _clear_corrections(self):
         self.reference_boxes = {}

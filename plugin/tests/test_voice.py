@@ -432,6 +432,17 @@ class VoiceDialogTests(unittest.TestCase):
         self.recorder.ready.emit(audio())
         return reply
 
+    def test_oversized_finished_reply_is_completed_only_once_during_abort(self):
+        reply = self.start_voice_request(b'x' * (1024 * 1024 + 1))
+        reply.finished.emit()  # A final unread buffer can abort inside finished itself.
+        self.assertTrue(reply.aborted)
+        self.assertEqual(self.dialog.history.toPlainText().count('Réponse Voxtral trop volumineuse'), 1)
+        self.recorder.start.reset_mock()
+        small = self.send('Demande de test.', b'x' * (1024 * 1024 + 1))
+        small.finished.emit()
+        self.assertTrue(small.aborted)
+        self.assertEqual(self.dialog.history.toPlainText().count('Réponse Mistral trop volumineuse'), 1)
+
     def test_transcription_is_visible_editable_and_requires_send(self):
         self.dialog.input.setPlainText('Note déjà saisie.')
         reply = self.start_voice_request(json.dumps({'text': PHRASE}).encode())
