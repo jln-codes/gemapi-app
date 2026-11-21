@@ -7,14 +7,14 @@ from pathlib import Path
 from qgis.PyQt.QtCore import QSettings, QTimer, Qt, QUrl
 from qgis.PyQt.QtGui import QColor, QIcon, QTextCharFormat, QTextCursor
 from qgis.PyQt.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from qgis.PyQt.QtWidgets import (QAction, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+from qgis.PyQt.QtWidgets import (QAction, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
                                 QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
                                 QTextBrowser, QToolButton, QVBoxLayout, QWidget)
 
 from .assistant import (ALLOWED_FAMILIES, Draft, ENDPOINT, KEY_PATH_SETTING, LABELS, REFERENCES, candidates, configured_key_path, load_catalog, parse_response,
-                        read_api_key, request_payload)
+                        read_api_key, request_payload, spoken_result)
 from .window_geometry import initialize_window
-from .voice import (Recorder, TRANSCRIPTION_ENDPOINT, context_vocabulary,
+from .voice import (Recorder, Speaker, SPEECH_SETTING, TRANSCRIPTION_ENDPOINT, context_vocabulary,
                     parse_transcription, transcription_error, transcription_multipart)
 
 VOICE_IDLE = "Dictée ponctuelle : l'audio est transmis à Voxtral après Arrêter ; aucun fichier audio n'est conservé."
@@ -36,6 +36,7 @@ class AssistantDialog(QDialog):
         self._recording = False
         self._voice_previous_review = False
         self.recorder = Recorder(self)
+        self.speaker = Speaker(self)
         self._capture_generation = 0
         self._capture_slots = []
         self.recorder.finished.connect(self._voice_finished)
@@ -102,6 +103,33 @@ class AssistantDialog(QDialog):
         self.voice_status.setWordWrap(True)
         self.voice_status.setTextFormat(Qt.PlainText)
         layout.addWidget(self.voice_status)
+        speech_controls = QHBoxLayout()
+        self.speech_enabled = QCheckBox("Réponses vocales", self)
+        self.speech_enabled.setChecked(QSettings().value(SPEECH_SETTING, False, type=bool))
+        self.speech_enabled.setToolTip("Lire une phrase courte vérifiée localement avec Voxtral, sans transmettre les noms du brouillon.")
+        speech_controls.addWidget(self.speech_enabled)
+        self.replay_button = QToolButton(self)
+        self.replay_button.setText("Relire")
+        self.replay_button.setAutoRaise(True)
+        self.replay_button.setToolTip("Relire la dernière réponse ; réutiliser l'audio en mémoire si disponible.")
+        self.replay_button.clicked.connect(self._replay_speech)
+        speech_controls.addWidget(self.replay_button)
+        self.stop_speech_button = QToolButton(self)
+        self.stop_speech_button.setText("Arrêter la lecture")
+        self.stop_speech_button.setAutoRaise(True)
+        self.stop_speech_button.clicked.connect(self._stop_speech)
+        speech_controls.addWidget(self.stop_speech_button)
+        speech_controls.addStretch()
+        layout.addLayout(speech_controls)
+        self.speech_status = QLabel(self)
+        self.speech_status.setWordWrap(True)
+        self.speech_status.setTextFormat(Qt.PlainText)
+        self.speech_status.hide()
+        layout.addWidget(self.speech_status)
+        self.speaker.status.connect(self._show_speech_status)
+        self.speaker.changed.connect(self._sync_speech_controls)
+        self.speech_enabled.toggled.connect(self._speech_toggled)
+        self.input.textChanged.connect(self._forget_speech)
         self.progress = QProgressBar(self)
         self.progress.setRange(0, 0)
         self.progress.setFormat("Mistral traite le message…")
@@ -128,6 +156,7 @@ class AssistantDialog(QDialog):
         self.timer.setSingleShot(True)
         self.voice_timer = QTimer(self)
         self.voice_timer.setSingleShot(True)
+        self._sync_speech_controls()
         initialize_window(self, "assistant", parent)
         self._append("Assistant IA", "Décrivez une prestation sur un ouvrage hydraulique, un stockage hydraulique "
                      "ou une zone terrestre. Vos messages et les noms du brouillon sont transmis à Mistral. "
@@ -159,6 +188,47 @@ class AssistantDialog(QDialog):
             # Only a local path is stored in this QGIS profile, never the key itself.
             QSettings().setValue(KEY_PATH_SETTING, path)
             self._append("Assistant IA", "Chemin du fichier de clé enregistré pour ce profil QGIS.")
+
+    def _sync_speech_controls(self):
+        available = (self.speech_enabled.isChecked() and bool(self.speaker.text) and
+                     self._reply is None and self._voice_reply is None and not self._recording)
+        self.replay_button.setEnabled(available and not self.speaker.busy)
+        self.stop_speech_button.setEnabled(self.speaker.busy)
+
+    def _show_speech_status(self, text):
+        self.speech_status.setText(text)
+        self.speech_status.setVisible(bool(text))
+
+    def _speech_toggled(self, enabled):
+        QSettings().setValue(SPEECH_SETTING, enabled)
+        if not enabled:
+            self._stop_speech()
+            self.speaker.audio = None
+        self._sync_speech_controls()
+
+    def _stop_speech(self):
+        self.speaker.stop()
+        self._show_speech_status("Lecture arrêtée." if self.speech_enabled.isChecked() else "")
+
+    def _forget_speech(self):
+        self.speaker.stop(clear=True)
+        self._show_speech_status("")
+
+    def _remember_spoken_result(self):
+        self.speaker.set_text(spoken_result(self.draft, self.resolution))
+        if self.speech_enabled.isChecked() and self.isVisible():
+            self._replay_speech()
+
+    def _replay_speech(self):
+        if (not self.speech_enabled.isChecked() or not self.speaker.text or
+                self._reply is not None or self._voice_reply is not None or self._recording):
+            return
+        try:
+            key = '' if self.speaker.audio is not None else read_api_key(configured_key_path(QSettings()))
+        except ValueError:
+            self._show_speech_status("Clé Mistral indisponible pour la réponse vocale. Le texte reste disponible.")
+            return
+        self.speaker.speak(self.network, key)
 
     def _send(self):
         self.submit_user_message(self.input.toPlainText())
@@ -222,6 +292,7 @@ class AssistantDialog(QDialog):
         """Shared entry point for keyboard input and future speech-to-text messages."""
         if self._reply is not None or self._voice_reply is not None or self._recording or not text.strip():
             return
+        self._forget_speech()
         text = text.strip()
         self._review_required = True
         self.open_button.setEnabled(False)
@@ -294,6 +365,7 @@ class AssistantDialog(QDialog):
             self._append("Mistral — proposition", "Proposition de prestation préparée. Vérifiez le récapitulatif local.")
             self._review_required = False
             self._refresh(log=True)
+            self._remember_spoken_result()
         except ValueError as error:
             self._append("Assistant IA", str(error))
         finally:
@@ -316,6 +388,7 @@ class AssistantDialog(QDialog):
         self.cancel_voice_button.setText("Interrompre Voxtral" if voice_busy else "Annuler dictée")
         self.open_button.setEnabled(not busy and not voice_busy and not self._recording and not self._review_required and
                                     bool(self.resolution and self.resolution["values"]))
+        self._sync_speech_controls()
 
     def _toggle_microphone(self):
         if self._recording:
@@ -325,6 +398,7 @@ class AssistantDialog(QDialog):
             return
         if self._reply is not None or self._voice_reply is not None or self.recorder.thread is not None:
             return
+        self._forget_speech()
         self._voice_previous_review = self._review_required
         self._review_required = True
         self._recording = True
@@ -373,6 +447,7 @@ class AssistantDialog(QDialog):
     def _voice_ready(self, audio):
         if not self._recording:  # A cancelled recording must never send audio.
             return
+        self._forget_speech()
         self._recording = False
         self.voice_status.setStyleSheet("")
         try:
@@ -565,6 +640,7 @@ class AssistantDialog(QDialog):
             self._fill_reference_box(key, combo, catalog)
             self.reference_boxes[key] = combo
             self._correction_label(label, combo)
+            combo.currentTextChanged.connect(self._forget_speech)
         for key in ("date_debut", "date_fin"):
             if self.draft.names.get(key) and not (key == "date_fin" and self.draft.end_date_needs_confirmation):
                 continue
@@ -577,6 +653,7 @@ class AssistantDialog(QDialog):
             edit.setText(self.draft.names.get(key, ""))  # Missing dates stay empty, never today's/start date.
             self.date_edits[key] = edit
             self._correction_label(label, edit)
+            edit.textChanged.connect(self._forget_speech)
         self.apply_button.setVisible(bool(self.reference_boxes or self.date_edits or self.family_box))
 
     def _correction_family_changed(self, index, box=None):
@@ -585,6 +662,7 @@ class AssistantDialog(QDialog):
         family = self.family_box.itemData(index)
         if not family or "patrimoine" not in self.reference_boxes:
             return
+        self._forget_speech()
         try:
             catalog = load_catalog(self.session.connection(), family)
             # Re-rank places only in the explicitly selected family, keeping the other staged inputs.
@@ -601,6 +679,7 @@ class AssistantDialog(QDialog):
     def _apply_corrections(self):
         if self.resolution is None or self._reply is not None or self._voice_reply is not None or self._recording or self._review_required:
             return
+        self._forget_speech()
         catalog, references, dates = None, {}, {}
         try:
             family = self.family_box.currentData() if self.family_box is not None else self.draft.names.get("famille")
@@ -640,6 +719,7 @@ class AssistantDialog(QDialog):
             lines.insert(0, "Famille : " + family)
         self._append("Vous — corrections validées", "\n".join(lines))
         self._refresh(log=True)
+        self._remember_spoken_result()
 
     def _open_form(self):
         if self._reply is not None or self._review_required:
@@ -660,6 +740,7 @@ class AssistantDialog(QDialog):
         self.hide()
 
     def cancel_request(self):
+        self._forget_speech()
         if self._recording or self._voice_reply is not None or self.recorder.thread is not None:
             self._cancel_voice()
         else:
@@ -681,3 +762,7 @@ class AssistantDialog(QDialog):
     def closeEvent(self, event):
         self.cancel_request()
         super().closeEvent(event)
+
+    def hideEvent(self, event):
+        self._forget_speech()
+        super().hideEvent(event)

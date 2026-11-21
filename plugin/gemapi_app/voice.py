@@ -1,6 +1,8 @@
-"""One-shot Qt5 microphone capture and Voxtral helpers; audio exists only in memory."""
+"""Qt5 microphone, optional speech and Voxtral transport; audio stays in memory."""
 
 from array import array
+import base64
+import binascii
 from io import BytesIO
 import json
 import sys
@@ -8,7 +10,8 @@ from uuid import uuid4
 import wave
 
 from qgis.PyQt.QtCore import (QBuffer, QElapsedTimer, QIODevice, QMetaObject, QObject,
-                             QThread, QTimer, Qt, pyqtSignal, pyqtSlot)
+                             QThread, QTimer, Qt, QUrl, pyqtSignal, pyqtSlot)
+from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
 TRANSCRIPTION_ENDPOINT = "https://api.mistral.ai/v1/audio/transcriptions"
 TRANSCRIPTION_MODEL = "voxtral-mini-transcribe-3"
@@ -17,6 +20,286 @@ MAX_AUDIO_BYTES = 48000 * 2 * 2 * MAX_SECONDS
 # Retain threads if a dialog is unloaded during native device initialization.
 # No QThread is destroyed while its native audio backend is still running.
 _CAPTURES = set()
+SPEECH_ENDPOINT = "https://api.mistral.ai/v1/audio/speech"
+SPEECH_MODEL = "voxtral-mini-tts-3-0"
+SPEECH_VOICE = "voice_592"  # Marie, French preset; never clone a user's voice.
+SPEECH_SETTING = "gemapi_app/spoken_responses"
+MAX_SPEECH_TEXT = 360
+MAX_SPEECH_BYTES = 2 * 1024 * 1024
+MAX_SPEECH_RESPONSE = 3 * 1024 * 1024
+SPEECH_TIMEOUT_MS = 30000
+_PLAYBACKS = set()
+
+
+def speech_payload(text):
+    if (not isinstance(text, str) or not text.strip() or len(text) > MAX_SPEECH_TEXT or
+            any(ord(char) < 32 for char in text)):
+        raise ValueError("La réponse vocale doit être une phrase courte.")
+    return {"model": SPEECH_MODEL, "input": text.strip(), "voice_id": SPEECH_VOICE,
+            "response_format": "wav"}
+
+
+def parse_speech(raw):
+    """Validate bounded base64 + WAV, returning only PCM samples and their format."""
+    try:
+        if not raw or len(raw) > MAX_SPEECH_RESPONSE:
+            raise ValueError()
+        encoded = json.loads(raw)["audio_data"]
+        if not isinstance(encoded, str) or len(encoded) > (MAX_SPEECH_BYTES + 2) // 3 * 4:
+            raise ValueError()
+        audio = base64.b64decode(encoded, validate=True)
+        if len(audio) > MAX_SPEECH_BYTES or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+            raise ValueError()
+        if int.from_bytes(audio[4:8], 'little') + 8 != len(audio):
+            raise ValueError()
+        with wave.open(BytesIO(audio), 'rb') as wav:
+            rate, channels, frames = wav.getframerate(), wav.getnchannels(), wav.getnframes()
+            if (wav.getcomptype() != 'NONE' or wav.getsampwidth() != 2 or channels not in (1, 2) or
+                    not 8000 <= rate <= 48000 or not 0 < frames <= rate * 30):
+                raise ValueError()
+            pcm = wav.readframes(frames)
+            if len(pcm) != frames * channels * 2:
+                raise ValueError()
+        return pcm, rate, channels
+    except (ValueError, TypeError, KeyError, binascii.Error, wave.Error, EOFError, RecursionError):
+        raise ValueError("Audio de réponse invalide ou trop volumineux. Le texte reste disponible.") from None
+
+
+class _PlaybackWorker(QObject):
+    status = pyqtSignal(str)
+    failed = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(self, audio):
+        super().__init__()
+        self.pcm, self.rate, self.channels = audio
+        self.output = self.buffer = self.timer = None
+        self.done = False
+
+    @pyqtSlot()
+    def start(self):
+        if QThread.currentThread().isInterruptionRequested():
+            self.cancel()
+            return
+        try:
+            from qgis.PyQt.QtMultimedia import QAudio, QAudioDeviceInfo, QAudioFormat, QAudioOutput
+            device = QAudioDeviceInfo.defaultOutputDevice()
+            if device.isNull():
+                raise ValueError("Aucun périphérique de sortie audio disponible. Le texte reste disponible.")
+            fmt = QAudioFormat()
+            fmt.setCodec('audio/pcm')
+            fmt.setSampleRate(self.rate)
+            fmt.setChannelCount(self.channels)
+            fmt.setSampleSize(16)
+            fmt.setSampleType(QAudioFormat.SignedInt)
+            fmt.setByteOrder(QAudioFormat.LittleEndian)
+            if not device.isFormatSupported(fmt):
+                raise ValueError("Le périphérique audio ne prend pas en charge cette réponse. Le texte reste disponible.")
+            self.buffer = QBuffer(self)
+            self.buffer.setData(self.pcm)
+            self.pcm = b''
+            self.buffer.open(QIODevice.ReadOnly)
+            self.output = QAudioOutput(device, fmt, self)
+            self.output.stateChanged.connect(self._state)
+            self.timer = QTimer(self)
+            self.timer.setSingleShot(True)
+            self.timer.timeout.connect(self.cancel)
+            self.timer.start(31000)
+            # Device initialization may block its worker, never the QGIS GUI.
+            if QThread.currentThread().isInterruptionRequested():
+                self.cancel()
+                return
+            self.output.start(self.buffer)
+            if not self.done and self.output.error() != QAudio.NoError:
+                raise ValueError("Lecture audio indisponible. Le texte reste disponible.")
+            if not self.done:
+                self.status.emit("Lecture de la réponse…")
+        except (ImportError, OSError, RuntimeError, ValueError):
+            self._finish("Lecture vocale indisponible : vérifiez la sortie audio et QtMultimedia. Le texte reste disponible.")
+
+    def _state(self, state):
+        if self.done:
+            return
+        from qgis.PyQt.QtMultimedia import QAudio
+        if self.output.error() != QAudio.NoError:
+            self._finish("La lecture audio a échoué. Le texte reste disponible.")
+        elif state in (QAudio.IdleState, QAudio.StoppedState):
+            self._finish()
+
+    @pyqtSlot()
+    def cancel(self):
+        self._finish()
+
+    def _finish(self, error=''):
+        if self.done:
+            return
+        self.done = True
+        if self.timer is not None:
+            self.timer.stop()
+        if self.output is not None:
+            self.output.stop()
+            self.output.deleteLater()
+            self.output = None
+        if self.buffer is not None:
+            self.buffer.close()
+            self.buffer.setData(b'')
+            self.buffer.deleteLater()
+            self.buffer = None
+        self.pcm = b''
+        if error:
+            self.failed.emit(error)
+        self.finished.emit()
+
+
+class Speaker(QObject):
+    """One current sentence + one cached audio. Late replies cannot start playback."""
+    changed = pyqtSignal()
+    status = pyqtSignal(str)
+    cancel_playback = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.text = ''
+        self.audio = None
+        self.reply = None
+        self.thread = None
+        self.raw = bytearray()
+        self.failure = ''
+        self._playback_failed = False
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+
+    @property
+    def busy(self):
+        return self.reply is not None or self.thread is not None
+
+    def set_text(self, text):
+        self.stop(clear=True)
+        self.text = text
+        self.changed.emit()
+
+    def speak(self, network, key):
+        if not self.text:
+            return
+        self.stop()
+        if self.audio is not None:
+            self._play()
+            return
+        try:
+            payload = speech_payload(self.text)
+            request = QNetworkRequest(QUrl(SPEECH_ENDPOINT))
+            request.setHeader(QNetworkRequest.ContentTypeHeader, 'application/json')
+            request.setRawHeader(b'Authorization', ('Bearer ' + key).encode('utf-8'))
+            request.setAttribute(QNetworkRequest.RedirectPolicyAttribute, QNetworkRequest.ManualRedirectPolicy)
+            request.setTransferTimeout(SPEECH_TIMEOUT_MS)
+            self.reply = network.post(request, json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+            reply = self.reply
+            reply.setReadBufferSize(MAX_SPEECH_RESPONSE + 1)
+            reply.readyRead.connect(lambda current=reply: self._read(current))
+            reply.finished.connect(lambda current=reply: self._finished(current))
+            try:
+                self.timer.timeout.disconnect()
+            except TypeError:
+                pass
+            self.timer.timeout.connect(lambda current=reply: self._timeout(current))
+            self.timer.start(SPEECH_TIMEOUT_MS)
+            self.status.emit("Préparation de la réponse vocale…")
+            self.changed.emit()
+        except (RuntimeError, ValueError):
+            self.stop()
+            self.status.emit("Réponse vocale indisponible. Le texte reste disponible.")
+
+    def stop(self, clear=False):
+        self.timer.stop()
+        if self.reply is not None:
+            reply, self.reply = self.reply, None
+            reply.abort()
+            reply.deleteLater()
+        if self.thread is not None:
+            thread, self.thread = self.thread, None
+            try:
+                thread.requestInterruption()
+                self.cancel_playback.emit()
+            except RuntimeError:  # Native cleanup may precede thread.finished delivery.
+                pass
+        self.raw.clear()
+        self.failure = ''
+        if clear:
+            self.text, self.audio = '', None
+        self.changed.emit()
+
+    def _read(self, reply):
+        if reply is self.reply:
+            self.raw.extend(bytes(reply.readAll()))
+            if len(self.raw) > MAX_SPEECH_RESPONSE and not self.failure:
+                self.failure = "Réponse vocale trop volumineuse. Le texte reste disponible."
+                reply.abort()
+
+    def _timeout(self, reply):
+        if reply is self.reply:
+            self.failure = "Délai de réponse vocale dépassé (30 s). Le texte reste disponible."
+            self.reply.abort()
+
+    def _finished(self, reply):
+        if reply is not self.reply:
+            return
+        self._read(reply)
+        if reply is not self.reply:  # abort may synchronously emit finished.
+            return
+        self.timer.stop()
+        self.reply = None
+        try:
+            status = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+            if self.failure or reply.error() != QNetworkReply.NoError or status != 200:
+                raise ValueError(self.failure or "Synthèse vocale indisponible (réseau, clé ou quota). Le texte reste disponible.")
+            self.audio = parse_speech(bytes(self.raw))
+            self._play()
+        except ValueError as error:
+            self.status.emit(str(error))
+        finally:
+            self.raw.clear()
+            self.failure = ''
+            reply.deleteLater()
+            self.changed.emit()
+
+    def _play(self):
+        thread = QThread()
+        worker = _PlaybackWorker(self.audio)
+        thread.worker = worker
+        worker.moveToThread(thread)
+        self.cancel_playback.connect(worker.cancel, Qt.QueuedConnection)
+        self._playback_failed = False
+        worker.status.connect(self._play_status)
+        worker.failed.connect(self._play_failed)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.started.connect(worker.start)
+        thread.finished.connect(self._played)
+        thread.finished.connect(lambda: _PLAYBACKS.discard(thread))
+        thread.finished.connect(thread.deleteLater)
+        _PLAYBACKS.add(thread)
+        self.thread = thread
+        thread.start()
+        self.changed.emit()
+
+    @pyqtSlot(str)
+    def _play_status(self, text):
+        if self.thread is not None and self.sender() is self.thread.worker:
+            self.status.emit(text)
+
+    @pyqtSlot(str)
+    def _play_failed(self, text):
+        if self.thread is not None and self.sender() is self.thread.worker:
+            self._playback_failed = True
+            self.status.emit(text)
+
+    @pyqtSlot()
+    def _played(self):
+        if self.sender() is self.thread:
+            self.thread = None
+            if not self._playback_failed:
+                self.status.emit("Lecture terminée. Vous pouvez relire la réponse.")
+            self.changed.emit()
 
 
 def wav_audio(pcm, rate, channels):

@@ -505,6 +505,34 @@ def type_candidates(name, rows):
     return candidates(name, rows)
 
 
+def spoken_result(draft, resolution):
+    """Short factual summary of LOCAL verification; never interpolate model/user data."""
+    if resolution is None:
+        return ""
+    if resolution["values"] is not None:
+        return "Le brouillon est complet. Vous pouvez ouvrir le formulaire pour le vérifier. Rien n'est encore enregistré."
+    if draft.names.get("plusieurs_objets"):
+        return "Plusieurs objets ont été demandés. Veuillez choisir un seul objet patrimonial."
+    pending, verified = resolution["pending"], resolution["verified"]
+    if len(pending.get("patrimoine", ())) > 1:
+        return "Plusieurs objets patrimoniaux correspondent à cette demande. Veuillez choisir celui qui convient."
+    if pending:
+        return "Des correspondances restent à confirmer. Veuillez choisir les références dans les listes proposées."
+    if draft.names.get("geometrie_demandee"):
+        return "La géométrie demandée nécessite une clarification. Consultez le récapitulatif avant de poursuivre."
+    intro = ("L'objet patrimonial et le type de prestation sont identifiés. "
+             if "patrimoine" in verified and "type_prestation" in verified else "")
+    if not draft.names.get("date_debut") and not draft.names.get("date_fin"):
+        return intro + "Il manque les dates de début et de fin. Complétez les champs proposés."
+    if not draft.names.get("date_fin"):
+        return intro + "Il manque la date de fin. Complétez les champs proposés."
+    if not draft.names.get("date_debut"):
+        return intro + "Il manque la date de début. Complétez les champs proposés."
+    if draft.end_date_needs_confirmation:
+        return intro + "La date de fin doit être confirmée. Vérifiez les champs proposés."
+    return intro + "Le brouillon reste à compléter ou à corriger. Consultez le récapitulatif."
+
+
 class Draft:
     def __init__(self):
         self.names = {}
