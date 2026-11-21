@@ -34,6 +34,17 @@ automatique. Le clavier conserve le même brouillon. L'audio reste uniquement en
 mémoire. En cas de microphone inaccessible, vérifier les autorisations de QGIS
 et l'entrée par défaut du système, ou continuer au clavier.
 
+**Réponses vocales**, désactivé par défaut, lit une phrase courte après la
+vérification locale d'une proposition. Ce choix est conservé dans le profil QGIS.
+Le récapitulatif texte reste affiché. **Arrêter la lecture** interrompt l'audio et
+la requête TTS en cours. **Relire** réutilise la dernière réponse audio en mémoire,
+ou la redemande à Voxtral si nécessaire, sans nouvel appel à Mistral Small.
+Seule la courte phrase est transmise au TTS, sans noms, référentiels, UUID ou géométries.
+Une nouvelle demande, une correction, la dictée, un nouveau brouillon ou le masquage
+de l'assistant arrêtent l'ancienne réponse. Aucun audio n'est écrit sur disque.
+Sans clé, réseau ou sortie audio utilisable, continuer au clavier : le brouillon
+et le formulaire restent disponibles. Une réponse vocale ne sauvegarde jamais la prestation.
+
 Seuls les ouvrages hydrauliques, stockages hydrauliques et zones terrestres sont acceptés,
 avec un seul objet et une géométrie propre `NULL`. Aucun champ obligatoire n'est déduit
 arbitrairement. Les messages et noms complets des référentiels actifs et des trois

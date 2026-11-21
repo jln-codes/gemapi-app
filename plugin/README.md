@@ -1,4 +1,4 @@
-# GEMAPI-App — plugin QGIS 0.8.1
+# GEMAPI-App — plugin QGIS 0.8.2
 
 L’assistant IA ajoute un assistant conversationnel Mistral à la création standard.
 Le plugin utilise le schéma canonique actuel sans le modifier.
@@ -110,8 +110,39 @@ la correction et le choix prudent des références restent nécessaires.
 Les délais maximaux sont 30 secondes pour Mistral Small et 60 secondes pour Voxtral ;
 les deux appels HTTP Qt sont asynchrones. Les consultations PostgreSQL réutilisent
 la connexion QGIS et restent synchrones, comme celles du formulaire standard.
-Cette version ne comprend ni écoute permanente, ni WebSocket, ni synthèse vocale,
+Cette version ne comprend ni écoute permanente, ni WebSocket,
 ni enregistrement de prestation par commande vocale.
+
+### Réponses vocales facultatives
+
+**Réponses vocales** est désactivé par défaut. L'activer mémorise le choix dans le
+profil QGIS (`gemapi_app/spoken_responses`) et lit automatiquement les prochains
+résultats vérifiés localement. L'affichage texte est conservé. La phrase indique
+un champ manquant, un choix à confirmer ou un brouillon prêt à vérifier dans le
+formulaire ; elle n'annonce jamais une sauvegarde. Elle ne lit ni JSON ni noms ou
+messages libres de Mistral. Les corrections locales validées peuvent aussi être lues.
+
+**Arrêter la lecture** interrompt la synthèse ou la lecture en cours. **Relire**
+réutilise l'audio de la dernière phrase en mémoire s'il est disponible, sinon seul
+le TTS est rappelé ; aucun nouvel appel Mistral Small. Activer l'option ne lance pas
+de lecture rétroactive : utiliser Relire pour une réponse déjà affichée.
+
+Le TTS utilise l'API officielle `/v1/audio/speech`, le modèle
+`voxtral-mini-tts-3-0`, la voix française Marie (`voice_592`) et le format WAV.
+La même configuration de clé Mistral est utilisée. Seule la phrase courte est
+envoyée : aucun référentiel, nom du brouillon, UUID, chemin de fichier ou géométrie.
+Limites : 360 caractères, requête de 30 secondes maximum, réponse JSON de 3 Mio,
+WAV PCM 16 bits de 2 Mio et 30 secondes maximum. Les échanges réseau Qt sont
+asynchrones et la sortie QtMultimedia est gérée dans un thread distinct.
+Le WAV Base64 est contrôlé puis lu depuis un tampon mémoire, sans fichier audio
+ni dépendance Python supplémentaire. L'audio de la dernière réponse est conservé
+uniquement pour Relire, puis libéré au changement de demande, à une correction,
+au nouveau brouillon, à la désactivation ou au masquage de l'assistant.
+
+Toute nouvelle demande ou dictée interrompt l'ancienne réponse. Les réponses
+tardives sont ignorées. Une panne réseau, une clé indisponible, QtMultimedia absent
+ou une sortie audio non utilisable laissent le texte, les corrections et le
+brouillon disponibles. Le formulaire habituel conserve sa validation humaine.
 
 Le [compte rendu DYSTOPIC-02](../audits/DYSTOPIC-02.md) décrit la recette et ses limites.
 
@@ -145,7 +176,7 @@ L’espace des photographies s’adapte en conservant leurs proportions.
 ## Installation et dépendances
 
 Depuis la racine du dépôt, exécuter `python3 plugin/tools/build_plugin.py`, puis installer
-`plugin/dist/gemapi-app-0.8.1.zip` dans **Extensions > Installer/Gérer les
+`plugin/dist/gemapi-app-0.8.2.zip` dans **Extensions > Installer/Gérer les
 extensions > Installer depuis un ZIP**. Le plugin n'ajoute aucune dépendance
 Python externe : PyQGIS, Qt et la bibliothèque standard suffisent. Le script
 contrôle les fonctions requises et vérifie que chaque fichier du ZIP correspond
@@ -174,7 +205,7 @@ par UUID.
 
 Le ZIP installe uniquement `gemapi_app`, nommé **GEMAPI-App**, avec son
 icône habituelle dans la barre partagée **SIG-Milieux**. L’assistant fait partie
-de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.1.zip` et contient
+de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.2.zip` et contient
 `gemapi_app/`. Désactiver puis retirer l’ancien plugin `sig_prestations` lors de
 cette première installation sous le nouveau nom ; les anciennes archives gardent
 leur nom et leur contenu. Le chemin de clé existant est repris automatiquement. Désactiver puis retirer l’ancienne extension
@@ -435,7 +466,9 @@ simulée et de résolution locale. Un essai API sans base ni écriture est dispo
 `/usr/bin/python3 plugin/tests/test_assistant_linguistics.py --live --limit 12`.
 Il utilise le catalogue de test, sans interroger CABBALR.
 La même commande avec `-p 'test_voice.py'` vérifie la capture simulée, le multipart
-Voxtral, les erreurs, la relecture, les échanges mixtes et l'annulation sans envoi.
+Voxtral, les erreurs, les échanges mixtes et l'annulation sans envoi. Elle couvre
+aussi les requêtes TTS, le WAV Base64, la préférence, la relecture en mémoire,
+les interruptions concurrentes et le nettoyage des threads et tampons audio.
 `QT_QPA_PLATFORM=offscreen /usr/bin/python3 plugin/tests/test_assistant_integration.py`
 valide le ZIP avec une base PostGIS Docker neuve, les trois rattachements et
 l'enregistrement standard déclenché explicitement par le test. La base est supprimée

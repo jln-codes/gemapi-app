@@ -24,6 +24,7 @@ ALLOWED_IMPORTS = {"pathlib", "plugin", "creation", "management", "filter_picker
 REPORT_EXPORTS = {"filter_option_queries", "build_management_query", "build_report_query", "prepare_rows", "grouped_entries", "measure_lines", "report_warnings"}
 ALLOWED_IMPORTS.update(('digues', 'permissions', 'prestation_focus', 'assistant', 'assistant_dialog', 'voice', 're', 'difflib', 'array', 'io', 'wave'))
 ALLOWED_IMPORTS.add('copy')
+ALLOWED_IMPORTS.update(('base64', 'binascii'))
 
 
 def validate_python(source: Path) -> None:

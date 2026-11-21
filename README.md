@@ -5,7 +5,7 @@ L'historique antérieur à la refonte du dépôt est conservé dans
 [gemapi-app-legacy](https://github.com/jln-codes/gemapi-app-legacy).
 
 Modèle PostgreSQL/PostGIS V0.13, données de démonstration et plugin QGIS
-**GEMAPI-App 0.8.1**, assistant Mistral et dictée Voxtral
+**GEMAPI-App 0.8.2**, assistant Mistral, dictée et réponses vocales Voxtral facultatives
 (QGIS 3.44 minimum).
 
 ## Organisation
@@ -63,7 +63,7 @@ migration des données métier.
   `bash demo/data/importer_base_neuve.sh nom_base`.
 - [Installer, utiliser et tester le plugin](plugin/README.md) : générer le ZIP
   avec `python3 plugin/tools/build_plugin.py`, puis installer
-  `plugin/dist/gemapi-app-0.8.1.zip` dans QGIS.
+  `plugin/dist/gemapi-app-0.8.2.zip` dans QGIS.
 
 Le ZIP standard embarque uniquement le package `gemapi_app/`, ses modules, les
 interfaces Qt, l'icône et le logo institutionnel. Il n'embarque aucune donnée,
