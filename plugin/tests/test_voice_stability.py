@@ -13,12 +13,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def child(scenario):
+    if os.name == 'posix':
+        import resource
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     import copy
     import time
     from unittest.mock import Mock, patch
     from qgis.PyQt import sip
     from qgis.PyQt.QtCore import QCoreApplication, QEvent, QObject, QSettings
     from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtMultimedia import QAudioDeviceInfo, QAudioInput, QAudioOutput
     from qgis.core import QgsApplication
     sys.path.insert(0, str(ROOT / 'plugin'))
     import test_voice as fixtures
@@ -28,7 +32,11 @@ def child(scenario):
     app = QgsApplication([], True)
     app.initQgis()
     callback_errors = []
-    sys.excepthook = lambda kind, _error, _trace: callback_errors.append(kind.__name__)
+    def callback_error(kind, error, trace):
+        import traceback
+        callback_errors.append(kind.__name__)
+        traceback.print_exception(kind, error, trace)  # Only synthetic test inputs in this process.
+    sys.excepthook = callback_error
     device = Mock()
     device.isNull.return_value = False
     device.isFormatSupported.return_value = True
@@ -46,14 +54,47 @@ def child(scenario):
             time.sleep(.025)  # A slow native device must not multiply workers.
             super().start(buffer)
 
-    with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultInputDevice', return_value=device), patch(
-            'qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice', return_value=device), patch(
-            'qgis.PyQt.QtMultimedia.QAudioInput', fixtures.FakeAudio), patch(
-            'qgis.PyQt.QtMultimedia.QAudioOutput', SlowOutput), patch(
+    native = scenario == 'native'
+    input_device, output_device = QAudioDeviceInfo.defaultInputDevice, QAudioDeviceInfo.defaultOutputDevice
+    with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultInputDevice',
+               side_effect=input_device if native else lambda: device), patch(
+            'qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice',
+            side_effect=output_device if native else lambda: device), patch(
+            'qgis.PyQt.QtMultimedia.QAudioInput', QAudioInput if native else fixtures.FakeAudio), patch(
+            'qgis.PyQt.QtMultimedia.QAudioOutput', QAudioOutput if native else SlowOutput), patch(
             'gemapi_app.assistant_dialog.load_catalog', return_value=copy.deepcopy(CATALOG)), patch(
             'gemapi_app.assistant_dialog.read_api_key', return_value='simulated-key'):
         try:
-            if scenario == 'owners':
+            if native:
+                parent = QObject()
+                speaker, recorder = Speaker(parent), Recorder(parent)
+                statuses = []
+                speaker.status.connect(statuses.append)
+                capture_statuses = []
+                recorder.status.connect(capture_statuses.append)
+                for index in range(32):
+                    statuses.clear()
+                    speaker.set_text('Réponse locale de test.')
+                    speaker.audio = (b'\0' * 24000, 24000, 1)
+                    speaker.speak(Mock(), '')
+                    drain(lambda: any(s.startswith('Lecture de la réponse') for s in statuses))
+                    speaker.stop(clear=True)
+                    drain(lambda: not _PLAYBACKS)
+                    if index % 8 == 0:
+                        capture_statuses.clear()
+                        recorder.start()
+                        drain(lambda: any('Microphone actif' in s for s in capture_statuses))
+                        recorder.cancel()
+                        drain(lambda: not _CAPTURES)
+                statuses.clear()
+                speaker.set_text('Réponse terminée normalement.')
+                speaker.audio = (b'\0' * 24000, 24000, 1)
+                speaker.speak(Mock(), '')
+                drain(lambda: not speaker.busy, limit=600)
+                assert any('Lecture terminée' in text for text in statuses), statuses
+                sip.delete(parent)
+                drain(lambda: not _CAPTURES and not _PLAYBACKS)
+            elif scenario == 'owners':
                 for _ in range(20):
                     parent = QObject()
                     recorder, speaker = Recorder(parent), Speaker(parent)
@@ -152,5 +193,7 @@ class IsolatedStabilityTests(unittest.TestCase):
 if __name__ == '__main__':
     if len(sys.argv) > 2 and sys.argv[1] == '--child':
         child(sys.argv[2])
+    elif '--native' in sys.argv:
+        IsolatedStabilityTests().run_scenario('native')
     else:
         unittest.main()

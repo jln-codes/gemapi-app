@@ -9,6 +9,7 @@ import sys
 from uuid import uuid4
 import wave
 
+from qgis.PyQt import sip
 from qgis.PyQt.QtCore import (QBuffer, QElapsedTimer, QIODevice, QObject,
                              QThread, QTimer, Qt, QUrl, pyqtSignal, pyqtSlot)
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
@@ -73,15 +74,18 @@ def parse_speech(raw):
 
 
 class _PlaybackWorker(QObject):
-    status = pyqtSignal(str)
-    failed = pyqtSignal(str)
+    status = pyqtSignal(int, str)
+    failed = pyqtSignal(int, str)
     finished = pyqtSignal()
+    finish_requested = pyqtSignal(str)
 
-    def __init__(self, audio):
+    def __init__(self, audio, generation=0):
         super().__init__()
+        self.generation = generation
         self.pcm, self.rate, self.channels = audio
         self.output = self.buffer = self.timer = None
         self.done = False
+        self.finish_requested.connect(self._finish, Qt.QueuedConnection)
 
     @pyqtSlot()
     def start(self):
@@ -120,7 +124,7 @@ class _PlaybackWorker(QObject):
             if not self.done and self.output.error() != QAudio.NoError:
                 raise ValueError("Lecture audio indisponible. Le texte reste disponible.")
             if not self.done:
-                self.status.emit("Lecture de la réponse…")
+                self.status.emit(self.generation, "Lecture de la réponse…")
         except (ImportError, OSError, RuntimeError, ValueError):
             self._finish("Lecture vocale indisponible : vérifiez la sortie audio et QtMultimedia. Le texte reste disponible.")
 
@@ -128,15 +132,20 @@ class _PlaybackWorker(QObject):
         if self.done:
             return
         from qgis.PyQt.QtMultimedia import QAudio
-        if self.output.error() != QAudio.NoError:
-            self._finish("La lecture audio a échoué. Le texte reste disponible.")
+        error = self.output.error()
+        if (state == QAudio.IdleState and self.buffer is not None and self.buffer.atEnd() and
+                error in (QAudio.NoError, QAudio.UnderrunError)):
+            self.finish_requested.emit('')  # A finite memory stream has reached its end.
+        elif error != QAudio.NoError:
+            self.finish_requested.emit("La lecture audio a échoué. Le texte reste disponible.")
         elif state in (QAudio.IdleState, QAudio.StoppedState):
-            self._finish()
+            self.finish_requested.emit('')
 
     @pyqtSlot()
     def cancel(self):
         self._finish()
 
+    @pyqtSlot(str)
     def _finish(self, error=''):
         if self.done:
             return
@@ -144,9 +153,11 @@ class _PlaybackWorker(QObject):
         if self.timer is not None:
             self.timer.stop()
         if self.output is not None:
-            self.output.stop()
-            self.output.deleteLater()
-            self.output = None
+            output, self.output = self.output, None
+            output.stop()
+            # Qt5 PulseAudio's destructor processes events. Finish it while the
+            # worker and its buffer are still alive, BEFORE allowing thread exit.
+            sip.delete(output)
         if self.buffer is not None:
             self.buffer.close()
             self.buffer.setData(b'')
@@ -154,7 +165,7 @@ class _PlaybackWorker(QObject):
             self.buffer = None
         self.pcm = b''
         if error:
-            self.failed.emit(error)
+            self.failed.emit(self.generation, error)
         self.finished.emit()
 
 
@@ -175,6 +186,7 @@ class Speaker(QObject):
         self._playback_failed = False
         self._playing = False
         self._pending_play = False
+        self._generation = 0
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
 
@@ -281,7 +293,8 @@ class Speaker(QObject):
             self._pending_play = True  # Only the latest sentence survives cancellation.
             return
         thread = _AudioThread()
-        worker = _PlaybackWorker(self.audio)
+        self._generation += 1
+        worker = _PlaybackWorker(self.audio, self._generation)
         thread.worker = worker
         worker.moveToThread(thread)
         self.cancel_playback.connect(worker.cancel, Qt.QueuedConnection)
@@ -302,14 +315,14 @@ class Speaker(QObject):
         thread.start()
         self.changed.emit()
 
-    @pyqtSlot(str)
-    def _play_status(self, text):
-        if self._playing and self.thread is not None and self.sender() is self.thread.worker:
+    @pyqtSlot(int, str)
+    def _play_status(self, generation, text):
+        if self._playing and generation == self._generation:
             self.status.emit(text)
 
-    @pyqtSlot(str)
-    def _play_failed(self, text):
-        if self._playing and self.thread is not None and self.sender() is self.thread.worker:
+    @pyqtSlot(int, str)
+    def _play_failed(self, generation, text):
+        if self._playing and generation == self._generation:
             self._playback_failed = True
             self.status.emit(text)
 
@@ -420,6 +433,7 @@ class _CaptureWorker(QObject):
     failed = pyqtSignal(str)
     status = pyqtSignal(str)
     finished = pyqtSignal()
+    failure_requested = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -430,6 +444,7 @@ class _CaptureWorker(QObject):
         self.clock = None
         self.format = None
         self.done = False
+        self.failure_requested.connect(self._fail, Qt.QueuedConnection)
 
     @pyqtSlot()
     def start(self):
@@ -492,9 +507,11 @@ class _CaptureWorker(QObject):
     def _state_changed(self, state):
         from qgis.PyQt.QtMultimedia import QAudio
         if not self.done and state == QAudio.StoppedState and self.audio.error() != QAudio.NoError:
-            self._fail("Microphone interrompu ou accès refusé. Vérifiez le périphérique et les permissions ; poursuivez au clavier.")
+            self.failure_requested.emit("Microphone interrompu ou accès refusé. Vérifiez le périphérique et les permissions ; poursuivez au clavier.")
 
     def _tick(self):
+        if self.done:
+            return
         if QThread.currentThread().isInterruptionRequested():
             self.cancel()
             return
@@ -513,8 +530,11 @@ class _CaptureWorker(QObject):
         if self.limit_timer is not None:
             self.limit_timer.stop()
         if self.audio is not None:
-            self.audio.stop()
+            audio, self.audio = self.audio, None
+            audio.stop()
+            sip.delete(audio)
 
+    @pyqtSlot(str)
     def _fail(self, message):
         if self.done:
             return

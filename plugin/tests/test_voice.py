@@ -289,15 +289,48 @@ class PlaybackTests(unittest.TestCase):
         device.isFormatSupported.return_value = True
         return device
 
+    def test_native_output_is_destroyed_before_buffer_release_and_thread_finish(self):
+        with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice', return_value=self.device()), patch(
+                'qgis.PyQt.QtMultimedia.QAudioOutput', FakeOutput):
+            worker = _PlaybackWorker(parse_speech(speech_response()))
+            worker.start()
+            order = []
+            buffer = worker.buffer
+            def destroyed(_object=None):
+                self.assertTrue(buffer.isOpen())
+                self.assertFalse(worker.signalsBlocked())
+                self.app.processEvents()  # PulseAudio destructor can reenter the event loop.
+                order.append('device')
+            worker.output.destroyed.connect(destroyed)
+            worker.finished.connect(lambda: order.append('finished'))
+            worker.cancel()
+            self.assertEqual(order, ['device', 'finished'])
+            self.assertIsNone(worker.buffer)
+
+    def test_end_of_finite_audio_is_not_reported_as_device_failure(self):
+        with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice', return_value=self.device()), patch(
+                'qgis.PyQt.QtMultimedia.QAudioOutput', FakeOutput):
+            worker = _PlaybackWorker(parse_speech(speech_response()))
+            errors = []
+            worker.failed.connect(lambda _generation, text: errors.append(text))
+            worker.start()
+            worker.buffer.seek(worker.buffer.size())
+            worker.output.error = lambda: QAudio.UnderrunError
+            worker.output.stateChanged.emit(QAudio.IdleState)
+            QTest.qWait(5)
+            self.assertTrue(worker.done)
+            self.assertFalse(errors)
+
     def test_memory_only_player_completion_cancel_and_device_failures(self):
         errors = []
         with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice', return_value=self.device()), patch(
                 'qgis.PyQt.QtMultimedia.QAudioOutput', FakeOutput):
             worker = _PlaybackWorker(parse_speech(speech_response()))
-            worker.failed.connect(errors.append)
+            worker.failed.connect(lambda _generation, text: errors.append(text))
             worker.start()
             self.assertTrue(worker.buffer.isOpen())
             worker.output.stateChanged.emit(QAudio.IdleState)
+            QTest.qWait(5)
             self.assertIsNone(worker.buffer)
             self.assertIsNone(worker.output)
             self.assertEqual(worker.pcm, b'')
@@ -306,12 +339,12 @@ class PlaybackTests(unittest.TestCase):
         self.assertFalse(errors)
         for condition in ('missing', 'unsupported', 'backend', 'module'):
             worker = _PlaybackWorker(parse_speech(speech_response()))
-            worker.failed.connect(errors.append)
+            worker.failed.connect(lambda _generation, text: errors.append(text))
             device = self.device()
             device.isNull.return_value = condition == 'missing'
             device.isFormatSupported.return_value = condition != 'unsupported'
-            output = Mock()
-            output.error.return_value = QAudio.OpenError
+            output = FakeOutput()
+            output.error = lambda: QAudio.OpenError
             with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice', return_value=device), patch(
                     'qgis.PyQt.QtMultimedia.QAudioOutput', return_value=output):
                 if condition == 'module':
@@ -349,6 +382,27 @@ class PlaybackTests(unittest.TestCase):
             self.assertFalse(_PLAYBACKS)
             self.assertIsNone(speaker.thread)
             self.assertIsNone(speaker.audio)
+            speaker.deleteLater()
+
+    def test_fast_deleted_worker_keeps_queued_error_and_never_reports_false_success(self):
+        from qgis.PyQt.QtCore import QThread
+        device = self.device()
+        device.isNull.return_value = True
+        with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultOutputDevice', return_value=device):
+            speaker = Speaker()
+            speaker.set_text('Réponse de test.')
+            speaker.audio = parse_speech(speech_response())
+            statuses = []
+            speaker.status.connect(statuses.append)
+            speaker.speak(Mock(), '')
+            QThread.msleep(30)  # Let the worker die before its queued messages are delivered.
+            for _ in range(60):
+                QTest.qWait(5)
+                if not _PLAYBACKS:
+                    break
+            self.assertTrue(any('indisponible' in text for text in statuses), statuses)
+            self.assertFalse(any('Lecture terminée' in text for text in statuses), statuses)
+            speaker.stop(clear=True)
             speaker.deleteLater()
 
 
@@ -688,6 +742,7 @@ class CaptureWorkerTests(unittest.TestCase):
             worker2.ready.connect(ready.append)
             worker2.start()
             worker2.cancel()
+            worker2._tick()  # An already queued timer must not touch released audio.
             self.assertEqual(len(ready), 1)
             self.assertEqual(worker2.buffer.size(), 0)
 
@@ -702,8 +757,8 @@ class CaptureWorkerTests(unittest.TestCase):
         self.assertIn('Aucun microphone', errors[0])
         worker = _CaptureWorker()
         worker.failed.connect(errors.append)
-        audio_backend = Mock()
-        audio_backend.error.return_value = QAudio.OpenError
+        audio_backend = FakeAudio()
+        audio_backend.error = lambda: QAudio.OpenError
         with patch('qgis.PyQt.QtMultimedia.QAudioDeviceInfo.defaultInputDevice', return_value=self.device()), patch(
                 'qgis.PyQt.QtMultimedia.QAudioInput', return_value=audio_backend):
             worker.start()
