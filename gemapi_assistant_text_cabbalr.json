@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "usage": "Tests d'interprétation textuelle de l'assistant GEMAPI-App, sans microphone, sans Voxtral ni TTS.",
+  "test_protocol": {
+    "input_path": "text",
+    "instructions": [
+      "Soumettre text directement au flux d'interprétation Mistral / assistant (sans reconnaissance vocale).",
+      "Chaque cas commence avec un brouillon neuf; tester les reprises de brouillon séparément.",
+      "Les expected_dates ne sont que les bornes explicitement données dans la phrase; null signifie date absente, ne pas l'inventer.",
+      "Ne pas inférer l'identité UUID à partir de cette fixture : vérifier contre le référentiel PostgreSQL de l'environnement correspondant.",
+      "Ne jamais écrire de prestation ni modifier une base pour tester l'extraction.",
+      "Distinguer la réponse JSON brute de Mistral, l'application locale du patch et la résolution des références.",
+      "En cas d'ambiguïté métier, conserver les champs indépendants et demander une confirmation plutôt que sélectionner arbitrairement un UUID."
+    ]
+  },
+  "dataset": "cabbalr",
+  "cases": [
+    {
+      "id": "CABBALR-01",
+      "scenario": "Date de fin manquante",
+      "text": "Je veux créer une intervention de débroussaillage sur le Talus ZEC Ourton. C'était le onze novembre deux mille vingt-six, l'entreprise Noeux Environnement est intervenue et le suivi était assuré par Benoît Quentin. Le chantier est terminé. Il y avait beaucoup de ronces au pied du talus, ce qui gênait les inspections.",
+      "expected_dates": {
+        "date_debut": "2026-11-11",
+        "date_fin": null
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Date d'intervention unique : ne pas déduire de date de fin du statut Terminé."
+    },
+    {
+      "id": "CABBALR-02",
+      "scenario": "Chantier planifié",
+      "text": "Il faut programmer un chantier de fauche sur le Talus 1 ZEC Comté, du 3 au 5 décembre 2026. La Régie réalisera les travaux sous la responsabilité de Laurent Massart. Statut planifié. L'objectif est de dégager la végétation qui empêche de voir correctement le pied de l'ouvrage.",
+      "expected_dates": {
+        "date_debut": "2026-12-03",
+        "date_fin": "2026-12-05"
+      },
+      "expected_statut_if_explicit": "Planifié",
+      "notes": "Période prévue : les deux bornes sont explicites."
+    },
+    {
+      "id": "CABBALR-03",
+      "scenario": "Informations désordonnées",
+      "text": "Réagir, Laeticia Lamiaux, du 19 au 22 novembre 2026, c'est en cours. Ah oui, je parle de l'élagage sur le Talus 2 ZEC Comté. Plusieurs branches surplombent le chemin d'accès et doivent être retirées.",
+      "expected_dates": {
+        "date_debut": "2026-11-19",
+        "date_fin": "2026-11-22"
+      },
+      "expected_statut_if_explicit": "En cours",
+      "notes": "Conserver exactement « Réagir, Laeticia Lamiaux » ; ne pas corriger arbitrairement Réagir en un prestataire de la base."
+    },
+    {
+      "id": "CABBALR-04",
+      "scenario": "Expression métier libre",
+      "text": "Forêt et Paysages a terminé le retrait d'embâcles sur le Talus RC Caucourt le 15 octobre 2026. C'est Aline Pruvost qui suivait l'intervention. On avait notamment des branchages accumulés près de l'accès de maintenance.",
+      "expected_dates": {
+        "date_debut": null,
+        "date_fin": "2026-10-15"
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Le 15 octobre est explicitement associé à l'achèvement, pas au début ; début absent, à demander."
+    },
+    {
+      "id": "CABBALR-05",
+      "scenario": "Stockage hydraulique",
+      "text": "Créer une prestation de curage sur le Stockage ZEC Bellerive, prévue du 1er au 8 décembre 2026. Le prestataire sera AVIEE et le technicien Mickael Macquet. Statut planifié. Une accumulation de sédiments est signalée près de la sortie du bassin.",
+      "expected_dates": {
+        "date_debut": "2026-12-01",
+        "date_fin": "2026-12-08"
+      },
+      "expected_statut_if_explicit": "Planifié",
+      "notes": "Stockage hydraulique ; période prévue."
+    },
+    {
+      "id": "CABBALR-06",
+      "scenario": "Hésitations et reformulation",
+      "text": "Alors, pour le bassin de la Comté, enfin le Stockage ZEC La Comté, il faut enregistrer un suivi de milieu du 19 au 25 novembre 2026. C'est en cours, avec Chemins vers l'Emploi et Vincent Canoen. On a observé des traces de ruissellement dans la partie basse.",
+      "expected_dates": {
+        "date_debut": "2026-11-19",
+        "date_fin": "2026-11-25"
+      },
+      "expected_statut_if_explicit": "En cours",
+      "notes": "La reformulation finale du patrimoine doit primer sans inventer d'UUID."
+    },
+    {
+      "id": "CABBALR-07",
+      "scenario": "Description complémentaire",
+      "text": "Je voudrais prévoir une restauration écologique sur le Stockage ZEC Paradis, du 7 au 18 décembre 2026, confiée à Noeux Environnement. Jérémie Duval sera responsable du suivi. La prestation est planifiée. Il faudra favoriser la reprise de la végétation sur les zones dénudées.",
+      "expected_dates": {
+        "date_debut": "2026-12-07",
+        "date_fin": "2026-12-18"
+      },
+      "expected_statut_if_explicit": "Planifié",
+      "notes": "Conserver la motivation métier dans la description."
+    },
+    {
+      "id": "CABBALR-08",
+      "scenario": "Zone terrestre",
+      "text": "Une étude a été réalisée sur l'Escalier du Site de la Vallée Carreau les 4 et 5 novembre 2026. C'était AVIEE, avec Julien Lorion comme technicien responsable. Statut terminé. Plusieurs marches semblent dégradées et nécessitent une vérification de leur stabilité.",
+      "expected_dates": {
+        "date_debut": "2026-11-04",
+        "date_fin": "2026-11-05"
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Zone terrestre ; deux jours d'intervention explicitement cités."
+    },
+    {
+      "id": "CABBALR-09",
+      "scenario": "Synonymes et contexte",
+      "text": "La société Régie a débroussaillé le Sentier VTT du Site de la Vallée Carreau les 15 et 16 novembre 2026. Tony Rolland assurait le suivi. C'est terminé. La végétation débordait largement sur le passage et gênait les usagers.",
+      "expected_dates": {
+        "date_debut": "2026-11-15",
+        "date_fin": "2026-11-16"
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Le libellé « Régie » doit être résolu selon le catalogue réel, sans déduction forcée."
+    },
+    {
+      "id": "CABBALR-10",
+      "scenario": "Homonymie volontaire",
+      "text": "Je voudrais enregistrer un chantier d'élagage sur le Sentier pédestre du Site de la Vallée Carreau, du 19 au 23 novembre 2026. Le travail est en cours avec Forêt et Paysages et Benoît Sauvage. Plusieurs branches basses doivent être supprimées.",
+      "expected_dates": {
+        "date_debut": "2026-11-19",
+        "date_fin": "2026-11-23"
+      },
+      "expected_statut_if_explicit": "En cours",
+      "notes": "Cas volontairement ambigu : la source indique 24 zones appelées « Sentier pédestre ». Ne jamais choisir automatiquement un UUID ; demander la sélection de l'objet exact."
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "usage": "Tests d'interprétation textuelle de l'assistant GEMAPI-App, sans microphone, sans Voxtral ni TTS.",
+  "test_protocol": {
+    "input_path": "text",
+    "instructions": [
+      "Soumettre text directement au flux d'interprétation Mistral / assistant (sans reconnaissance vocale).",
+      "Chaque cas commence avec un brouillon neuf; tester les reprises de brouillon séparément.",
+      "Les expected_dates ne sont que les bornes explicitement données dans la phrase; null signifie date absente, ne pas l'inventer.",
+      "Ne pas inférer l'identité UUID à partir de cette fixture : vérifier contre le référentiel PostgreSQL de l'environnement correspondant.",
+      "Ne jamais écrire de prestation ni modifier une base pour tester l'extraction.",
+      "Distinguer la réponse JSON brute de Mistral, l'application locale du patch et la résolution des références.",
+      "En cas d'ambiguïté métier, conserver les champs indépendants et demander une confirmation plutôt que sélectionner arbitrairement un UUID."
+    ]
+  },
+  "dataset": "demo",
+  "cases": [
+    {
+      "id": "DEMO-01",
+      "scenario": "Phrase naturelle",
+      "text": "Je voudrais créer une intervention de débroussaillage sur le Remblai1 ZEC Nave. Paysages et Milieux a effectué les travaux le 11 novembre 2026, sous la responsabilité de Jean Dupont. Le chantier est terminé. Les broussailles empêchaient de circuler facilement le long du remblai.",
+      "expected_dates": {
+        "date_debut": "2026-11-11",
+        "date_fin": null
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Une seule date de travaux est donnée. Ne pas créer de date de fin à partir du statut Terminé."
+    },
+    {
+      "id": "DEMO-02",
+      "scenario": "Chantier en cours",
+      "text": "Sur le Remblai2 ZEC Clarence, la Régie technique des milieux réalise un chantier d'élagage du 19 au 21 novembre 2026. David Petit est responsable, le statut est en cours. Plusieurs branches mortes menacent de tomber sur le passage.",
+      "expected_dates": {
+        "date_debut": "2026-11-19",
+        "date_fin": "2026-11-21"
+      },
+      "expected_statut_if_explicit": "En cours",
+      "notes": "La fin de période peut être prévisionnelle bien que le chantier soit en cours."
+    },
+    {
+      "id": "DEMO-03",
+      "scenario": "Vocabulaire libre",
+      "text": "Travaux hydrauliques du bassin est intervenu les 8 et 9 octobre 2026 sur le Remblai RC Bois des Aulnes pour retirer des embâcles. Eric Martin suivait le chantier, maintenant terminé. Les branches accumulées gênaient les accès d'entretien.",
+      "expected_dates": {
+        "date_debut": "2026-10-08",
+        "date_fin": "2026-10-09"
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Deux jours d'intervention explicitement cités."
+    },
+    {
+      "id": "DEMO-04",
+      "scenario": "Curage planifié",
+      "text": "Programmer une prestation de curage du Bassin ZEC Nave entre le 5 et le 12 décembre 2026. Entreprise Rivage Nord, technicien Julien Dubois, statut planifié. Des dépôts de vase sont visibles dans le fond du bassin et doivent être évacués.",
+      "expected_dates": {
+        "date_debut": "2026-12-05",
+        "date_fin": "2026-12-12"
+      },
+      "expected_statut_if_explicit": "Planifié",
+      "notes": "Aucune géométrie propre demandée ; ne pas activer geometrie_demandee."
+    },
+    {
+      "id": "DEMO-05",
+      "scenario": "Dates prononcées",
+      "text": "La société Atelier des Eaux a fait une fauche sur le Bassin RC Pré Vert du onze zéro neuf deux mille vingt-six au douze zéro neuf deux mille vingt-six. David Petit était chargé du suivi. C'est terminé. L'herbe était particulièrement haute près de l'entrée.",
+      "expected_dates": {
+        "date_debut": "2026-09-11",
+        "date_fin": "2026-09-12"
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Les dates sont écrites comme une expression orale, sans Voxtral : le modèle doit les interpréter depuis le texte."
+    },
+    {
+      "id": "DEMO-06",
+      "scenario": "Étude et description",
+      "text": "Prévoir une étude sur le Bassin ZEC Val des Prés du 1er au 3 février 2027. L'entreprise Écologie Terrain réalisera cette prestation, avec Eric Martin comme technicien responsable. Statut planifié. Il faudra examiner les possibilités d'amélioration de l'infiltration dans le bassin.",
+      "expected_dates": {
+        "date_debut": "2027-02-01",
+        "date_fin": "2027-02-03"
+      },
+      "expected_statut_if_explicit": "Planifié",
+      "notes": "Description complémentaire à conserver, sans inventer de résultats."
+    },
+    {
+      "id": "DEMO-07",
+      "scenario": "Zone et site parent",
+      "text": "Je souhaite planifier une restauration écologique sur la Zone naturelle du secteur 01, dans l'Espace naturel du Bois des Aulnes, du 15 au 26 décembre 2026. La Régie technique des milieux interviendra avec Julien Dubois comme responsable. Plusieurs secteurs présentent une végétation dégradée.",
+      "expected_dates": {
+        "date_debut": "2026-12-15",
+        "date_fin": "2026-12-26"
+      },
+      "expected_statut_if_explicit": null,
+      "notes": "Zone et parent fournis ; si la source de nom ne correspond pas exactement, ne pas rejeter les champs indépendants. Statut non nommé littéralement."
+    },
+    {
+      "id": "DEMO-08",
+      "scenario": "Phrase non structurée",
+      "text": "La haie du secteur 06, dans le Bois du Petit Marais, on l'a fait élaguer par Paysages et Milieux. C'était du 10 au 12 novembre 2026, avec Jean Dupont pour le suivi. C'est terminé. Certaines branches débordaient sur le chemin voisin.",
+      "expected_dates": {
+        "date_debut": "2026-11-10",
+        "date_fin": "2026-11-12"
+      },
+      "expected_statut_if_explicit": "Terminé",
+      "notes": "Conserver une description factuelle ; si référence incertaine, demander une sélection sans rejet global."
+    },
+    {
+      "id": "DEMO-09",
+      "scenario": "Suivi de milieu",
+      "text": "Un suivi de milieu est en cours sur la Zone naturelle du secteur 03 du Terril du Bois des Dames. Écologie Terrain intervient du 19 au 30 novembre 2026, sous la responsabilité de David Petit. On souhaite surveiller l'évolution de la végétation spontanée et les éventuelles espèces invasives.",
+      "expected_dates": {
+        "date_debut": "2026-11-19",
+        "date_fin": "2026-11-30"
+      },
+      "expected_statut_if_explicit": "En cours",
+      "notes": "Zone terrestre ; période explicitement donnée."
+    },
+    {
+      "id": "DEMO-10",
+      "scenario": "Statut annulé",
+      "text": "L'étude prévue sur le Point d'observation du secteur 07 dans le Parc du Moulin Vert a finalement été annulée. Elle était programmée du 12 au 13 novembre 2026, avec Atelier des Eaux et Eric Martin. L'accès était impraticable à cause de l'état du terrain et l'équipe n'a pas pu intervenir.",
+      "expected_dates": {
+        "date_debut": "2026-11-12",
+        "date_fin": "2026-11-13"
+      },
+      "expected_statut_if_explicit": "Annulé",
+      "notes": "Dates de programmation : ne pas affirmer que les travaux ont effectivement eu lieu ; conserver la cause de l'annulation."
+    }
+  ]
+}
