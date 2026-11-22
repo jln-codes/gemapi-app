@@ -11,6 +11,9 @@ manquantes sont présentées ensemble. Choisir les candidats, saisir les dates, 
 cliquer sur **Valider les corrections ensemble**. La date de fin manque ? Le champ
 reste vide jusqu'à votre saisie. Rien n'est sauvegardé par cette validation.
 Le récapitulatif local indique les champs reconnus et les informations encore nécessaires.
+Des espaces différents ou une citation reformulée avec le parent ne demandent pas
+de confirmation supplémentaire lorsque l'identité complète est vérifiée localement.
+Un prénom seul, un nom incomplet ou des homonymes non départagés restent à préciser.
 Une période explicite (par exemple « du 19 au 21 novembre 2026 ») renseigne les deux
 dates après contrôle de sa citation. Une fin prévue est acceptée pour une prestation
 planifiée ou en cours et apparaît comme prévue. Le seul statut Terminé ne fournit

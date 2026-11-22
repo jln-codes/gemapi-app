@@ -1,4 +1,4 @@
-# GEMAPI-App — plugin QGIS 0.8.3
+# GEMAPI-App — plugin QGIS 0.8.4
 
 L’assistant IA ajoute un assistant conversationnel Mistral à la création standard.
 Le plugin utilise le schéma canonique actuel sans le modifier.
@@ -49,6 +49,11 @@ peut être acceptée après contrôle Python des libellés réels, de la famille
 contexte envoyé ; les approximations et ambiguïtés nécessitent un choix humain.
 Python ne contient aucun moteur phonétique. Un changement de référentiel suspend
 l'acceptation automatique de l'ancienne proposition.
+Les espaces dans un nom ou autour d'un numéro ne créent pas une ambiguïté lorsque
+la référence reste unique. Pour un patrimoine, une citation reformattée avec son
+parent peut être vérifiée à partir des deux noms présents ensemble dans la demande,
+y compris les liaisons « du Site » et « dans le Parc ». Un parent absent, une
+référence contradictoire ou des homonymes non départagés demandent toujours un choix.
 
 Les références incertaines ou manquantes et les dates à compléter apparaissent
 dans un même panneau, avant le récapitulatif. Les candidats proposés par Mistral
@@ -67,8 +72,9 @@ demandent une confirmation. Le statut Terminé seul ne prouve toujours aucune fi
 Si le modèle omet une date mais cite correctement une période explicite, ses bornes
 vérifiées peuvent compléter le champ ; une borne contradictoire n'est jamais écrasée.
 
-Une citation de nom absente ou ambiguë bloque uniquement sa référence, même si le
-nom canonique proposé existe. Les autres champs indépendants restent disponibles.
+Une citation de nom invérifiable bloque uniquement sa référence, même si le
+nom canonique proposé existe. Une reformulation patrimoniale vérifiée par le nom
+et son parent n'impose pas de confirmation supplémentaire. Les autres champs indépendants restent disponibles.
 Le récapitulatif indique le champ et la cause sans répéter la citation potentiellement
 sensible ; `draft.reference_diagnostics` conserve en mémoire le champ, la source
 et la cause pour diagnostic local. Ces diagnostics ne sont ni journalisés ni envoyés
@@ -195,7 +201,7 @@ L’espace des photographies s’adapte en conservant leurs proportions.
 ## Installation et dépendances
 
 Depuis la racine du dépôt, exécuter `python3 plugin/tools/build_plugin.py`, puis installer
-`plugin/dist/gemapi-app-0.8.3.zip` dans **Extensions > Installer/Gérer les
+`plugin/dist/gemapi-app-0.8.4.zip` dans **Extensions > Installer/Gérer les
 extensions > Installer depuis un ZIP**. Le plugin n'ajoute aucune dépendance
 Python externe : PyQGIS, Qt et la bibliothèque standard suffisent. Le script
 contrôle les fonctions requises et vérifie que chaque fichier du ZIP correspond
@@ -224,7 +230,7 @@ par UUID.
 
 Le ZIP installe uniquement `gemapi_app`, nommé **GEMAPI-App**, avec son
 icône habituelle dans la barre partagée **SIG-Milieux**. L’assistant fait partie
-de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.3.zip` et contient
+de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.4.zip` et contient
 `gemapi_app/`. Désactiver puis retirer l’ancien plugin `sig_prestations` lors de
 cette première installation sous le nouveau nom ; les anciennes archives gardent
 leur nom et leur contenu. Le chemin de clé existant est repris automatiquement. Désactiver puis retirer l’ancienne extension
