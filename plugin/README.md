@@ -1,4 +1,4 @@
-# GEMAPI-App — plugin QGIS 0.8.4
+# GEMAPI-App — plugin QGIS 0.8.5
 
 L’assistant IA ajoute un assistant conversationnel Mistral à la création standard.
 Le plugin utilise le schéma canonique actuel sans le modifier.
@@ -47,11 +47,13 @@ phonétique par Mistral. Une valeur exacte ou normalisée unique prime toujours
 sur une suggestion phonétique. Une correspondance phonétique complète et unique
 peut être acceptée après contrôle Python des libellés réels, de la famille et du
 contexte envoyé ; les approximations et ambiguïtés nécessitent un choix humain.
-Python ne contient aucun moteur phonétique. Un changement de référentiel suspend
-l'acceptation automatique de l'ancienne proposition.
+Python ne contient aucun moteur phonétique. Un changement des listes de libellés
+suspend l'acceptation automatique de l'ancienne proposition. Un remplacement
+d’UUID à libellé identique n’est pas détecté par ce contrôle.
 Les espaces dans un nom ou autour d'un numéro ne créent pas une ambiguïté lorsque
-la référence reste unique. Pour un patrimoine, une citation reformattée avec son
-parent peut être vérifiée à partir des deux noms présents ensemble dans la demande,
+la référence reste unique. Un article extérieur au nom ne bloque pas sa reconnaissance ;
+les homonymes après normalisation demandent toujours un choix. Pour un patrimoine,
+une citation reformattée avec son parent peut être vérifiée à partir des deux noms présents ensemble dans la demande,
 y compris les liaisons « du Site » et « dans le Parc ». Un parent absent, une
 référence contradictoire ou des homonymes non départagés demandent toujours un choix.
 
@@ -65,11 +67,12 @@ Le formulaire standard reste l'unique lieu de sauvegarde humaine.
 
 Les bornes d'une période explicite, l'achèvement et la fin prévisionnelle sont
 distingués dans le contrat JSON strict. Mistral fournit une citation `preuve_dates` ;
-Python vérifie sa présence dans la demande et les dates de ses bornes avec le
-parseur calendaire. La fin prévue d'un chantier Planifié ou En cours n'est pas
-effacée. Les dates incertaines, contradictoires, absentes ou insuffisamment étayées
+Python vérifie dans le message original la valeur calendaire et son rôle de fin ou
+de borne de période. Une citation légèrement reformulée ne suffit pas à invalider
+une fin explicitement vérifiable. La fin prévue d'un chantier Planifié ou En cours
+n'est pas effacée. Les dates incertaines, contradictoires, absentes ou insuffisamment étayées
 demandent une confirmation. Le statut Terminé seul ne prouve toujours aucune fin.
-Si le modèle omet une date mais cite correctement une période explicite, ses bornes
+Si le modèle omet une date mais que la demande contient une période explicite unique, ses bornes
 vérifiées peuvent compléter le champ ; une borne contradictoire n'est jamais écrasée.
 
 Une citation de nom invérifiable bloque uniquement sa référence, même si le
@@ -201,7 +204,7 @@ L’espace des photographies s’adapte en conservant leurs proportions.
 ## Installation et dépendances
 
 Depuis la racine du dépôt, exécuter `python3 plugin/tools/build_plugin.py`, puis installer
-`plugin/dist/gemapi-app-0.8.4.zip` dans **Extensions > Installer/Gérer les
+`plugin/dist/gemapi-app-0.8.5.zip` dans **Extensions > Installer/Gérer les
 extensions > Installer depuis un ZIP**. Le plugin n'ajoute aucune dépendance
 Python externe : PyQGIS, Qt et la bibliothèque standard suffisent. Le script
 contrôle les fonctions requises et vérifie que chaque fichier du ZIP correspond
@@ -230,7 +233,7 @@ par UUID.
 
 Le ZIP installe uniquement `gemapi_app`, nommé **GEMAPI-App**, avec son
 icône habituelle dans la barre partagée **SIG-Milieux**. L’assistant fait partie
-de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.4.zip` et contient
+de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.5.zip` et contient
 `gemapi_app/`. Désactiver puis retirer l’ancien plugin `sig_prestations` lors de
 cette première installation sous le nouveau nom ; les anciennes archives gardent
 leur nom et leur contenu. Le chemin de clé existant est repris automatiquement. Désactiver puis retirer l’ancienne extension

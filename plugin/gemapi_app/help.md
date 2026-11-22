@@ -13,9 +13,12 @@ reste vide jusqu'à votre saisie. Rien n'est sauvegardé par cette validation.
 Le récapitulatif local indique les champs reconnus et les informations encore nécessaires.
 Des espaces différents ou une citation reformulée avec le parent ne demandent pas
 de confirmation supplémentaire lorsque l'identité complète est vérifiée localement.
+Un article extérieur au nom est accepté si la référence est unique. Deux références
+identiques après normalisation restent à départager.
 Un prénom seul, un nom incomplet ou des homonymes non départagés restent à préciser.
 Une période explicite (par exemple « du 19 au 21 novembre 2026 ») renseigne les deux
-dates après contrôle de sa citation. Une fin prévue est acceptée pour une prestation
+dates après contrôle dans votre message. Une fin explicitement annoncée est
+acceptée même si sa citation a été légèrement reformulée. Une fin prévue est acceptée pour une prestation
 planifiée ou en cours et apparaît comme prévue. Le seul statut Terminé ne fournit
 jamais une date de fin. Une date absente, incertaine ou contradictoire reste à vérifier.
 Si un nom source est invérifiable, les autres champs restent dans le brouillon ;

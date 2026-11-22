@@ -116,6 +116,29 @@ class EntityResolutionTests(unittest.TestCase):
                 draft, result = self.resolved_trial(index, source)
                 self.assertIn('patrimoine', result['verified'])
 
+    def test_parent_link_and_negated_observation_do_not_exclude_the_target(self):
+        source = 'haie du secteur 06, au bois du Petit Marais'
+        message = 'Élagage sur la ' + source + ', qui ne gêne pas le passage.'
+        draft, result = self.resolved_trial(7, source, text=message)
+        self.assertIn('patrimoine', result['verified'])
+        self.assertNotIn('patrimoine', draft.reference_diagnostics)
+
+    def test_rejected_prior_name_cannot_validate_itself_on_an_independent_turn(self):
+        text, catalog, fields = trial_proposal(6)
+        bad = 'Zone naturelle du secteur 01 — Bois du Petit Marais'
+        fields['patrimoine'] = bad
+        fields['correspondances']['patrimoine'] = {'source': bad, 'nature': 'exacte', 'candidats': [bad]}
+        draft = Draft()
+        context = json.loads(request_payload(draft, text, catalog)['messages'][1]['content'])['referentiels']
+        draft.apply(proposal(**fields), user_message=text, reference_context=context)
+        self.assertIn('patrimoine', draft.reference_diagnostics)
+        draft.apply(proposal(patrimoine=bad, description='Accès difficile.',
+                             correspondances=fields['correspondances']),
+                    user_message='Ajouter : accès difficile.', reference_context=context)
+        self.assertIn('patrimoine', draft.reference_diagnostics)
+        self.assertNotIn('patrimoine', draft.resolve(catalog)['verified'])
+        self.assertEqual(draft.names['description'], 'Accès difficile.')
+
     def test_wrong_canonical_parent_and_wrong_family_never_recovered(self):
         text, catalog, fields = trial_proposal(6)
         for bad in ('Zone naturelle du secteur 01 — Bois du Petit Marais',
@@ -164,6 +187,28 @@ class EntityResolutionTests(unittest.TestCase):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_end_role_is_verified_in_original_message_not_rewritten_quote(self):
+        for message in ('Travaux débutés le 11 novembre 2026 et terminés le 12 novembre 2026.',
+                        'Début le 11 novembre 2026. Achèvement le 12 novembre 2026.',
+                        'Intervention prévue du 11 au 12 novembre 2026, à proximité du bassin.'):
+            with self.subTest(message=message):
+                draft = Draft()
+                draft.apply(proposal(date_debut='2026-11-11', date_fin='2026-11-12',
+                                     preuve_dates={'source': 'a terminé les travaux le 12 novembre 2026',
+                                                   'nature': 'achevement'}), user_message=message)
+                self.assertFalse(draft.end_date_needs_confirmation)
+        for message in ('Travaux le 11 novembre 2026. Le chantier est terminé.',
+                        'Les travaux ne seront jamais terminés le 12 novembre 2026.',
+                        'Fin probable le 12 novembre 2026.',
+                        'Fin le 12 novembre 2026. Fin le 13 novembre 2026.',
+                        'Fin le 12 novembre 2026 ou le 13 novembre 2026.'):
+            with self.subTest(message=message):
+                draft = Draft()
+                draft.apply(proposal(date_debut='2026-11-11', date_fin='2026-11-12',
+                                     preuve_dates={'source': 'terminés le 12 novembre 2026',
+                                                   'nature': 'achevement'}), user_message=message)
+                self.assertTrue(draft.end_date_needs_confirmation)
+
     def test_eight_verbatim_trials_syntax_resolution_and_draft(self):
         for index, trial in enumerate(TRIALS):
             with self.subTest(trial=index + 1):
