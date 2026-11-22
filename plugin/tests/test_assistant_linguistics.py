@@ -370,6 +370,43 @@ class DescriptionTests(unittest.TestCase):
 
 
 class ProperNameTests(unittest.TestCase):
+    def resolve_name(self, text, fields, catalog):
+        draft = Draft()
+        context = json.loads(request_payload(draft, text, catalog)['messages'][1]['content'])['referentiels']
+        draft.apply(proposal(**fields), user_message=text, reference_context=context)
+        return draft.resolve(catalog)
+
+    def test_first_name_only_remains_pending_even_if_model_claims_complete(self):
+        item = NAME_CASES[4]  # Existing first-name-only fixture.
+        fields = copy.deepcopy(item['fields'])
+        fields['correspondances']['technicien']['nature'] = 'phonetique_complete'
+        result = self.resolve_name(item['text'], fields, item['catalog'])
+        self.assertNotIn('technicien', result['verified'])
+
+    def test_compact_spelling_collisions_never_select_first_candidate(self):
+        catalog = copy.deepcopy(CATALOG)
+        catalog['technicien'].append((uid(310), 'BenoîtQuentin', ''))
+        text = NAMES_TEXT.replace('Benoît Cantin', 'Benoît Quen tin')
+        fields = {**NAMES_FIELDS, 'correspondances':copy.deepcopy(NAMES_MATCHES)}
+        fields['correspondances']['technicien']['source'] = 'Benoît Quen tin'
+        result = self.resolve_name(text, fields, catalog)
+        self.assertNotIn('technicien', result['verified'])
+        self.assertEqual({r[0] for r in result['pending']['technicien']}, {uid(301),uid(310)})
+
+    def test_singular_plural_company_needs_model_evidence_not_local_stemming(self):
+        # Fictional unit fixture: no nominative exception in production Python.
+        catalog = copy.deepcopy(CATALOG)
+        catalog['prestataire'].append((uid(211), 'Jardins et Rivières', ''))
+        text = NAMES_TEXT.replace('Noeux Environnement', 'Jardin et rivière')
+        fields = {**NAMES_FIELDS, 'prestataire':'Jardins et Rivières',
+                  'correspondances':copy.deepcopy(NAMES_MATCHES)}
+        fields['correspondances']['prestataire'] = {'source':'Jardin et rivière',
+            'nature':'phonetique_complete','candidats':['Jardins et Rivières']}
+        result = self.resolve_name(text, fields, catalog)
+        self.assertEqual(result['verified']['prestataire'][0],uid(211))
+        fields['correspondances']['prestataire']['nature']='approximative'
+        self.assertNotIn('prestataire',self.resolve_name(text, fields, catalog)['verified'])
+
     def test_simulated_mistral_classification_and_python_resolution_for_all_cases(self):
         for item in NAME_CASES:
             with self.subTest(case=item['name']):

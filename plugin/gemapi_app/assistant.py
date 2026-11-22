@@ -455,11 +455,71 @@ def _canonical_label(row):
     return row[1] + (" — " + row[2] if row[2] else "")
 
 
+def _contextual_name(source, row, message):
+    """Recognise a complete name and parent separated only by linking words."""
+    rest = " " + normalized(source) + " "
+    for part in row[1:]:
+        if not part:
+            continue
+        phrase = " " + normalized(part) + " "
+        if phrase not in rest:
+            return False
+        rest = rest.replace(phrase, " ", 1)
+    if set(rest.split()) - {'de', 'du', 'des', 'd', 'l', 'le', 'la', 'les', 'dans', 'sur'}:
+        return False
+    # This new acceptance path must not turn an explicitly excluded object into a choice.
+    index = message.find(source)
+    if index < 0:
+        return False
+    clause = (re.split(r'[.!?;\n]', message[:index])[-1] + source +
+              re.split(r'[.!?;\n]', message[index + len(source):])[0])
+    return not re.search(r'\b(?:pas|non|sauf|hors)\b', normalized(clause))
+
+
+def _patrimony_source(match, message, prior, rows):
+    """Recover a reformatted quotation only from the actual name AND its parent."""
+    try:
+        return _source_spelling(match['source'], message, prior)
+    except ValueError:
+        if match['nature'] not in ('exacte', 'phonetique_complete') or len(match['candidats']) != 1:
+            raise
+        selected = [row for row in rows if normalized(match['candidats'][0]) == normalized(_canonical_label(row))]
+        spans = set()
+        for row in selected:
+            if not row[2] or not _contextual_name(match['source'], row, match['source']):
+                continue
+            try:
+                name = _source_spelling(row[1], message, None)
+                parent = _source_spelling(row[2], message, None)
+            except ValueError:
+                continue
+            names = list(re.finditer(re.escape(name), message))
+            parents = list(re.finditer(re.escape(parent), message))
+            if len(names) != 1 or len(parents) != 1:
+                continue  # A repeated anchor is ambiguous; never search all pairs of occurrences.
+            left, right = names[0], parents[0]
+            span = message[min(left.start(), right.start()):max(left.end(), right.end())]
+            if _contextual_name(span, row, message):
+                spans.add(span)
+        if len(spans) == 1:
+            return spans.pop()
+        raise
+
+
 def _model_candidates(name, rows, match, context, key, family):
     """Check canonical membership and complete context, without computing sounds."""
     original, original_exact = candidates(match["source"], rows)
     if original_exact and len(original) == 1:
         return original, True  # Exact spelling, then normalized spelling, always win.
+    # Joining words or separating an object number changes spacing, not identity.
+    # All real rows must participate so compact homonyms never select the first.
+    compact = normalized(match['source']).replace(' ', '')
+    spaced = [row for row in rows if compact and compact in (
+        normalized(row[1]).replace(' ', ''), normalized(_canonical_label(row)).replace(' ', ''))]
+    if len(spaced) == 1:
+        return spaced, True
+    if spaced:
+        return spaced, False
     labels = match["candidats"]
     options = []
     all_valid = bool(labels)
@@ -495,7 +555,9 @@ def _model_candidates(name, rows, match, context, key, family):
         complete_name = (len(source_name.split()) >= len(target_name.split()) or
                          source_name.replace(' ', '') == target_name.replace(' ', ''))
     automatic = (all_valid and selected and len(options) == 1 and complete_name and
-                 (match["nature"] == "phonetique_complete" or match["nature"] == "exacte" and original_exact)
+                 (match["nature"] == "phonetique_complete" or match["nature"] == "exacte" and
+                  (original_exact or key == 'patrimoine' and len(options) == 1 and
+                   _contextual_name(match['source'], options[0], context.get('_demande', ''))))
                  and full_context and supplied)
     return options, automatic
 
@@ -717,7 +779,13 @@ class Draft:
         for key, match in matches.items():
             if match is not None:
                 try:
-                    match["source"] = _source_spelling(match["source"], user_message, self.names.get(key))
+                    if key == 'patrimoine':
+                        family = proposal['famille'] if proposal['famille'] is not None else self.names.get('famille')
+                        rows = [("", row['libelle'], row['contexte']) for row in context.get('patrimoines', [])
+                                if row['famille'] == family]
+                        match['source'] = _patrimony_source(match, user_message, self.names.get(key), rows)
+                    else:
+                        match["source"] = _source_spelling(match["source"], user_message, self.names.get(key))
                     diagnostics.pop(key, None)
                 except ValueError as error:
                     # Diagnostic stays in RAM; source text is never logged, spoken or sent back.

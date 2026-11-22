@@ -84,6 +84,85 @@ def trial_proposal(index):
     return text, catalog, fields
 
 
+class EntityResolutionTests(unittest.TestCase):
+    def resolved_trial(self, index, source=None, kind='exacte', text=None, catalog=None):
+        original, actual, fields = trial_proposal(index)
+        actual = catalog or actual
+        if source is not None:
+            fields['correspondances']['patrimoine']['source'] = source
+            fields['correspondances']['patrimoine']['nature'] = kind
+        draft = Draft()
+        draft.apply(proposal(**fields), user_message=text or original,
+                    reference_context=json.loads(request_payload(Draft(), text or original, actual)
+                                                 ['messages'][1]['content'])['referentiels'])
+        return draft, draft.resolve(actual)
+
+    def test_reformatted_canonical_source_recovers_literal_name_and_parent(self):
+        for index in (6, 7):
+            with self.subTest(trial=index + 1):
+                text, catalog, fields = trial_proposal(index)
+                canonical = fields['patrimoine']
+                draft, result = self.resolved_trial(index, canonical)
+                self.assertNotIn('patrimoine', draft.reference_diagnostics)
+                self.assertIn('patrimoine', result['verified'])
+                self.assertEqual(draft.matches['patrimoine'][0]['source'] in text, True)
+                self.assertIsNotNone(result['values'])
+
+    def test_parent_linking_words_and_spacing_are_identity_not_approximation(self):
+        for index, source in ((6, "zone naturelle du secteur 01, dans l'espace naturel du Bois des Aulnes"),
+                              (7, 'haie du secteur 06, dans le bois du Petit Marais'),
+                              (1, 'remblai 2, ZEC Clarence'), (4, 'bassin RC Prévert')):
+            with self.subTest(source=source):
+                draft, result = self.resolved_trial(index, source)
+                self.assertIn('patrimoine', result['verified'])
+
+    def test_wrong_canonical_parent_and_wrong_family_never_recovered(self):
+        text, catalog, fields = trial_proposal(6)
+        for bad in ('Zone naturelle du secteur 01 — Bois du Petit Marais',
+                    'Zone naturelle du secteur 06 — Bois du Petit Marais'):
+            fields['patrimoine'] = bad
+            fields['correspondances']['patrimoine'] = {
+                'source': bad, 'nature': 'exacte', 'candidats': [bad]}
+            draft = Draft()
+            context = json.loads(request_payload(draft, text, catalog)['messages'][1]['content'])['referentiels']
+            draft.apply(proposal(**fields), user_message=text, reference_context=context)
+            result = draft.resolve(catalog)
+            self.assertNotIn('patrimoine', result['verified'])
+            self.assertEqual(set(result['verified']), {'technicien','prestataire','type_prestation','statut'})
+            self.assertEqual(draft.names['description'], fields['description'])
+        fields['famille'] = 'ah_ouvrage'
+        draft = Draft()
+        draft.apply(proposal(**fields), user_message=text, reference_context=context)
+        self.assertIn('patrimoine', draft.reference_diagnostics)
+
+    def test_reformatted_source_requires_current_context_and_excludes_negation(self):
+        text, catalog, fields = trial_proposal(7)
+        canonical = fields['patrimoine']
+        for message in ('Changer uniquement le suivi.',
+                        'Ne pas sélectionner la haie du secteur 06, dans le bois du Petit Marais.',
+                        'La haie du secteur 06 est voisine. Le bois du Petit Marais est un autre site.'):
+            with self.subTest(message=message):
+                draft, result = self.resolved_trial(7, canonical, text=message)
+                self.assertNotIn('patrimoine', result['verified'])
+                self.assertIn('patrimoine', draft.reference_diagnostics)
+
+    def test_repeated_identity_anchors_stay_pending_without_pairwise_search(self):
+        text, catalog, fields = trial_proposal(7)
+        canonical = fields['patrimoine']
+        fragment = 'La haie du secteur 06, dans le bois du Petit Marais. '
+        draft, result = self.resolved_trial(7, canonical, text=fragment * 30)
+        self.assertNotIn('patrimoine', result['verified'])
+        self.assertIn('patrimoine', draft.reference_diagnostics)
+
+    def test_approximation_and_invented_citation_keep_human_confirmation(self):
+        for source, nature in [('Zone naturelle du secteur 01 — Espace naturel du Bois des Aulnes', 'approximative'),
+                               ('Nom source inventé', 'exacte'),
+                               ('zone naturelle du secteur', 'phonetique_complete')]:
+            with self.subTest(source=source):
+                draft, result = self.resolved_trial(6, source, nature)
+                self.assertNotIn('patrimoine', result['verified'])
+
+
 class ValidationTests(unittest.TestCase):
     def test_eight_verbatim_trials_syntax_resolution_and_draft(self):
         for index, trial in enumerate(TRIALS):
