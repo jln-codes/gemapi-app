@@ -342,7 +342,7 @@ class AssistantTests(unittest.TestCase):
             self.assertEqual(result['values']['prestataire_id'], uid(70))
             self.assertEqual(result['associations'], [(family, uid(71))])
 
-    def test_source_normalization_preserves_the_actual_original_spelling_priority(self):
+    def test_source_normalization_does_not_hide_accent_homonyms(self):
         catalog = self.name_catalog()
         catalog['technicien'].append((uid(72), 'Benoit Quentin', ''))
         draft = Draft()
@@ -352,8 +352,9 @@ class AssistantTests(unittest.TestCase):
                                   'candidats': ['Benoît Quentin']}, 'prestataire': None, 'patrimoine': None}
         draft.apply(proposal(**{**FULL, 'patrimoine': 'Talus ZEC Ourton', 'technicien': 'Benoît Quentin',
                                 'correspondances': metadata}), user_message=message, reference_context=context)
-        self.assertEqual(draft.names['technicien'], 'Benoit Quentin')
-        self.assertEqual(draft.resolve(catalog)['values']['technicien_id'], uid(72))
+        result = draft.resolve(catalog)
+        self.assertNotIn('technicien', result['verified'])
+        self.assertEqual({row[0] for row in result['pending']['technicien']}, {uid(30), uid(72)})
 
     def test_interpretation_catalog_loads_all_allowed_families_read_only_and_without_ids_in_payload(self):
         queries = []
@@ -489,11 +490,52 @@ class AssistantTests(unittest.TestCase):
         current = json.loads(request_payload(Draft(), "Corriger le type.", catalog)["messages"][1]["content"])
         self.assertEqual(current["referentiels"]["types_prestations"][0]["libelle"], "Nouveau type de la connexion")
 
-    def test_literal_reference_match_precedes_normalized_homonyms(self):
+    def test_normalized_homonyms_remain_ambiguous_for_every_spelling(self):
         rows = [(uid(1), "Élagage", ""), (uid(2), "Elagage", "")]
-        self.assertEqual(candidates("Élagage", rows), ([rows[0]], True))
-        self.assertEqual(type_candidates("Elagage", rows), ([rows[1]], True))
-        self.assertEqual(len(type_candidates("ELAGAGE", rows)[0]), 2)
+        for spelling in ('Élagage', 'Elagage', 'ELAGAGE'):
+            self.assertEqual(candidates(spelling, rows), (rows, True))
+            self.assertEqual(type_candidates(spelling, rows), (rows, True))
+
+    def test_outer_articles_and_number_spacing_do_not_change_unique_identity(self):
+        rows = [(uid(1), 'Régie des Rives', ''), (uid(2), 'Remblai2 Test', 'Bassin Est')]
+        for source, expected in [('la régie des rives', rows[0]), ('REGIE DES RIVES', rows[0]),
+                                 ('Remblai 2, Test', rows[1]), ('le REMBLAI2 TEST', rows[1])]:
+            with self.subTest(source=source):
+                self.assertEqual(candidates(source, rows), ([expected], True))
+        # A canonical article is significant; keep both readings when they exist.
+        rows = [(uid(1), 'La Rive', ''), (uid(2), 'Rive', '')]
+        self.assertEqual(candidates('La Rive', rows), (rows, True))
+        self.assertEqual(candidates('Rive', rows), ([rows[1]], True))
+
+    def test_explicitly_excluded_reference_never_wins_the_direct_path(self):
+        for metadata in (None, {'prestataire': {'source': 'Veolia', 'nature': 'exacte', 'candidats': ['Veolia']},
+                                'technicien': None, 'patrimoine': None}):
+            draft = Draft()
+            draft.apply(proposal(**{**FULL, 'correspondances': metadata}),
+                        user_message=COMPLETE_PHRASE + ' Ne pas sélectionner Veolia.',
+                        reference_context=json.loads(request_payload(Draft(), COMPLETE_PHRASE, CATALOG)
+                                                     ['messages'][1]['content'])['referentiels'])
+            result = draft.resolve(CATALOG)
+            self.assertNotIn('prestataire', result['verified'])
+            self.assertIn('prestataire', draft.reference_diagnostics)
+            self.assertEqual(draft.names['date_debut'], '2026-11-11')
+            self.assertIn('technicien', result['verified'])
+
+    def test_independent_model_metadata_preserves_human_homonym_choice(self):
+        catalog = copy.deepcopy(CATALOG)
+        catalog['patrimoine'].append((uid(7), 'Rivière du Buissons', 'AH du Sud'))
+        catalog['patrimoines'] = {'ah_ouvrage': catalog['patrimoine']}
+        draft = self.full()
+        draft.correct({'patrimoine': uid(7)}, {}, catalog)
+        selected = draft.names['patrimoine']
+        metadata = {'patrimoine': {'source': selected, 'nature': 'exacte', 'candidats': [selected]},
+                    'prestataire': None, 'technicien': None}
+        draft.apply(proposal(description='Accès difficile.', patrimoine=selected, correspondances=metadata),
+                    user_message='Ajouter : accès difficile.',
+                    reference_context=json.loads(request_payload(draft, 'Ajouter : accès difficile.', catalog)
+                                                 ['messages'][1]['content'])['referentiels'])
+        self.assertEqual(draft.choices['patrimoine'], uid(7))
+        self.assertEqual(draft.resolve(catalog)['associations'], [('ah_ouvrage', uid(7))])
 
     def test_spoken_dates_and_ambiguities(self):
         for value, expected in (("onze novembre deux mille vingt-six", "2026-11-11"),

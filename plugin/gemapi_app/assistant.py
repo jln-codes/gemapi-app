@@ -455,6 +455,25 @@ def _canonical_label(row):
     return row[1] + (" — " + row[2] if row[2] else "")
 
 
+def _reference_excluded(source, message):
+    """Recognise an explicit selection exclusion, not a negated observation."""
+    needle = normalized(source).replace(' ', '')
+    if not needle:
+        return False
+    pattern = r'\b' + r'\s*'.join(map(re.escape, needle)) + r'\b'
+    for clause in re.split(r'[.!?;\n](?!\d)', message):
+        words = normalized(clause)
+        for found in re.finditer(pattern, words):
+            before = words[:found.start()].strip()
+            after = re.split(r'\b(?:mais|plutot)\b', words[found.end():], maxsplit=1)[0]
+            if (re.search(r'\b(?:ne )?pas (?:selectionner|choisir|retenir|utiliser|traiter|intervenir sur) '
+                          r'(?:(?:le|la|les|l|cet|cette|ces|technicien|prestataire|ouvrage|stockage|site) )*$', before + ' ') or
+                    re.search(r'\b(?:pas|sauf|hors|exclure) (?:(?:le|la|les|l|de|du) )*$', before + ' ') or
+                    re.search(r'\bne pas (?:le|la|les|l) (?:selectionner|choisir|retenir|utiliser|traiter)\b', after)):
+                return True
+    return False
+
+
 def _contextual_name(source, row, message):
     """Recognise a complete name and parent separated only by linking words."""
     rest = " " + normalized(source) + " "
@@ -465,15 +484,13 @@ def _contextual_name(source, row, message):
         if phrase not in rest:
             return False
         rest = rest.replace(phrase, " ", 1)
-    if set(rest.split()) - {'de', 'du', 'des', 'd', 'l', 'le', 'la', 'les', 'dans', 'sur'}:
+    if set(rest.split()) - {'de', 'du', 'des', 'd', 'l', 'le', 'la', 'les', 'dans', 'sur', 'au', 'aux'}:
         return False
     # This new acceptance path must not turn an explicitly excluded object into a choice.
     index = message.find(source)
     if index < 0:
         return False
-    clause = (re.split(r'[.!?;\n]', message[:index])[-1] + source +
-              re.split(r'[.!?;\n]', message[index + len(source):])[0])
-    return not re.search(r'\b(?:pas|non|sauf|hors)\b', normalized(clause))
+    return not _reference_excluded(source, message)
 
 
 def _patrimony_source(match, message, prior, rows):
@@ -509,17 +526,8 @@ def _patrimony_source(match, message, prior, rows):
 def _model_candidates(name, rows, match, context, key, family):
     """Check canonical membership and complete context, without computing sounds."""
     original, original_exact = candidates(match["source"], rows)
-    if original_exact and len(original) == 1:
-        return original, True  # Exact spelling, then normalized spelling, always win.
-    # Joining words or separating an object number changes spacing, not identity.
-    # All real rows must participate so compact homonyms never select the first.
-    compact = normalized(match['source']).replace(' ', '')
-    spaced = [row for row in rows if compact and compact in (
-        normalized(row[1]).replace(' ', ''), normalized(_canonical_label(row)).replace(' ', ''))]
-    if len(spaced) == 1:
-        return spaced, True
-    if spaced:
-        return spaced, False
+    if original_exact:
+        return original, len(original) == 1
     labels = match["candidats"]
     options = []
     all_valid = bool(labels)
@@ -566,11 +574,12 @@ def candidates(name, rows):
     needle = normalized(name)
     if not needle:
         return [], False
-    literal = [row for row in rows if str(row[1]).strip() == name.strip()]
-    if literal:
-        return literal, True
-    exact = [row for row in rows if needle in (normalized(row[1]), normalized(row[1] + " " + row[2]),
-                                               normalized(row[2] + " " + row[1]))]
+    # Remove an OUTER article from the query, never from canonical names. Keep
+    # both readings so a real name containing an article cannot hide a collision.
+    forms = {needle, re.sub(r'^(?:le|la|les|l|un|une|des)\s+', '', needle, count=1)}
+    compact = {value.replace(' ', '') for value in forms}
+    exact = [row for row in rows if any(normalized(value).replace(' ', '') in compact
+             for value in (row[1], row[1] + ' ' + row[2], row[2] + ' ' + row[1]))]
     if exact:
         return exact, True
     # Approximate or substring matches ALWAYS need a human selection, even a single hit.
@@ -584,11 +593,8 @@ def candidates(name, rows):
 def type_candidates(name, rows):
     """Canonical types first, then whole canonical phrases within a longer wording."""
     needle = normalized(name)
-    literal = [row for row in rows if needle and str(row[1]).strip() == name.strip()]
-    if literal:
-        return literal, True
-    exact = [row for row in rows if needle and normalized(row[1]) == needle]
-    if exact:
+    exact, direct = candidates(name, rows)
+    if direct:
         return exact, True
     contained = [row for row in rows if normalized(row[1]) and
                  " " + normalized(row[1]) + " " in " " + needle + " "]
@@ -611,23 +617,32 @@ def _date_atoms(text):
 
 def _period_dates(quote):
     """A bounded calendar range grammar, not a parser for arbitrary French sentences."""
-    match = re.fullmatch(r"(?:du|entre(?:\s+le)?|les)\s+(.+?)\s+(?:au|et(?:\s+le)?)\s+(.+)",
-                         quote.strip().rstrip(' .'), re.I)
-    if not match:
-        return None
-    end = parse_date(match[2])
-    partial = re.fullmatch(r"(?:le\s+)?(\d{1,2})(?:er)?", match[1], re.I)
-    if partial:
-        end_date = date.fromisoformat(end)
-        start = date(end_date.year, end_date.month, int(partial[1])).isoformat()
-    else:
-        try:
-            start = parse_date(match[1])
-        except ValueError:
-            day = _french_number(normalized(match[1]).split())
-            end_date = date.fromisoformat(end)
-            start = date(end_date.year, end_date.month, day).isoformat()
-    return start, end
+    text = ' '.join(quote.split())
+    periods = set()
+    for marker in re.finditer(r'\b(?:du|entre(?:\s+le)?|les)\s+', text, re.I):
+        match = re.match(r'(?:du|entre(?:\s+le)?|les)\s+(.+?)\s+(?:au|et(?:\s+le)?)\s+(.+)',
+                         text[marker.start():], re.I)
+        if not match:
+            continue
+        words = match[2].split()
+        period = None
+        for count in range(1, min(len(words), 20) + 1):
+            try:
+                end = parse_date(' '.join(words[:count]).strip(' ,.;'))
+                partial = re.fullmatch(r'(?:le\s+)?(\d{1,2})(?:er)?', match[1], re.I)
+                if partial:
+                    start = date.fromisoformat(end).replace(day=int(partial[1])).isoformat()
+                else:
+                    try:
+                        start = parse_date(match[1])
+                    except ValueError:
+                        start = date.fromisoformat(end).replace(day=_french_number(normalized(match[1]).split())).isoformat()
+                period = (start, end)
+            except ValueError:
+                continue
+        if period:
+            periods.add(period)
+    return periods.pop() if len(periods) == 1 else None
 
 
 def _uncertain_date(text):
@@ -635,44 +650,39 @@ def _uncertain_date(text):
     if 'date de fin' in words:
         words = re.sub(r'^non\s+', '', words)
     return bool('?' in text or re.search(
-        r'\b(?:incertain\w*|inconnu\w*|probablement|pas|non)\b|'
+        r'\b(?:incertain\w*|inconnu\w*|probable\w*|pas|non|jamais)\b|'
         r'\b(?:peut etre|a confirmer|a verifier|je pense)\b|\bou\b.*\d', words))
 
 
 def _verified_date_proof(proof, message, start, end):
-    if not proof or proof['nature'] in ('incertaine', 'confirmation'):
+    if not end or proof and proof['nature'] == 'incertaine':
         return False
-    try:
-        quote = _source_spelling(proof['source'], message, None)
-        index = message.find(quote)
-        scope = (re.split(r'[.!?;\n]', message[:index])[-1] + quote +
-                 re.split(r'[.!;\n]', message[index + len(quote):])[0])
-        if _uncertain_date(scope):
-            return False
-        if proof['nature'] in ('periode', 'previsionnelle'):
-            period = _period_dates(quote)
-            if period is not None:
-                return period == (start, end)
-        words = set(normalized(quote).split())
-        cues = {'fin', 'termine', 'termines', 'terminee', 'terminees', 'acheve', 'acheves', 'achevee', 'achevees'}
-        if proof['nature'] == 'previsionnelle':
-            cues |= {'prevu', 'prevue', 'previsionnelle', 'previsionnel'}
-        if not words & cues:
-            return False
-        cue_positions = [token.start() for token in re.finditer(r'[^\W\d_]+', quote)
-                         if normalized(token[0]) in cues]
-        quote = quote[cue_positions[-1]:]
-        atoms = _date_atoms(quote)
-        if not atoms:  # A fully spoken date still uses the existing calendar parser.
-            for token in re.finditer(r'\S+', quote):
-                try:
-                    atoms.append(parse_date(quote[token.start():].rstrip(' .')))
-                    break
-                except ValueError:
-                    continue
-        return set(atoms) == {end}
-    except ValueError:
-        return False
+    # Establish the relation in the ORIGINAL message, not in a model's rewritten
+    # quotation. A status after a lone intervention date has no date after its cue.
+    ends = set()
+    period = _period_dates(message)
+    for clause in re.split(r'[.!;\n](?!\d)', message):
+        if _uncertain_date(clause):
+            continue
+        if period == (start, end) and _period_dates(clause) == period:
+            ends.add(end)
+        for cue in re.finditer(r'[^\W\d_]+', clause):
+            if not re.fullmatch(r'fin|termine\w*|acheve\w*', normalized(cue[0])):
+                continue
+            tail = clause[cue.end():]
+            try:
+                atoms = _date_atoms(tail)
+                if not atoms:
+                    for token in re.finditer(r'\S+', tail):
+                        try:
+                            atoms = [parse_date(tail[token.start():].strip(' ,.;'))]
+                            break
+                        except ValueError:
+                            continue
+                ends.update(atoms)
+            except ValueError:
+                continue
+    return ends == {end}
 
 
 def _geometry_change(proof, message):
@@ -779,13 +789,18 @@ class Draft:
         for key, match in matches.items():
             if match is not None:
                 try:
+                    # A rejected proposal retained for review is not a confirmed
+                    # prior name. Only new words in the request can clear it.
+                    prior = None if key in diagnostics else self.names.get(key)
                     if key == 'patrimoine':
                         family = proposal['famille'] if proposal['famille'] is not None else self.names.get('famille')
                         rows = [("", row['libelle'], row['contexte']) for row in context.get('patrimoines', [])
                                 if row['famille'] == family]
-                        match['source'] = _patrimony_source(match, user_message, self.names.get(key), rows)
+                        match['source'] = _patrimony_source(match, user_message, prior, rows)
                     else:
-                        match["source"] = _source_spelling(match["source"], user_message, self.names.get(key))
+                        match["source"] = _source_spelling(match["source"], user_message, prior)
+                    if _reference_excluded(match['source'], user_message):
+                        raise ValueError('référence explicitement exclue de la sélection')
                     diagnostics.pop(key, None)
                 except ValueError as error:
                     # Diagnostic stays in RAM; source text is never logged, spoken or sent back.
@@ -806,6 +821,11 @@ class Draft:
                     pass
         # Validate the complete patch before changing state.
         combined = {**self.names, **changes}
+        for key in NAME_FIELDS:
+            name = combined.get(key, '')
+            if _reference_excluded(name.split(' — ', 1)[0] if key == 'patrimoine' else name, user_message):
+                diagnostics[key] = {'source': name, 'reason': 'référence explicitement exclue de la sélection'}
+                matches[key] = None
         for key, match in matches.items():
             if match is None:
                 continue
@@ -835,10 +855,9 @@ class Draft:
         # A model can emit a correct period quotation yet omit date_fin. Recover
         # only its explicit calendar bounds, never a date from status or start alone.
         proof = proposal['preuve_dates']
-        if proof and proof['nature'] in ('periode', 'previsionnelle'):
+        if not proof or proof['nature'] != 'incertaine':
             try:
-                quote = _source_spelling(proof['source'], user_message, None)
-                period = _period_dates(quote)
+                period = _period_dates(user_message)
                 if period and _verified_date_proof(proof, user_message, *period) and all(
                         proposal[key] is None or combined.get(key) == value
                         for key, value in zip(('date_debut', 'date_fin'), period)):
@@ -873,11 +892,10 @@ class Draft:
             self.choices.pop(key, None)
             self.matches.pop(key, None)
         for key, match in matches.items():
-            if match is not None:
+            if match is not None and key not in self.choices:
                 evidence = copy.deepcopy(reference_context or {})
                 evidence["_demande"] = user_message
                 self.matches[key] = (copy.deepcopy(match), evidence)
-                self.choices.pop(key, None)
 
     def correct(self, references, dates, catalog, family=None):
         """Apply one explicit local review atomically, against freshly read references."""
@@ -895,7 +913,7 @@ class Draft:
             row = next((row for row in catalog.get(key, ()) if row[0] == identifier), None)
             if row is None:
                 raise ValueError("Référence absente ou inactive : " + LABELS[key] + ". Réexaminez les choix.")
-            trial.names[key] = row[1]
+            trial.names[key] = _canonical_label(row) if key == 'patrimoine' else row[1]
             trial.choices[key] = row[0]
             trial.matches.pop(key, None)
             trial.reference_diagnostics.pop(key, None)

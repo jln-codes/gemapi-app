@@ -437,7 +437,7 @@ class QtAssistantTests(unittest.TestCase):
             self.assertTrue(self.dialog.open_button.isEnabled())
             self.assertFalse(self.dialog.apply_button.isVisible())
             self.assertEqual(self.dialog.draft.names['technicien'], 'Benoît Quentin')
-            self.assertEqual(self.dialog.draft.names['patrimoine'], 'Talus ZEC Ourton')
+            self.assertEqual(self.dialog.draft.names['patrimoine'], 'Talus ZEC Ourton — AH de test')
             self.assertEqual(self.dialog.resolution['values']['date_fin'], '2026-11-12')
             for key in ('type_prestation', 'prestataire', 'statut', 'date_debut'):
                 self.assertEqual(self.dialog.draft.names[key], before[key])
