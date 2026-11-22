@@ -28,6 +28,8 @@ REFERENCES = {"type_prestation": "type_prestation_id", "prestataire": "prestatai
 TEXT_FIELDS = tuple(LABELS) + ("message",)
 BOOL_FIELDS = ("plusieurs_objets", "geometrie_demandee")
 NAME_FIELDS = ("technicien", "prestataire", "patrimoine")
+EVIDENCE_FIELDS = ("preuve_dates", "preuve_geometrie")
+DATE_KINDS = ("periode", "achevement", "previsionnelle", "confirmation", "incertaine")
 MATCH_KINDS = ("exacte", "phonetique_complete", "approximative", "ambigue", "inconnue")
 SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -48,13 +50,21 @@ SCHEMA["properties"]["correspondances"] = {
 SCHEMA["properties"] = {"correspondances": SCHEMA["properties"]["correspondances"],
                         **{key: value for key, value in SCHEMA["properties"].items() if key != "correspondances"}}
 SCHEMA["required"] = ["correspondances", *TEXT_FIELDS, *BOOL_FIELDS]
+SCHEMA["properties"]["preuve_dates"] = {
+    "type": ["object", "null"], "additionalProperties": False,
+    "properties": {"source": {"type": "string"}, "nature": {"type": "string", "enum": list(DATE_KINDS)}},
+    "required": ["source", "nature"],
+}
+SCHEMA["properties"]["preuve_geometrie"] = {"type": ["string", "null"]}
+SCHEMA["required"].extend(EVIDENCE_FIELDS)
 SCHEMA["properties"]["famille"]["enum"] = [None, "", *FAMILIES]
 SCHEMA["properties"]["type_prestation"]["description"] = (
     "Libellé du type métier seul, sans l'intention de création. "
     "Exemple : intervention de débroussaillage → Débroussaillage. Ne pas inventer de type.")
 SCHEMA["properties"]["date_fin"]["description"] = (
     "null par défaut, même si une date d'intervention et le statut Terminé sont fournis. "
-    "Renseigner uniquement une date de FIN explicitement donnée ou confirmée par l'utilisateur.")
+    "Borne de période, date d'achèvement ou fin prévue explicitement donnée : renseigner même "
+    "pour Planifié/En cours, avec preuve_dates. Ne pas exiger les mots 'date de fin'.")
 SCHEMA["properties"]["description"]["description"] = (
     "Description concise, factuelle et grammaticale des seuls compléments métier. "
     "Ne répète aucun champ structuré, supprime hésitations et répétitions, n'invente rien. "
@@ -125,7 +135,11 @@ ah_stockage pour stockage hydraulique ; sites_zones pour zone terrestre.
 Identifie aussi cours_eau, digues, ah_sections et sites_terrestres pour signaler leur
 exclusion, ou inconnue. Un seul objet est autorisé : plusieurs_objets=true si plusieurs
 sont demandés, false uniquement après correction explicite. geometrie_demandee=true
-si une géométrie propre est demandée, false uniquement si l'utilisateur y renonce.
+si une géométrie propre est explicitement demandée, false uniquement si l'utilisateur y renonce.
+Dans ce cas, copie la demande ou renonciation littérale dans preuve_geometrie.
+Sinon geometrie_demandee=null et preuve_geometrie=null. Un bassin, des dépôts de vase,
+une localisation, une surface ou une observation ne constituent pas une demande de dessin.
+Plusieurs branches ou secteurs dégradés dans la description ne désignent pas plusieurs patrimoines.
 
 Dates : interprète les dates écrites ou dictées non ambiguës et retourne YYYY-MM-DD.
 'onze novembre deux mille vingt-six' = 2026-11-11 ; 'onze zéro neuf 2026' = 2026-09-11.
@@ -134,6 +148,18 @@ pas la fin : date_fin=null, même si le chantier est terminé. Demande la date d
 Exemple : 'intervention le 11/11/2026, chantier terminé' donne date_debut='2026-11-11'
 et date_fin=null : le statut terminé ne prouve pas une fin le jour de l'intervention.
 Utilise MEME_JOUR seulement après une confirmation explicite de fin le même jour.
+Une période explicite donne SES DEUX BORNES, quel que soit le statut : 'du 19 au 21 novembre
+2026' donne 2026-11-19 / 2026-11-21 ; 'les 8 et 9 octobre 2026' donne 2026-10-08 /
+2026-10-09 ; 'entre le 5 et le 12 décembre 2026' donne 2026-12-05 / 2026-12-12 ;
+'du 1er au 3 février 2027' donne 2027-02-01 / 2027-02-03.
+Une fin prévisionnelle est une date de fin valable, pas une absence de date. Distingue la borne
+de période, l'achèvement effectif, la prévision et l'incertitude. Pour preuve_dates, copie
+la citation littérale MINIMALE qui prouve la fin et indique nature : periode, achevement,
+previsionnelle, confirmation ou incertaine. Exemples de citations : 'du 19 au 21 novembre 2026',
+'a terminé les travaux le 12 novembre 2026'. Ne cite pas seulement une date d'intervention
+comme preuve d'achèvement. Garde les mots d'incertitude/négation dans la citation.
+L'absence de preuve donne preuve_dates=null. Ne transforme pas une contradiction ou une
+alternative entre dates en date certaine. Une correction sans date laisse preuve_dates=null.
 
 Dans la même analyse, produis description à partir des seuls faits métier complémentaires :
 localisation fine, contexte, motif, difficultés, observations, résultats. Rédige une ou
@@ -180,7 +206,7 @@ def _source_spelling(source, message, prior):
         return found.pop()
     if not found and prior and normalized(source) == normalized(prior):
         return prior
-    raise ValueError("Le nom source proposé par Mistral est absent ou ambigu dans la demande et le brouillon.")
+    raise ValueError("citation ambiguë" if found else "citation absente de la demande et du brouillon")
 
 
 def _french_number(words):
@@ -361,10 +387,10 @@ def parse_response(raw):
 
 
 def validate_proposal(proposal):
-    if not isinstance(proposal, dict) or set(proposal) != set(TEXT_FIELDS + BOOL_FIELDS + ("correspondances",)):
+    if not isinstance(proposal, dict) or set(proposal) != set(TEXT_FIELDS + BOOL_FIELDS + ("correspondances",) + EVIDENCE_FIELDS):
         raise ValueError("Champs inattendus dans la proposition Mistral.")
     for key, value in proposal.items():
-        if value is None or key == "correspondances":
+        if value is None or key in ("correspondances", *EVIDENCE_FIELDS):
             continue
         if key in BOOL_FIELDS:
             if type(value) is not bool:
@@ -373,6 +399,14 @@ def validate_proposal(proposal):
             raise ValueError("Proposition invalide : seuls des noms, jamais des UUID, sont acceptés.")
     if proposal["famille"] not in (None, "", *FAMILIES):
         raise ValueError("Famille patrimoniale inconnue.")
+    proof = proposal['preuve_dates']
+    if proof is not None and (not isinstance(proof, dict) or set(proof) != {'source', 'nature'} or
+                              proof['nature'] not in DATE_KINDS):
+        raise ValueError("Preuve de dates invalide.")
+    for citation in (proof['source'] if proof is not None else None, proposal['preuve_geometrie']):
+        if citation is not None and (not isinstance(citation, str) or not citation.strip() or
+                                    len(citation) > 2000 or '\x00' in citation or UUID_PATTERN.search(citation)):
+            raise ValueError("Citation de validation invalide.")
     matches = proposal["correspondances"]
     if matches is not None:
         if not isinstance(matches, dict) or set(matches) != set(NAME_FIELDS):
@@ -457,7 +491,9 @@ def _model_candidates(name, rows, match, context, key, family):
     supplied = selected and normalized(labels[0]) in set(map(normalized, sent))
     complete_name = (key != "technicien" or len(normalized(match["source"]).split()) >= 2)
     if key == "patrimoine" and len(options) == 1:
-        complete_name = len(normalized(match["source"]).split()) >= len(normalized(options[0][1]).split())
+        source_name, target_name = normalized(match['source']), normalized(options[0][1])
+        complete_name = (len(source_name.split()) >= len(target_name.split()) or
+                         source_name.replace(' ', '') == target_name.replace(' ', ''))
     automatic = (all_valid and selected and len(options) == 1 and complete_name and
                  (match["nature"] == "phonetique_complete" or match["nature"] == "exacte" and original_exact)
                  and full_context and supplied)
@@ -505,6 +541,97 @@ def type_candidates(name, rows):
     return candidates(name, rows)
 
 
+def _date_atoms(text):
+    """Calendar tokens only. Meaning and roles come from the structured quotation."""
+    pattern = r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}(?:er)?\s+[^\W\d_]+\s+\d{4})\b"
+    return [parse_date(match[0]) for match in re.finditer(pattern, text)]
+
+
+def _period_dates(quote):
+    """A bounded calendar range grammar, not a parser for arbitrary French sentences."""
+    match = re.fullmatch(r"(?:du|entre(?:\s+le)?|les)\s+(.+?)\s+(?:au|et(?:\s+le)?)\s+(.+)",
+                         quote.strip().rstrip(' .'), re.I)
+    if not match:
+        return None
+    end = parse_date(match[2])
+    partial = re.fullmatch(r"(?:le\s+)?(\d{1,2})(?:er)?", match[1], re.I)
+    if partial:
+        end_date = date.fromisoformat(end)
+        start = date(end_date.year, end_date.month, int(partial[1])).isoformat()
+    else:
+        try:
+            start = parse_date(match[1])
+        except ValueError:
+            day = _french_number(normalized(match[1]).split())
+            end_date = date.fromisoformat(end)
+            start = date(end_date.year, end_date.month, day).isoformat()
+    return start, end
+
+
+def _uncertain_date(text):
+    words = normalized(text)
+    if 'date de fin' in words:
+        words = re.sub(r'^non\s+', '', words)
+    return bool('?' in text or re.search(
+        r'\b(?:incertain\w*|inconnu\w*|probablement|pas|non)\b|'
+        r'\b(?:peut etre|a confirmer|a verifier|je pense)\b|\bou\b.*\d', words))
+
+
+def _verified_date_proof(proof, message, start, end):
+    if not proof or proof['nature'] in ('incertaine', 'confirmation'):
+        return False
+    try:
+        quote = _source_spelling(proof['source'], message, None)
+        index = message.find(quote)
+        scope = (re.split(r'[.!?;\n]', message[:index])[-1] + quote +
+                 re.split(r'[.!;\n]', message[index + len(quote):])[0])
+        if _uncertain_date(scope):
+            return False
+        if proof['nature'] in ('periode', 'previsionnelle'):
+            period = _period_dates(quote)
+            if period is not None:
+                return period == (start, end)
+        words = set(normalized(quote).split())
+        cues = {'fin', 'termine', 'termines', 'terminee', 'terminees', 'acheve', 'acheves', 'achevee', 'achevees'}
+        if proof['nature'] == 'previsionnelle':
+            cues |= {'prevu', 'prevue', 'previsionnelle', 'previsionnel'}
+        if not words & cues:
+            return False
+        cue_positions = [token.start() for token in re.finditer(r'[^\W\d_]+', quote)
+                         if normalized(token[0]) in cues]
+        quote = quote[cue_positions[-1]:]
+        atoms = _date_atoms(quote)
+        if not atoms:  # A fully spoken date still uses the existing calendar parser.
+            for token in re.finditer(r'\S+', quote):
+                try:
+                    atoms.append(parse_date(quote[token.start():].rstrip(' .')))
+                    break
+                except ValueError:
+                    continue
+        return set(atoms) == {end}
+    except ValueError:
+        return False
+
+
+def _geometry_change(proof, message):
+    """Require a literal explicit request/renunciation, never infer from site descriptions."""
+    try:
+        quote = _source_spelling(proof, message, None) if proof else message
+    except ValueError:
+        return None
+    words = set(normalized(quote).split())
+    geometry = bool(words & {'geometrie', 'dessin', 'polygone', 'ligne', 'point'})
+    negative = bool(words & {'sans', 'renonce', 'renoncer', 'aucune', 'pas', 'annuler'})
+    request = bool(words & {'veux', 'voudrais', 'souhaite', 'demande', 'demandee', 'dessiner',
+                            'dessine', 'dessinez', 'tracer', 'tracez', 'ajouter'})
+    if geometry and negative and (proof or words & {'renonce', 'renoncer'}):
+        return False
+    drawing = bool(words & {'dessiner', 'dessine', 'dessinez', 'tracer', 'tracez'})
+    if geometry and not negative and (drawing or request and bool(words & {'geometrie', 'dessin', 'polygone'})):
+        return True
+    return None
+
+
 def spoken_result(draft, resolution):
     """Short factual summary of LOCAL verification; never interpolate model/user data."""
     if resolution is None:
@@ -540,8 +667,14 @@ class Draft:
         self.matches = {}
         self.end_date_needs_confirmation = False
         self._explicit_category = ""
+        self.date_evidence_kind = None
+        self.reference_diagnostics = {}
 
-    def _confirms_end_date(self, message, end_date, start_date):
+    def _confirms_end_date(self, message, end_date, start_date, proof=None):
+        if proof and proof['nature'] == 'incertaine':
+            return False
+        if _verified_date_proof(proof, message, start_date, end_date):
+            return True
         text = normalized(message)
         # "Non, la date de fin est ..." can be an explicit correction, not uncertainty.
         uncertainty_text = re.sub(r"^non\s+", "", text) if "date de fin" in text else text
@@ -580,10 +713,29 @@ class Draft:
         validate_proposal(proposal)
         context = reference_context or {}
         matches = copy.deepcopy(proposal["correspondances"] or {})
+        diagnostics = copy.deepcopy(self.reference_diagnostics)
         for key, match in matches.items():
             if match is not None:
-                match["source"] = _source_spelling(match["source"], user_message, self.names.get(key))
-        changes = {key: value for key, value in proposal.items() if value is not None and key not in ("message", "correspondances")}
+                try:
+                    match["source"] = _source_spelling(match["source"], user_message, self.names.get(key))
+                    diagnostics.pop(key, None)
+                except ValueError as error:
+                    # Diagnostic stays in RAM; source text is never logged, spoken or sent back.
+                    diagnostics[key] = {'source': match['source'], 'reason': str(error)}
+                    matches[key] = None
+        changes = {key: value for key, value in proposal.items() if value is not None and
+                   key not in ("message", "correspondances", *EVIDENCE_FIELDS)}
+        geometry = _geometry_change(proposal['preuve_geometrie'], user_message)
+        changes.pop('geometrie_demandee', None)
+        if geometry is not None:
+            changes['geometrie_demandee'] = geometry
+        for key in NAME_FIELDS:
+            if key in diagnostics and key in changes and not (proposal['correspondances'] or {}).get(key):
+                try:
+                    _source_spelling(changes[key], user_message, None)
+                    diagnostics.pop(key)
+                except ValueError:
+                    pass
         # Validate the complete patch before changing state.
         combined = {**self.names, **changes}
         for key, match in matches.items():
@@ -612,10 +764,29 @@ class Draft:
                 combined[key] = parse_date(combined["date_debut"])
             elif key in changes:
                 combined[key] = parse_date(changes[key])
+        # A model can emit a correct period quotation yet omit date_fin. Recover
+        # only its explicit calendar bounds, never a date from status or start alone.
+        proof = proposal['preuve_dates']
+        if proof and proof['nature'] in ('periode', 'previsionnelle'):
+            try:
+                quote = _source_spelling(proof['source'], user_message, None)
+                period = _period_dates(quote)
+                if period and _verified_date_proof(proof, user_message, *period) and all(
+                        proposal[key] is None or combined.get(key) == value
+                        for key, value in zip(('date_debut', 'date_fin'), period)):
+                    for key, value in zip(('date_debut', 'date_fin'), period):
+                        if proposal[key] is None:
+                            combined[key] = changes[key] = value
+            except ValueError:
+                pass
         confirm_end = self.end_date_needs_confirmation
-        if confirm_end or any(combined.get(key) != self.names.get(key) for key in ("date_debut", "date_fin")):
+        if confirm_end or proposal['preuve_dates'] is not None or any(
+                combined.get(key) != self.names.get(key) for key in ("date_debut", "date_fin")):
             confirm_end = bool(combined.get("date_fin") and not self._confirms_end_date(
-                user_message, combined["date_fin"], combined.get("date_debut")))
+                user_message, combined["date_fin"], combined.get("date_debut"), proposal['preuve_dates']))
+        date_kind = self.date_evidence_kind
+        if proposal['preuve_dates'] is not None or any(combined.get(k) != self.names.get(k) for k in ('date_debut', 'date_fin')):
+            date_kind = proposal['preuve_dates']['nature'] if proposal['preuve_dates'] and not confirm_end else None
         for key in changes:
             if changes[key] != self.names.get(key):
                 self.choices.pop(key, None)
@@ -628,6 +799,11 @@ class Draft:
         self.names = combined
         self.end_date_needs_confirmation = confirm_end
         self._explicit_category = explicit_category
+        self.date_evidence_kind = date_kind
+        self.reference_diagnostics = diagnostics
+        for key in diagnostics:
+            self.choices.pop(key, None)
+            self.matches.pop(key, None)
         for key, match in matches.items():
             if match is not None:
                 evidence = copy.deepcopy(reference_context or {})
@@ -654,6 +830,7 @@ class Draft:
             trial.names[key] = row[1]
             trial.choices[key] = row[0]
             trial.matches.pop(key, None)
+            trial.reference_diagnostics.pop(key, None)
             if key == "type_prestation":
                 trial.names["categorie"] = row[2]
                 trial._explicit_category = normalized(row[2])
@@ -673,6 +850,7 @@ class Draft:
         self.matches = trial.matches
         self.end_date_needs_confirmation = trial.end_date_needs_confirmation
         self._explicit_category = trial._explicit_category
+        self.reference_diagnostics = trial.reference_diagnostics
         return result
 
     def resolve(self, catalog):
@@ -688,7 +866,7 @@ class Draft:
             issues.append("Ce prototype exige une géométrie propre NULL. Renoncez explicitement à la géométrie demandée.")
         for key in (*REFERENCES, "patrimoine"):
             name = self.names.get(key, "")
-            if not name and key not in self.matches:
+            if not name and key not in self.matches and key not in self.reference_diagnostics:
                 issues.append("À renseigner : " + LABELS[key] + ".")
                 continue
             rows = catalog.get(key, [])
@@ -698,6 +876,10 @@ class Draft:
             if key in self.matches:
                 match, context = self.matches[key]
                 options, exact = _model_candidates(name, rows, match, context, key, family)
+            if key in self.reference_diagnostics:
+                exact = False
+                issues.append("Nom source à vérifier — " + LABELS[key] + " : " +
+                              self.reference_diagnostics[key]['reason'] + ". Les autres champs sont conservés.")
             chosen = self.choices.get(key)
             match = next((row for row in options if row[0] == chosen), None)
             if match is None and exact and len(options) == 1:

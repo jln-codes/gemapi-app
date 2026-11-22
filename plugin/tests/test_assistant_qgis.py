@@ -447,6 +447,33 @@ class QtAssistantTests(unittest.TestCase):
         self.manager.post.assert_called_once()
         self.session.db.executeSql.assert_not_called()
 
+    def test_eight_demo_trials_present_partial_results_and_explicit_dates(self):
+        from test_assistant_validation import TRIALS, trial_proposal
+        self.dialog.before_new = lambda _: True
+        self.dialog.speech_enabled.setChecked(False)
+        for index, trial in enumerate(TRIALS):
+            with self.subTest(trial=index + 1):
+                self.dialog.new_prestation()
+                text, catalog, fields = trial_proposal(index)
+                with patch('gemapi_app.assistant_dialog.load_catalog', return_value=catalog):
+                    self.send(text, response(**fields)).complete()
+                    self.assertEqual(self.dialog.draft.names['date_fin'], trial[8])
+                    self.assertNotIn('date_fin', self.dialog.date_edits)
+                    if index < 6:
+                        self.assertTrue(self.dialog.open_button.isEnabled(), self.dialog.summary.text())
+                    else:
+                        self.assertFalse(self.dialog.open_button.isEnabled())
+                        self.assertIn('Nom source à vérifier', self.dialog.summary.text())
+                        box = self.dialog.reference_boxes['patrimoine']
+                        self.assertIsNone(box.currentData())
+                        target = next(row for row in catalog['patrimoine'] if row[1] == trial[2])
+                        box.setCurrentIndex(box.findData(target[0]))
+                        self.dialog.apply_button.click()
+                        self.assertTrue(self.dialog.open_button.isEnabled(), self.dialog.summary.text())
+                    if trial[10] == 'previsionnelle':
+                        self.assertIn('(prévue)', self.dialog.summary.text())
+                self.session.db.executeSql.assert_not_called()
+
     def test_unique_mistral_phonetic_names_auto_resolve_all_families_in_one_request(self):
         for family in ('ah_ouvrage', 'ah_stockage', 'sites_zones'):
             catalog = copy.deepcopy(CATALOG)

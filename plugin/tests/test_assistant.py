@@ -36,7 +36,8 @@ COMPLETE_PHRASE = PHRASE + " La date de fin est le 11 novembre 2026."
 
 
 def proposal(**fields):
-    return {**{key: None for key in TEXT_FIELDS + BOOL_FIELDS}, "correspondances": None, **fields}
+    return {**{key: None for key in TEXT_FIELDS + BOOL_FIELDS}, "correspondances": None,
+            "preuve_dates": None, "preuve_geometrie": None, **fields}
 
 
 def response(**fields):
@@ -320,9 +321,11 @@ class AssistantTests(unittest.TestCase):
         before = copy.deepcopy(vars(draft))
         metadata = {'technicien': {'source': 'Benoît Inventé', 'nature': 'exacte', 'candidats': ['Benoît Quentin']},
                     'prestataire': None, 'patrimoine': None}
-        with self.assertRaises(ValueError):
-            draft.apply(proposal(technicien='Benoît Quentin', correspondances=metadata), user_message='Autre demande.')
-        self.assertEqual(vars(draft), before)
+        draft.apply(proposal(technicien='Benoît Quentin', correspondances=metadata), user_message='Autre demande.')
+        self.assertIn('technicien', draft.reference_diagnostics)
+        self.assertNotIn('technicien', draft.resolve(catalog)['verified'])
+        for field in ('date_debut', 'date_fin', 'patrimoine', 'description'):
+            self.assertEqual(draft.names.get(field), before['names'].get(field))
 
     def test_exact_priority_also_applies_to_companies_and_all_patrimonial_families(self):
         for family in ('ah_ouvrage', 'ah_stockage', 'sites_zones'):
@@ -430,7 +433,10 @@ class AssistantTests(unittest.TestCase):
         for family in ("ah_ouvrage", "ah_stockage", "sites_zones"):
             self.assertEqual(self.full(famille=family).resolve(CATALOG)["associations"], [(family, uid(6))])
         self.assertIsNone(self.full(plusieurs_objets=True).resolve(CATALOG)["values"])
-        self.assertIsNone(self.full(geometrie_demandee=True).resolve(CATALOG)["values"])
+        drawing = self.full()
+        text = 'Je souhaite dessiner une géométrie propre.'
+        drawing.apply(proposal(geometrie_demandee=True, preuve_geometrie=text), user_message=text)
+        self.assertIsNone(drawing.resolve(CATALOG)["values"])
 
     def test_uuid_injection_rejected_and_local_choice_membership(self):
         for fields in ({"patrimoine": uid(999)}, {"prestataire_id": uid(999)}, {"famille": "milieux.ah_ouvrage; DROP TABLE"}):
