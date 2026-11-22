@@ -1,4 +1,4 @@
-# GEMAPI-App — plugin QGIS 0.8.2
+# GEMAPI-App — plugin QGIS 0.8.3
 
 L’assistant IA ajoute un assistant conversationnel Mistral à la création standard.
 Le plugin utilise le schéma canonique actuel sans le modifier.
@@ -57,6 +57,25 @@ Choisir les valeurs, saisir la date de fin vide si elle manque, puis cliquer sur
 **Valider les corrections ensemble**. Cette validation est locale et atomique,
 sans appel API ni écriture PostgreSQL. La date de fin n'est jamais copiée du début.
 Le formulaire standard reste l'unique lieu de sauvegarde humaine.
+
+Les bornes d'une période explicite, l'achèvement et la fin prévisionnelle sont
+distingués dans le contrat JSON strict. Mistral fournit une citation `preuve_dates` ;
+Python vérifie sa présence dans la demande et les dates de ses bornes avec le
+parseur calendaire. La fin prévue d'un chantier Planifié ou En cours n'est pas
+effacée. Les dates incertaines, contradictoires, absentes ou insuffisamment étayées
+demandent une confirmation. Le statut Terminé seul ne prouve toujours aucune fin.
+Si le modèle omet une date mais cite correctement une période explicite, ses bornes
+vérifiées peuvent compléter le champ ; une borne contradictoire n'est jamais écrasée.
+
+Une citation de nom absente ou ambiguë bloque uniquement sa référence, même si le
+nom canonique proposé existe. Les autres champs indépendants restent disponibles.
+Le récapitulatif indique le champ et la cause sans répéter la citation potentiellement
+sensible ; `draft.reference_diagnostics` conserve en mémoire le champ, la source
+et la cause pour diagnostic local. Ces diagnostics ne sont ni journalisés ni envoyés
+au TTS. Un choix humain validé ou une nouvelle citation vérifiable lève le blocage.
+La géométrie propre reste `NULL` dans le périmètre de l'assistant : un indicateur
+Mistral sans demande explicite vérifiable n'est pas appliqué. Une demande réelle
+de dessin reste bloquante jusqu'à renonciation explicite.
 
 L'action principale cochable de la barre QGIS affiche ou masque l’interface du plugin ;
 les quatre autres boutons de l'accueil conservent leurs fonctionnalités.
@@ -176,7 +195,7 @@ L’espace des photographies s’adapte en conservant leurs proportions.
 ## Installation et dépendances
 
 Depuis la racine du dépôt, exécuter `python3 plugin/tools/build_plugin.py`, puis installer
-`plugin/dist/gemapi-app-0.8.2.zip` dans **Extensions > Installer/Gérer les
+`plugin/dist/gemapi-app-0.8.3.zip` dans **Extensions > Installer/Gérer les
 extensions > Installer depuis un ZIP**. Le plugin n'ajoute aucune dépendance
 Python externe : PyQGIS, Qt et la bibliothèque standard suffisent. Le script
 contrôle les fonctions requises et vérifie que chaque fichier du ZIP correspond
@@ -205,7 +224,7 @@ par UUID.
 
 Le ZIP installe uniquement `gemapi_app`, nommé **GEMAPI-App**, avec son
 icône habituelle dans la barre partagée **SIG-Milieux**. L’assistant fait partie
-de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.2.zip` et contient
+de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.3.zip` et contient
 `gemapi_app/`. Désactiver puis retirer l’ancien plugin `sig_prestations` lors de
 cette première installation sous le nouveau nom ; les anciennes archives gardent
 leur nom et leur contenu. Le chemin de clé existant est repris automatiquement. Désactiver puis retirer l’ancienne extension
@@ -476,6 +495,16 @@ sont simulés ; aucun appel payant ni accès aux bases métier. Un seul worker d
 reste actif par assistant, même pendant une annulation. Ces tests détectent des
 défauts de cycle de vie sans prouver l'absence de tout plantage natif ; la recette
 Windows reste nécessaire.
+Avec des périphériques disponibles, `python3 plugin/tests/test_voice_stability.py --native`
+teste explicitement 32 lectures locales interrompues, une fin normale et quatre
+captures annulées, dans un processus isolé. Aucun audio n'est transmis. La destruction
+des objets audio natifs précède la libération des tampons et l'arrêt de leur thread,
+pour éviter une réentrance du backend audio pendant la destruction de son propriétaire.
+`test_assistant_validation.py` conserve les huit phrases d'AI-VALIDATION-01 à
+l'identique, simule les JSON et lit les référentiels Démo actuels en lecture seule.
+La suite Qt vérifie aussi leur affichage, la conservation des dates et les choix
+humains nécessaires. Ces résultats déterministes valident Python ; ils ne garantissent
+pas que chaque réponse future du modèle linguistique sera correcte.
 `QT_QPA_PLATFORM=offscreen /usr/bin/python3 plugin/tests/test_assistant_integration.py`
 valide le ZIP avec une base PostGIS Docker neuve, les trois rattachements et
 l'enregistrement standard déclenché explicitement par le test. La base est supprimée

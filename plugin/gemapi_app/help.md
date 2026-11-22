@@ -11,6 +11,13 @@ manquantes sont présentées ensemble. Choisir les candidats, saisir les dates, 
 cliquer sur **Valider les corrections ensemble**. La date de fin manque ? Le champ
 reste vide jusqu'à votre saisie. Rien n'est sauvegardé par cette validation.
 Le récapitulatif local indique les champs reconnus et les informations encore nécessaires.
+Une période explicite (par exemple « du 19 au 21 novembre 2026 ») renseigne les deux
+dates après contrôle de sa citation. Une fin prévue est acceptée pour une prestation
+planifiée ou en cours et apparaît comme prévue. Le seul statut Terminé ne fournit
+jamais une date de fin. Une date absente, incertaine ou contradictoire reste à vérifier.
+Si un nom source est invérifiable, les autres champs restent dans le brouillon ;
+seule la référence concernée demande un choix dans les listes, sans sélection automatique.
+Décrire un bassin ou des dépôts ne constitue pas une demande de géométrie propre.
 **Ouvrir le formulaire de création prérempli** ne sauvegarde rien : vérifier puis utiliser
 **Enregistrer la prestation** dans le formulaire habituel. Le bouton de retour restitue
 la conversation, conservée en mémoire pendant toute la session du plugin.

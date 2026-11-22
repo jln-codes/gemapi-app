@@ -568,6 +568,10 @@ class AssistantDialog(QDialog):
                 value = row[1] + (" — " + row[2] if row[2] else "") if row else self.draft.names[key]
                 if key == "date_fin" and self.draft.end_date_needs_confirmation:
                     value += " (proposée, à confirmer)"
+                elif key == "date_fin" and (self.draft.date_evidence_kind == 'previsionnelle' or
+                        self.draft.date_evidence_kind == 'periode' and
+                        self.resolution['verified'].get('statut', ('', '', ''))[1] in ('Planifié', 'En cours')):
+                    value += " (prévue)"
                 lines.append(label.capitalize() + " : " + value)
         lines.extend(self.resolution["issues"])
         if self.resolution["values"]:
