@@ -1,4 +1,4 @@
-name: Synchroniser development vers sig-fusion
+name: Synchroniser development vers gemapi-app-sirs
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 # A pending run may be replaced by a newer push; each run fetches the latest tip
 # and therefore includes all preceding commits, regardless of queue ordering.
 concurrency:
+  # Keep the existing lock across workflow versions.
   group: development-to-sig-fusion
   cancel-in-progress: false
 
@@ -28,9 +29,9 @@ jobs:
           ref: development
           fetch-depth: 0
       - name: Tester les scénarios Git isolés
-        run: python3 tools/test_git_sig_fusion.py
-      - name: Fusionner, contrôler, publier et vérifier origin/sig-fusion
-        run: python3 tools/git_sig_fusion.py sync
+        run: python3 tools/test_git_gemapi_app_sirs.py
+      - name: Fusionner, contrôler, publier et vérifier origin/gemapi-app-sirs
+        run: python3 tools/git_gemapi_app_sirs.py sync
 
   protected:
     if: vars.SIG_FUSION_SYNC_MODE == 'pull-request'
@@ -46,11 +47,11 @@ jobs:
           ref: development
           fetch-depth: 0
       - name: Tester les scénarios Git isolés
-        run: python3 tools/test_git_sig_fusion.py
+        run: python3 tools/test_git_gemapi_app_sirs.py
       - name: Préparer et contrôler la fusion puis proposer une PR conditionnelle
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/git_sig_fusion.py sync --mode pull-request
+        run: python3 tools/git_gemapi_app_sirs.py sync --mode pull-request
 
   configuration:
     if: vars.SIG_FUSION_SYNC_MODE != '' && vars.SIG_FUSION_SYNC_MODE != 'direct' && vars.SIG_FUSION_SYNC_MODE != 'pull-request'
