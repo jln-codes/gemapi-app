@@ -9,14 +9,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import git_sig_fusion as policy
+import git_gemapi_app_sirs as policy
 
 
-class GitSigFusionTests(unittest.TestCase):
+class GitGemapiAppSirsTests(unittest.TestCase):
     def setUp(self):
         audits = Path(__file__).resolve().parents[1] / "audits"
         audits.mkdir(exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(prefix="git-sig-fusion-test-", dir=audits)
+        self.temp = tempfile.TemporaryDirectory(prefix="git-gemapi-app-sirs-test-", dir=audits)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.remote = self.root / "origin.git"
@@ -33,18 +33,20 @@ class GitSigFusionTests(unittest.TestCase):
             self.commit(self.repo, name, "initial\n")
         self.initial = policy.sha(self.repo, "HEAD")
         policy.git(self.repo, "branch", "main")
-        policy.git(self.repo, "branch", "sig-fusion")
-        policy.git(self.repo, "push", "origin", "development", "main", "sig-fusion")
+        policy.git(self.repo, "branch", "gemapi-app-sirs")
+        policy.git(self.repo, "push", "origin", "development", "main", "gemapi-app-sirs")
         policy.fetch(self.repo)
         self.work = self.root / "gemapi-app-sirs"
-        policy.git(self.repo, "worktree", "add", str(self.work), "sig-fusion")
+        policy.git(self.repo, "worktree", "add", str(self.work), "gemapi-app-sirs")
+        self.expected_development = self.initial
         self.main = policy.sha(self.remote, "main")
 
     def tearDown(self):
         # Every scenario preserves main and all protected data directories.
         self.assertEqual(policy.sha(self.remote, "main"), self.main)
+        self.assertEqual(policy.sha(self.remote, "development"), self.expected_development)
         for directory in ("demo", "cabbalr", "plugin"):
-            self.assertTrue(policy.git(self.remote, "ls-tree", "-r", "--name-only", "sig-fusion",
+            self.assertTrue(policy.git(self.remote, "ls-tree", "-r", "--name-only", "gemapi-app-sirs",
                                        "--", directory).stdout)
 
     def commit(self, repo, name, content):
@@ -58,20 +60,21 @@ class GitSigFusionTests(unittest.TestCase):
     def development(self, name="common.txt", content="new common\n"):
         commit = self.commit(self.repo, name, content)
         policy.git(self.repo, "push", "origin", "development")
+        self.expected_development = commit
         return commit
 
     def specialized(self, name="sirs/schema.sql", content="specialized\n"):
         commit = self.commit(self.work, name, content)
-        policy.git(self.work, "push", "origin", "sig-fusion")
+        policy.git(self.work, "push", "origin", "gemapi-app-sirs")
         return commit
 
     def assert_synced(self, *preserved):
         policy.fetch(self.repo)
-        self.assertTrue(policy.ancestor(self.repo, "origin/development", "origin/sig-fusion"))
+        self.assertTrue(policy.ancestor(self.repo, "origin/development", "origin/gemapi-app-sirs"))
         for commit in preserved:
-            self.assertTrue(policy.ancestor(self.repo, commit, "origin/sig-fusion"))
+            self.assertTrue(policy.ancestor(self.repo, commit, "origin/gemapi-app-sirs"))
         self.assertEqual(policy.git(self.repo, "show", "origin/development:AGENTS.md").stdout,
-                         policy.git(self.repo, "show", "origin/sig-fusion:AGENTS.md").stdout)
+                         policy.git(self.repo, "show", "origin/gemapi-app-sirs:AGENTS.md").stdout)
 
     def test_new_commit(self):
         self.development()
@@ -93,28 +96,34 @@ class GitSigFusionTests(unittest.TestCase):
         self.development()
         policy.sync(self.repo)
         self.assert_synced(special)
-        parents = policy.git(self.repo, "show", "-s", "--format=%P", "origin/sig-fusion").stdout.split()
+        parents = policy.git(self.repo, "show", "-s", "--format=%P", "origin/gemapi-app-sirs").stdout.split()
         self.assertEqual(len(parents), 2)
-        self.assertEqual(policy.git(self.repo, "show", "origin/sig-fusion:sirs/schema.sql").stdout, "specialized\n")
+        self.assertEqual(policy.git(self.repo, "show", "origin/gemapi-app-sirs:sirs/schema.sql").stdout, "specialized\n")
 
     def test_no_new_commit_no_push(self):
         with patch.object(policy, "git", wraps=policy.git) as calls:
             policy.sync(self.repo)
         self.assertFalse(any("push" in call.args[1:] for call in calls.call_args_list))
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), self.initial)
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), self.initial)
 
-    def test_no_new_common_commit_with_sig_fusion_commits(self):
+    def test_no_new_common_commit_with_sirs_commits(self):
         special = self.specialized()
         policy.sync(self.repo)
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), special)
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), special)
 
     def test_protected_mode_pending_pr_is_not_success(self):
         self.development()
         original = policy.subprocess.run
 
+        commands = []
+
         def gh_pending(args, **kwargs):
             if args[0] != "gh":
                 return original(args, **kwargs)
+            commands.append(args)
+            if args[1:3] in (["pr", "list"], ["pr", "create"]):
+                self.assertEqual(args[args.index("--base") + 1], "gemapi-app-sirs")
+                self.assertEqual(args[args.index("--head") + 1], "development")
             output = '[]' if args[1:3] == ["pr", "list"] else 'https://github.com/jln-codes/gemapi-app/pull/1'
             return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
 
@@ -122,7 +131,9 @@ class GitSigFusionTests(unittest.TestCase):
             with patch.object(policy.subprocess, "run", side_effect=gh_pending):
                 with self.assertRaisesRegex(policy.Refused, "PR en attente"):
                     policy.sync(self.repo, mode="pull-request")
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), self.initial)
+        self.assertEqual([args[2] for args in commands], ["list", "create", "merge"])
+        self.assertEqual(commands[-1][-4:], ["--merge", "--auto", "--match-head-commit", self.expected_development])
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), self.initial)
 
     def test_protected_mode_reuses_pr_and_checks_actual_remote(self):
         development = self.development()
@@ -136,7 +147,7 @@ class GitSigFusionTests(unittest.TestCase):
             if args[1:3] == ["pr", "list"]:
                 output = '[{"url":"https://github.com/jln-codes/gemapi-app/pull/1"}]'
             else:
-                policy.git(self.remote, "update-ref", "refs/heads/sig-fusion", development, self.initial)
+                policy.git(self.remote, "update-ref", "refs/heads/gemapi-app-sirs", development, self.initial)
                 output = "merged"
             return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
 
@@ -155,7 +166,7 @@ class GitSigFusionTests(unittest.TestCase):
         self.development(content=lines.replace("line 28\n", "Common line\n"))
         policy.sync(self.repo)
         self.assert_synced(special)
-        merged = policy.git(self.repo, "show", "origin/sig-fusion:common.txt").stdout
+        merged = policy.git(self.repo, "show", "origin/gemapi-app-sirs:common.txt").stdout
         self.assertIn("SIRS line", merged)
         self.assertIn("Common line", merged)
 
@@ -165,18 +176,18 @@ class GitSigFusionTests(unittest.TestCase):
         before = policy.sha(self.repo, "HEAD")
         with self.assertRaisesRegex(policy.Refused, "Conflits.*|common.txt"):
             policy.sync(self.repo)
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), special)
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), special)
         self.assertEqual(policy.sha(self.repo, "HEAD"), before)
         self.assertEqual((self.work / "common.txt").read_text(), "SIRS value\n")
         self.assertEqual(len(policy.git(self.repo, "worktree", "list", "--porcelain").stdout.split("worktree ")) - 1, 2)
 
-    def test_concurrent_sig_fusion_push_retry_preserves_both(self):
+    def test_concurrent_sirs_push_retry_preserves_both(self):
         self.development()
         original = policy.git
         concurrent = []
 
         def race(repo, *args, **kwargs):
-            if args[:3] == ("push", "origin", "HEAD:refs/heads/sig-fusion") and not concurrent:
+            if args[:3] == ("push", "origin", "HEAD:refs/heads/gemapi-app-sirs") and not concurrent:
                 concurrent.append(self.specialized())
             return original(repo, *args, **kwargs)
 
@@ -191,7 +202,7 @@ class GitSigFusionTests(unittest.TestCase):
 
         def race(repo, *args, **kwargs):
             result = original(repo, *args, **kwargs)
-            if args[:3] == ("push", "origin", "HEAD:refs/heads/sig-fusion") and not concurrent:
+            if args[:3] == ("push", "origin", "HEAD:refs/heads/gemapi-app-sirs") and not concurrent:
                 concurrent.append(self.development("second.txt"))
             return result
 
@@ -206,39 +217,39 @@ class GitSigFusionTests(unittest.TestCase):
         hook.chmod(0o755)
         with self.assertRaisesRegex(policy.Refused, "Publication refusée"):
             policy.sync(self.repo)
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), self.initial)
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), self.initial)
 
     def test_reverse_ancestry_and_source_refused_common_allowed(self):
         special = self.specialized("extension.txt")
         common = self.development()
         policy.sync(self.repo)
-        policy.guard(self.repo, self.initial, common, common, "origin/sig-fusion", "development")
+        policy.guard(self.repo, self.initial, common, common, "origin/gemapi-app-sirs", "development")
         with self.assertRaisesRegex(policy.Refused, "Ascendance spécifique"):
-            policy.guard(self.repo, common, "origin/sig-fusion", common, "origin/sig-fusion", "other-name")
-        with self.assertRaisesRegex(policy.Refused, "source est sig-fusion"):
-            policy.guard(self.repo, common, common, common, special, "sig-fusion")
+            policy.guard(self.repo, common, "origin/gemapi-app-sirs", common, "origin/gemapi-app-sirs", "other-name")
+        with self.assertRaisesRegex(policy.Refused, "source est gemapi-app-sirs"):
+            policy.guard(self.repo, common, common, common, special, "gemapi-app-sirs")
 
-    def test_sirs_model_path_refused_without_sig_fusion_ancestry(self):
+    def test_sirs_model_path_refused_without_sirs_ancestry(self):
         change = self.development("sirs/schema.sql")
         with self.assertRaisesRegex(policy.Refused, "Changements spécifiques"):
-            policy.guard(self.repo, self.initial, change, self.initial, "origin/sig-fusion")
+            policy.guard(self.repo, self.initial, change, self.initial, "origin/gemapi-app-sirs")
 
     def test_update_clean_behind_fast_forward_then_noop(self):
         self.development()
         policy.sync(self.repo)
         policy.update(self.repo, self.work)
         policy.update(self.repo, self.work)
-        self.assertEqual(policy.sha(self.work, "HEAD"), policy.sha(self.remote, "sig-fusion"))
+        self.assertEqual(policy.sha(self.work, "HEAD"), policy.sha(self.remote, "gemapi-app-sirs"))
 
     def test_renamed_cli_and_unchanged_worktree_path(self):
         special = self.specialized()
-        self.development("tools/git_sig_fusion.py", Path(policy.__file__).read_text())
+        self.development("tools/git_gemapi_app_sirs.py", Path(policy.__file__).read_text())
         policy.sync(self.repo)
-        script = self.repo / "tools/git_sig_fusion.py"
+        script = self.repo / "tools/git_gemapi_app_sirs.py"
         for args in (
-            ("validate", "--sig-fusion", self.initial),
+            ("validate", "--gemapi-app-sirs", self.initial),
             ("guard", "--base", self.initial, "--head", "HEAD", "--common", "HEAD",
-             "--sig-fusion", "origin/sig-fusion", "--source", "development"),
+             "--gemapi-app-sirs", "origin/gemapi-app-sirs", "--source", "development"),
             ("update", "--worktree", str(self.work)),
         ):
             with self.subTest(command=args[0]):
@@ -246,11 +257,11 @@ class GitSigFusionTests(unittest.TestCase):
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.work.name, "gemapi-app-sirs")
-        self.assertEqual(policy.git(self.work, "branch", "--show-current").stdout.strip(), "sig-fusion")
+        self.assertEqual(policy.git(self.work, "branch", "--show-current").stdout.strip(), "gemapi-app-sirs")
         self.assertEqual((self.work / "sirs/schema.sql").read_text(), "specialized\n")
         self.assert_synced(special)
         self.assertFalse(policy.git(self.remote, "for-each-ref", "--format=%(refname)",
-                                    "refs/heads/sirs").stdout)
+                                    "refs/heads/sig-fusion").stdout)
 
     def test_update_dirty_including_untracked_refused(self):
         before = policy.sha(self.work, "HEAD")
@@ -283,7 +294,7 @@ class GitSigFusionTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.Refused, "worktree lié"):
             policy.update(self.repo, self.repo)
         policy.git(self.work, "switch", "-c", "temporary")
-        with self.assertRaisesRegex(policy.Refused, "branche locale sig-fusion"):
+        with self.assertRaisesRegex(policy.Refused, "branche locale gemapi-app-sirs"):
             policy.update(self.repo, self.work)
 
     def test_update_reports_pending_github_sync(self):
@@ -291,27 +302,27 @@ class GitSigFusionTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.Refused, "synchronisation GitHub"):
             policy.update(self.repo, self.work)
 
-    def test_validation_rejects_sig_fusion_instruction_drift(self):
+    def test_validation_rejects_sirs_instruction_drift(self):
         special = self.specialized("AGENTS.md", "different instructions\n")
         self.development()
         with self.assertRaisesRegex(policy.Refused, "AGENTS.md diffère"):
             policy.sync(self.repo)
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), special)
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), special)
 
-    def test_validation_rejects_sig_fusion_data_deletion(self):
+    def test_validation_rejects_sirs_data_deletion(self):
         for directory in ("demo", "cabbalr", "plugin"):
             policy.git(self.work, "rm", "-r", directory)
         policy.git(self.work, "commit", "-m", "Forbidden SIRS deletions")
-        policy.git(self.work, "push", "origin", "sig-fusion")
-        before = policy.sha(self.remote, "sig-fusion")
+        policy.git(self.work, "push", "origin", "gemapi-app-sirs")
+        before = policy.sha(self.remote, "gemapi-app-sirs")
         self.development()
         with self.assertRaisesRegex(policy.Refused, "Suppressions de fichiers"):
             policy.sync(self.repo)
-        self.assertEqual(policy.sha(self.remote, "sig-fusion"), before)
+        self.assertEqual(policy.sha(self.remote, "gemapi-app-sirs"), before)
         # Restore only this test's temporary remote for the shared preservation assertion.
         for directory, file in (("demo", "data.txt"), ("cabbalr", "data.txt"), ("plugin", "code.py")):
             self.commit(self.work, f"{directory}/{file}", "initial\n")
-        policy.git(self.work, "push", "origin", "sig-fusion")
+        policy.git(self.work, "push", "origin", "gemapi-app-sirs")
 
 
 if __name__ == "__main__":

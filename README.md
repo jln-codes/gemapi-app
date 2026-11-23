@@ -67,63 +67,68 @@ Le ZIP standard embarque uniquement le package `gemapi_app/`, ses modules, les
 interfaces Qt, l'icône et le logo institutionnel. Il n'embarque aucune donnée,
 aucun schéma, test, outil ou rapport généré.
 
-## Branches et synchronisation sig-fusion
+## Branches et synchronisation gemapi-app-sirs
 
 `development` porte le socle courant ; `main` reçoit seulement les versions
-validées, normalement par fast-forward. `sig-fusion` reçoit automatiquement chaque push
+validées, normalement par fast-forward. `gemapi-app-sirs` reçoit automatiquement chaque push
 sur `development`, par fusion normale préservant ses propres commits. La production
 n'intervient pas dans ce flux. Les développements SIRS restent spécialisés, de
 préférence sous `sirs/`, avec des bases PostgreSQL/PostGIS locales ; ils ne modifient
 ni Supabase, ni les données, ni le plugin commun. Voir [AGENTS.md](AGENTS.md).
 
-La branche spécialisée se nomme définitivement `sig-fusion`. Le nom SIRS reste
+La branche spécialisée se nomme définitivement `gemapi-app-sirs`. Le nom SIRS reste
 légitime pour le modèle métier et son répertoire `sirs/`. Le worktree Ubuntu conserve
 exactement son chemin `~/Projects/gemapi-app-sirs` ; seule sa branche est renommée
-et suit `origin/sig-fusion`.
+et suit `origin/gemapi-app-sirs`.
 
 Avant une session SIRS sous Ubuntu, depuis n'importe quel répertoire :
 
 ```bash
-python3 ~/Projects/gemapi-app/tools/git_sig_fusion.py update
+python3 ~/Projects/gemapi-app/tools/git_gemapi_app_sirs.py update
 ```
 
 Cette commande vérifie le worktree lié `~/Projects/gemapi-app-sirs`, sa branche
-`sig-fusion` et sa propreté, récupère `origin`, puis avance uniquement par fast-forward.
+`gemapi-app-sirs` et sa propreté, récupère `origin`, puis avance uniquement par fast-forward.
 Elle affiche le retard, la synchronisation ou la divergence et refuse les fichiers
 modifiés/non suivis et les commits locaux non poussés, sans toucher aux fichiers.
-Autre emplacement : `python3 tools/git_sig_fusion.py update --worktree CHEMIN`.
+Autre emplacement : `python3 tools/git_gemapi_app_sirs.py update --worktree CHEMIN`.
 Prérequis : Python 3 et Git 2.31 ou ultérieur, avec accès à `origin`. Aucun service
 résident n'est nécessaire ; GitHub ne peut pas mettre à jour un ordinateur hors ligne.
 
-Le workflow [sync-sig-fusion.yml](.github/workflows/sync-sig-fusion.yml) sérialise les exécutions,
-récupère les pointes récentes et retente une fusion si un push concurrent sur `sig-fusion`
+Le workflow [sync-gemapi-app-sirs.yml](.github/workflows/sync-gemapi-app-sirs.yml) sérialise les exécutions,
+récupère les pointes récentes et retente une fusion si un push concurrent sur `gemapi-app-sirs`
 refuse la publication. Il teste les mécanismes Git avant publication, puis contrôle
 l'ascendance, l'identité d'`AGENTS.md` et l'absence de fichiers du socle supprimés
 par SIRS sous `demo/`, `cabbalr/` et `plugin/`. Il vérifie ensuite réellement :
 
 ```bash
 git fetch origin
-git merge-base --is-ancestor origin/development origin/sig-fusion
+git merge-base --is-ancestor origin/development origin/gemapi-app-sirs
 ```
 
 Un conflit échoue visiblement, affiche les fichiers et laisse la branche distante
 SIRS inchangée. Dans un worktree SIRS propre, récupérer `origin`, lancer
 `git merge origin/development`, résoudre chaque conflit en préservant les deux
-développements, tester, committer et pousser `sig-fusion`. Ne pas utiliser de choix global
+développements, tester, committer et pousser `gemapi-app-sirs`. Ne pas utiliser de choix global
 `ours`/`theirs`, de force-push ou de réinitialisation. Relancer ensuite l'exécution
 en échec depuis GitHub Actions. Le déclenchement manuel `workflow_dispatch` ne sera
 disponible dans l'interface qu'après arrivée du workflow dans la branche par défaut
 `main` ; le déclenchement par push fonctionne directement depuis `development`.
 
+La variable de dépôt `SIG_FUSION_SYNC_MODE` conserve son nom et sa valeur lors du renommage.
+Le groupe de concurrence `development-to-sig-fusion` et les noms de contrôles
+`sync-sig-fusion-direct`, `sync-sig-fusion-protected` et `branch-policy` restent stables
+pour les exécutions en cours et les règles GitHub existantes.
+
 Les trois branches étaient sans protection ni ruleset lors du contrôle
 GIT-SIG-FUSION-01. Le mode par défaut est donc le push direct avec seulement
-`contents: write` pour le job de publication. Si une protection de `sig-fusion` exige une
+`contents: write` pour le job de publication. Si une protection de `gemapi-app-sirs` exige une
 PR, définir la variable de dépôt `SIG_FUSION_SYNC_MODE=pull-request`, autoriser la création
 de PR par Actions et l'auto-merge dans les paramètres du dépôt, puis rendre le
-contrôle `branch-policy` obligatoire sur `sig-fusion`. Autoriser les commits de fusion :
+contrôle `branch-policy` obligatoire sur `gemapi-app-sirs`. Autoriser les commits de fusion :
 un squash ou rebase ne satisfait pas la relation d'ancêtre attendue. Ce mode ajoute
 seulement au job PR la permission `pull-requests: write`, réutilise une PR
-`development → sig-fusion` et demande une intégration conditionnelle sans contournement
+`development → gemapi-app-sirs` et demande une intégration conditionnelle sans contournement
 administrateur. Une PR encore ouverte produit un échec explicite « en attente » ;
 après son intégration, relancer l'exécution pour confirmer l'état distant.
 Ce mode doit être qualifié avec les protections réellement configurées avant usage.
@@ -136,7 +141,7 @@ Voir la [documentation GitHub sur les déclenchements](https://docs.github.com/e
 Aucun jeton personnel n'est nécessaire.
 
 Le workflow [branch-policy.yml](.github/workflows/branch-policy.yml) refuse les PR
-`sig-fusion → development/main`, l'ascendance spécifique SIRS même depuis une autre
+`gemapi-app-sirs → development/main`, l'ascendance spécifique SIRS même depuis une autre
 branche et les changements sous `sirs/` visant le socle. Les commits communs de
 `development` hérités par SIRS restent autorisés vers `main`.
 Pour bloquer avant fusion, rendre `branch-policy` obligatoire sur `development` et
@@ -153,5 +158,5 @@ et les workflows y seront installés lors de cette intégration, pas par ce chan
 Tests Git sans accès aux bases, dans des dépôts isolés sous `audits/` supprimés à la fin :
 
 ```bash
-python3 tools/test_git_sig_fusion.py
+python3 tools/test_git_gemapi_app_sirs.py
 ```

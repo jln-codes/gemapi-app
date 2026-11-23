@@ -4,7 +4,7 @@ on:
   push:
     branches: [development, main]
   pull_request:
-    branches: [development, main, sig-fusion]
+    branches: [development, main, gemapi-app-sirs]
 
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Tester les scénarios Git isolés
-        run: python3 tools/test_git_sig_fusion.py
+        run: python3 tools/test_git_gemapi_app_sirs.py
       - name: Vérifier le sens de propagation et la fusion proposée
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -29,11 +29,11 @@ jobs:
           SOURCE: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
-          if [[ "$TARGET" == sig-fusion ]]; then
-            python3 tools/git_sig_fusion.py validate --sig-fusion "$BASE"
+          if [[ "$TARGET" == gemapi-app-sirs ]]; then
+            python3 tools/git_gemapi_app_sirs.py validate --gemapi-app-sirs "$BASE"
           else
             COMMON=origin/development
             if [[ "$TARGET" == development ]]; then COMMON="$BASE"; fi
-            python3 tools/git_sig_fusion.py guard --base "$BASE" --head "$HEAD" \
-              --common "$COMMON" --sig-fusion origin/sig-fusion --source "$SOURCE"
+            python3 tools/git_gemapi_app_sirs.py guard --base "$BASE" --head "$HEAD" \
+              --common "$COMMON" --gemapi-app-sirs origin/gemapi-app-sirs --source "$SOURCE"
           fi
