@@ -1,0 +1,742 @@
+%% SIG Prestations — reflet du schema SQL fourni, hors vues et triggers
+%% EPSG:3950. Les champs facultatifs sont notes dans les commentaires.
+%% Relations spatiales par intersection non representees.
+erDiagram
+    direction TB
+
+    TECHNICIENS {
+        uuid id PK
+        text nom
+        text prenom "nullable"
+        text login UK "nullable"
+        boolean actif
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    COMMUNES {
+        uuid id PK
+        text insee UK
+        text nom
+        geometry geom "MultiPolygon 3950 NOT NULL"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    COURS_EAU {
+        uuid id PK
+        text nom "obligatoire; non blanc"
+        text type_ecoulement "nullable"
+        boolean direction "nullable; validation humaine"
+        integer section "calculé ST_NumGeometries"
+        boolean valide "calculé direction IS TRUE et monosection"
+        text source
+        geometry geom "MultiLineString 3950 NOT NULL"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH {
+        uuid id PK
+        text nom
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH_STOCKAGE {
+        uuid id PK
+        uuid ah_id FK,UK
+        text nom
+        text categorie "nullable"
+        numeric surface_ha "nullable"
+        geometry geom "Polygon 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH_OUVRAGE {
+        uuid id PK
+        uuid ah_id FK
+        text nom "nullable"
+        geometry geom "LineString 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    AH_SECTIONS {
+        uuid id PK
+        uuid ah_id FK "parent obligatoire"
+        uuid cours_eau_id FK "cours d'eau qualifié à la validation"
+        double debut_fraction "0 <= début < fin <= 1"
+        double fin_fraction
+        geometry geom_reference "LineString 3950 2D positive figée"
+        text geom_cours_eau_signature "MD5 EWKB"
+        integer revision_validation "1 puis incrément explicite pour revalider"
+        text valide_par "compte PostgreSQL"
+        timestamptz date_validation
+        text commentaire "nullable"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    SITES_TERRESTRES {
+        uuid id PK
+        text nom
+        geometry geom "MultiPolygon 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    SITES_ZONES {
+        uuid id PK
+        uuid site_terrestre_id FK
+        text nom
+        text type_site "nullable"
+        numeric surface_ha "nullable"
+        geometry geom "MultiPoint/MultiLineString/MultiPolygon 3950 valide non vide"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    PRESTATAIRES {
+        uuid id PK
+        text nom
+        boolean actif
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    PRESTATIONS_CATEGORIE {
+        uuid id PK
+        text libelle UK
+        integer ordre
+    }
+    PRESTATIONS_CATEGORIE ||..o{ TYPES_PRESTATIONS : regroupe
+    TYPES_PRESTATIONS {
+        uuid categorie_id FK
+        uuid id PK
+        text code UK
+        text libelle
+        boolean actif
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    STATUTS_PRESTATIONS {
+        uuid id PK
+        text code UK
+        text libelle UK
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    PRESTATIONS {
+        uuid cours_eau_id FK "nullable"
+        uuid digue_id FK "nullable"
+        uuid ah_stockage_id FK "nullable"
+        uuid ah_ouvrage_id FK "nullable"
+        uuid ah_section_id FK "nullable; geometrie propre obligatoire"
+        uuid site_terrestre_id FK "nullable"
+        uuid site_zone_id FK "nullable"
+        uuid id PK
+        text intitule "nullable"
+        uuid prestataire_id FK
+        uuid type_prestation_id FK
+        uuid statut_id FK
+        date date_debut
+        date date_fin
+        numeric quantite "nullable"
+        text unite "nullable"
+        text position "NOT NULL, défaut Indéfini ; cinq valeurs"
+        text rive "NOT NULL, défaut Indéfinie ; quatre valeurs"
+        text description "nullable"
+        text photo_1 "nullable"
+        text photo_1_commentaire "nullable"
+        text photo_2 "nullable"
+        text photo_2_commentaire "nullable"
+        geometry geom "3950 2D, obligatoire cours d'eau et digues, Multi* obligatoire sur site, NULL sur zone"
+        uuid technicien_id FK "NOT NULL"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+        integer nombre_points "mesure enregistrée nullable"
+        double longueur_m "mesure enregistrée nullable"
+        double surface_m2 "mesure enregistrée nullable"
+        double surface_ha "générée depuis surface_m2"
+        text type_geometrie "mesure enregistrée nullable"
+        text type_geometrie_postgis "nullable"
+        boolean possede_geometrie "calcul serveur"
+        text origine_mesures "Prestation ou Patrimoine ou Aucune géométrie"
+    }
+    DIGUES {
+        uuid id PK
+        text nom
+        text identifiant_externe "nullable"
+        text commentaire "nullable"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    DIGUES_REPERES {
+        uuid id PK
+        uuid digue_id FK,UK "un repère obligatoire par digue"
+        uuid riviere_id FK
+        text rive "G ou D"
+        double debut_fraction "0..1"
+        double fin_fraction "0..1 ; debut < fin"
+        geometry geom_reference "LineString 3950 figee"
+        text geom_riviere_signature
+        integer revision_validation "1 puis +1 à chaque validation explicite"
+        text modifie_par "compte PostgreSQL"
+        timestamptz date_modification "nullable"
+    }
+    TECHNICIENS ||..o{ PRESTATIONS : responsable
+    PRESTATAIRES ||..o{ PRESTATIONS : realise
+    TYPES_PRESTATIONS ||..o{ PRESTATIONS : classifie
+    STATUTS_PRESTATIONS ||..o{ PRESTATIONS : qualifie
+    AH ||--o| AH_STOCKAGE : stockage_facultatif
+    AH ||--o{ AH_OUVRAGE : ouvrages
+    AH ||--o{ AH_SECTIONS : sections_acceptees
+    COURS_EAU ||--o{ AH_SECTIONS : support
+    %% AH_SECTIONS : unique (ah_id,cours_eau_id,debut_fraction,fin_fraction).
+    %% AH_SECTIONS_CARTE expose la conformité sans réécrire les instantanés.
+    SITES_TERRESTRES ||--o{ SITES_ZONES : zones
+    SITES_ZONES |o--o{ PRESTATIONS : "site_zone_id"
+    DIGUES ||--|| DIGUES_REPERES : contient
+    COURS_EAU ||--o{ DIGUES_REPERES : repere
+
+    %% Toute prestation choisit exactement une des sept FK patrimoniales.
+    %% ah_section_id reference AH_SECTIONS.id (RESTRICT), jamais AH.id.
+    %% Section AH : geometrie propre obligatoire ; mesures de l'intervention.
+    %% PRESTATIONS_CARTE utilise SITES_ZONES.geom pour le mode zone ; PRESTATIONS.geom reste NULL.
+    %% modifie_par est renseigne automatiquement avec session_user.
+    %% Les sections exigent une seule partie LineString simple dans
+    %% la MultiLineString du cours d eau.
+    %% Digues et sections AH : direction TRUE ET valide TRUE avant tout calcul.
+    %% Les references existantes non qualifiees restent figees et signalees.
+
+    COURS_EAU |o--o{ PRESTATIONS : "cours_eau_id"
+    DIGUES |o--o{ PRESTATIONS : "digue_id"
+    AH_STOCKAGE |o--o{ PRESTATIONS : "ah_stockage_id"
+    AH_OUVRAGE |o--o{ PRESTATIONS : "ah_ouvrage_id"
+    AH_SECTIONS |o--o{ PRESTATIONS : "ah_section_id"
+    %% prestations_carte : zone.geom imposee ; AH : geom propre prioritaire,
+    %% sinon geom du stockage/ouvrage. Aucune copie dans PRESTATIONS.geom.
+    %% MESURES-07 : les huit valeurs de PRESTATIONS sont exposees directement
+    %% par prestations_carte et prestations_fiches, sans recalcul dans les vues.
+    SITES_TERRESTRES |o--o{ PRESTATIONS : "site_terrestre_id"
+
+    %% SIG-FUSION-REF-01 · Version 0.1.
+    %% troncons.ck_troncons_crete_fields : voir la portée de la contrainte dans le rapport v0.1.
+    %% urgences : RefUrgence:1 (0), RefUrgence:3 (2), RefUrgence:4 (3), RefUrgence:99 (IND).
+    %% RefUrgence:2 (1) se rattache au niveau faible dans la correspondance documentaire.
+    %% Projection documentaire SIG-FUSION. Socle ci-dessus, schémas sources qualifiés ci-dessous.
+    %% Une FK vers une cible hors périmètre reste annotée en commentaire. Aucun raccord intermodèle présumé.
+
+    %% Tables métier
+    public__troncons["public.troncons"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        text type_physique_id FK "NOT NULL"
+        uuid digue_id FK "NULL"
+        uuid amenagement_hydraulique_id FK "NULL"
+        uuid systeme_reperage_defaut_id FK "NULL"
+        text libelle "NULL"
+        date date_debut "NULL"
+        date date_fin "NULL"
+        text commentaire "NULL"
+        text designation "NULL"
+        text type_rive_id FK "NULL"
+        text type_troncon_id FK "NULL"
+        text typologie_troncon_id FK "NULL"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry"
+        geometry geometry_reperage "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(LineString,__DIGUES_APP_BUSINESS_SRID__)"
+        boolean valid "NOT NULL"
+        bigint version "NOT NULL"
+        uuid troncon_support_id FK "NULL"
+        uuid segment_hydrographique_support_id FK "NULL"
+        uuid berge_support_id FK "NULL"
+        text berge_support_id_type FK "NULL"
+        boolean est_structure "NULL"
+        boolean est_support_classique "NULL"
+        boolean troncon_support_qualifie FK "NULL"
+        boolean position_pied_autorisee "NULL"
+        boolean position_sommet_autorisee "NULL"
+        text source_id FK "NULL"
+        text cote_id FK "NULL"
+        text position_id FK "NULL"
+        text fonction_id FK "NULL"
+        text fonction_haut_id FK "NULL"
+        text fonction_bas_id FK "NULL"
+        text nature_id FK "NULL"
+        text nature_haut_id FK "NULL"
+        text nature_bas_id FK "NULL"
+        text materiau_id FK "NULL"
+        text materiau_haut_id FK "NULL"
+        text materiau_bas_id FK "NULL"
+        integer num_couche "NULL"
+        double_precision epaisseur "NULL; SQL double precision"
+        double_precision largeur_moyenne "NULL; SQL double precision"
+        double_precision epaisseur_sommet "NULL; SQL double precision"
+        double_precision pente_interieure "NULL; SQL double precision"
+        double_precision longueur_rampant_haut "NULL; SQL double precision"
+        double_precision longueur_rampant_bas "NULL; SQL double precision"
+        double_precision hauteur_murette "NULL; SQL double precision"
+        double_precision largeur "NULL; SQL double precision"
+    }
+    %% public.troncons : UNIQUE (id, est_structure)
+    %% public.troncons : UNIQUE (id, est_support_classique)
+    %% public.troncons : UNIQUE (id, position_pied_autorisee)
+    %% public.troncons : UNIQUE (id, position_sommet_autorisee)
+    %% public.troncons : UNIQUE (id, type_physique_id)
+    public__desordres["public.desordres"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        text type_desordre_id FK "NULL"
+        text categorie_desordre_id FK "NULL"
+        text designation "NULL"
+        text commentaire "NULL"
+        text lieu_dit "NULL"
+        text cote_id FK "NULL"
+        text position_id FK "NULL"
+        text source_id FK "NULL"
+        date date_debut "NULL"
+        date date_fin "NULL"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        boolean valid "NULL"
+        bigint version "NOT NULL"
+    }
+    public__observations["public.observations"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        uuid desordre_id FK "NULL"
+        uuid troncon_id FK "NULL"
+        uuid ouvrage_hydraulique_id FK "NULL"
+        uuid equipement_mesure_id FK "NULL"
+        uuid cheminement_id FK "NULL"
+        uuid mobilier_id FK "NULL"
+        uuid reseau_technique_id FK "NULL"
+        uuid amenagement_hydraulique_id FK "NULL"
+        uuid zone_stockage_id FK "NULL"
+        uuid vegetation_id FK "NULL"
+        uuid ouvrage_particulier_id FK "NULL"
+        uuid structure_amenagement_hydraulique_id FK "NULL"
+        uuid organe_protection_collective_id FK "NULL"
+        uuid prestation_id FK "NULL"
+        uuid ouvrage_telecom_energie_id FK "NULL"
+        uuid ouvrage_voirie_id FK "NULL"
+        uuid reseau_hydraulique_id FK "NULL"
+        uuid structure_digue_id FK "NULL"
+        boolean structure_digue_qualifie FK "NULL"
+        uuid profil_travers_id FK "NULL"
+        uuid objet_mesure_hydraulique_id FK "NULL"
+        uuid structure_protection_id FK "NULL"
+        uuid segment_hydrographique_id FK "NULL"
+        uuid berge_id FK "NULL"
+        text berge_id_type FK "NULL"
+        uuid element_morphologique_id FK "NULL"
+        text urgence_id FK "NULL"
+        text designation "NULL"
+        date date_observation "NULL"
+        text evolution "NULL"
+        text suite "NULL"
+        text suite_apporter_id FK "NULL"
+        uuid observateur_id FK "NULL"
+        integer nombre_desordres "NULL"
+        boolean valid "NOT NULL"
+        bigint version "NOT NULL"
+        uuid composant_berge_id FK "NULL"
+        uuid trace_position_troncon_id FK "NULL"
+    }
+    public__photos["public.photos"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        uuid observation_id FK "NOT NULL"
+        date date_photo "NULL"
+        text designation "NULL"
+        text commentaire "NULL"
+        text libelle "NULL"
+        uuid photographe_id FK "NULL"
+        text cote_id FK "NULL"
+        boolean borne_debut_aval "NULL"
+        double_precision borne_debut_distance "NULL; SQL double precision"
+        geometry position_debut "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        real pr_debut "NULL"
+        boolean borne_fin_aval "NULL"
+        double_precision borne_fin_distance "NULL; SQL double precision"
+        geometry position_fin "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        real pr_fin "NULL"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        boolean valid "NOT NULL"
+        bigint version "NOT NULL"
+        text storage_key "NULL"
+        uuid systeme_reperage_id FK "NULL"
+        uuid borne_debut_id FK "NULL"
+        uuid borne_fin_id FK "NULL"
+    }
+    %% photos.storage_key : index unique si la clé est renseignée.
+    public__ouvrages_particuliers["public.ouvrages_particuliers"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        text designation "NULL"
+        text libelle "NULL"
+        text commentaire "NULL"
+        date date_debut "NULL"
+        date date_fin "NULL"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        uuid troncon_id FK "NULL"
+        boolean valid "NOT NULL"
+        bigint version "NOT NULL"
+        text type_id FK "NULL"
+    }
+    public__equipements_mesure["public.equipements_mesure"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        text type_id FK "NOT NULL"
+        text designation "NULL"
+        text libelle "NULL"
+        text commentaire "NULL"
+        date date_debut "NULL"
+        date date_fin "NULL"
+        text cote_id FK "NULL"
+        text position_id FK "NULL"
+        text source_id FK "NULL"
+        double_precision dimension_horizontale "NULL; SQL double precision"
+        double_precision dimension_verticale "NULL; SQL double precision"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        uuid troncon_id FK "NULL"
+        boolean valid "NULL"
+        bigint version "NOT NULL"
+    }
+    public__ouvrages_hydrauliques["public.ouvrages_hydrauliques"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        text type_id FK "NULL"
+        text designation "NULL"
+        text libelle "NULL"
+        text commentaire "NULL"
+        date date_debut "NULL"
+        date date_fin "NULL"
+        text commune "NULL"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        uuid troncon_id FK "NULL"
+        uuid amenagement_hydraulique_id FK "NULL"
+        uuid zone_stockage_id FK "NULL"
+        boolean valid "NULL"
+        double_precision cote_fond "NULL; SQL double precision"
+        double_precision cote_alerte "NULL; SQL double precision"
+        double_precision volume_stockage "NULL; SQL double precision"
+        double_precision longueur "NULL; SQL double precision"
+        double_precision largeur_max "NULL; SQL double precision"
+        double_precision pente_a_vide "NULL; SQL double precision"
+        double_precision hauteur "NULL; SQL double precision"
+        double_precision largeur_en_crete "NULL; SQL double precision"
+        text type_seuil_id FK "NULL"
+        integer annee_construction "NULL"
+        text materiau_principal_a_id FK "NULL"
+        text materiau_principal_b_id FK "NULL"
+        double_precision pente_rampant "NULL; SQL double precision"
+        double_precision surface_rampant_entretien "NULL; SQL double precision"
+        double_precision longueur_totale "NULL; SQL double precision"
+        double_precision longueur_coursier "NULL; SQL double precision"
+        double_precision hauteur_chute "NULL; SQL double precision"
+        boolean passe_sport_eau_vive "NULL"
+        boolean passe_poisson "NULL"
+    }
+    public__amenagements_hydrauliques__structures["public.amenagements_hydrauliques__structures"] {
+        uuid created_by FK "NULL"
+        uuid edited_by FK "NULL"
+        uuid id PK "NOT NULL"
+        uuid amenagement_hydraulique_id FK "NULL"
+        uuid zone_stockage_id FK "NULL"
+        text designation "NULL"
+        text libelle "NULL"
+        text commentaire "NULL"
+        date date_debut "NULL"
+        date date_fin "NULL"
+        geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(Geometry,__DIGUES_APP_BUSINESS_SRID__)"
+        boolean valid "NULL"
+        integer num_couche "NULL"
+        double_precision epaisseur "NULL; SQL double precision"
+        text materiau_id FK "NULL"
+        text fonction_id FK "NULL"
+        text nature_id FK "NULL"
+        text source_id FK "NULL"
+    }
+
+    %% Tables associatives
+    public__desordres__troncons["public.desordres__troncons"] {
+        uuid id PK "NOT NULL"
+        uuid desordre_id FK "NOT NULL"
+        uuid troncon_id FK "NOT NULL"
+    }
+    %% public.desordres__troncons : UNIQUE (desordre_id, troncon_id)
+    public__equipements_mesure__desordres["public.equipements_mesure__desordres"] {
+        uuid equipement_mesure_id PK, FK "NOT NULL"
+        uuid desordre_id PK, FK "NOT NULL"
+    }
+    public__ouvrages_hydrauliques__desordres["public.ouvrages_hydrauliques__desordres"] {
+        uuid ouvrage_hydraulique_id PK, FK "NOT NULL"
+        uuid desordre_id PK, FK "NOT NULL"
+    }
+    public__ouvrages_particuliers__desordres["public.ouvrages_particuliers__desordres"] {
+        uuid ouvrage_particulier_id PK, FK "NOT NULL"
+        uuid desordre_id PK, FK "NOT NULL"
+    }
+    public__ouvrages_hydrauliques__objets_lies["public.ouvrages_hydrauliques__objets_lies"] {
+        uuid id PK "NOT NULL"
+        uuid ouvrage_hydraulique_id FK "NOT NULL"
+        uuid cheminement_id FK "NULL"
+        uuid ouvrage_voirie_id FK "NULL"
+        uuid autre_ouvrage_hydraulique_id FK "NULL"
+        uuid reseau_hydraulique_id FK "NULL"
+        uuid ouvrage_telecom_energie_id FK "NULL"
+        uuid reseau_technique_id FK "NULL"
+        uuid ouvrage_particulier_id FK "NULL"
+        uuid equipement_mesure_id FK "NULL"
+        uuid berge_id FK "NULL"
+        text berge_id_type FK "NULL"
+        uuid digue_id FK "NULL"
+    }
+
+    %% Référentiels
+    referentiel__categories_desordre["referentiel.categories_desordre"] {
+        text id PK "NOT NULL"
+        text libelle "NULL"
+        text abrege "NULL"
+        boolean valid "NULL"
+        text designation "NULL"
+    }
+    referentiel__cotes["referentiel.cotes"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__fonctions_structure["referentiel.fonctions_structure"] {
+        text id PK "NOT NULL"
+        text code UK "NULL"
+        text libelle "NOT NULL"
+        text designation "NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__materiaux_structure["referentiel.materiaux_structure"] {
+        text id PK "NOT NULL"
+        text code UK "NULL"
+        text libelle "NOT NULL"
+        text designation "NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__natures_structure["referentiel.natures_structure"] {
+        text id PK "NOT NULL"
+        text code UK "NULL"
+        text libelle "NOT NULL"
+        text designation "NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__positions["referentiel.positions"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__rives["referentiel.rives"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__sources_information["referentiel.sources_information"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__suites_apporter["referentiel.suites_apporter"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__types_desordre["referentiel.types_desordre"] {
+        text id PK "NOT NULL"
+        text categorie_id FK "NULL"
+        text libelle "NULL"
+        text abrege "NULL"
+        boolean valid "NULL"
+        text designation "NULL"
+    }
+    referentiel__types_equipement_mesure["referentiel.types_equipement_mesure"] {
+        text id PK "NOT NULL"
+        text code UK "NOT NULL"
+        text abrege UK "NOT NULL"
+        text libelle "NOT NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__types_ouvrage_hydraulique["referentiel.types_ouvrage_hydraulique"] {
+        text id PK "NOT NULL"
+        text code UK "NOT NULL"
+        text abrege UK "NOT NULL"
+        text libelle "NOT NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__types_ouvrage_particulier["referentiel.types_ouvrage_particulier"] {
+        text id PK "NOT NULL"
+        text code UK "NULL"
+        text libelle "NOT NULL"
+        text designation "NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__types_seuil_batardable["referentiel.types_seuil_batardable"] {
+        text id PK "NOT NULL"
+        text code UK "NULL"
+        text libelle "NOT NULL"
+        text designation "NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__types_troncon["referentiel.types_troncon"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__types_troncon_unifie["referentiel.types_troncon_unifie"] {
+        text id PK "NOT NULL"
+        text code UK "NULL"
+        text libelle "NOT NULL"
+        text designation "NULL"
+        boolean valid "NOT NULL"
+    }
+    referentiel__typologies_troncon["referentiel.typologies_troncon"] {
+        text id PK "NOT NULL"
+        text designation "NULL"
+        text abrege "NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+    }
+    referentiel__urgences["referentiel.urgences"] {
+        text id PK "NOT NULL"
+        text libelle "NULL"
+        boolean valid "NULL"
+        text abrege "NULL"
+        text designation "NULL"
+    }
+
+    %% Relations SQL et dépendances aux tables externes
+    public__ouvrages_hydrauliques ||..o{ public__ouvrages_hydrauliques__desordres : "ouvrage_hydraulique_id"
+    public__desordres ||..o{ public__ouvrages_hydrauliques__desordres : "desordre_id"
+    public__ouvrages_hydrauliques ||..o{ public__ouvrages_hydrauliques__objets_lies : "ouvrage_hydraulique_id"
+    %% FK externe : public.ouvrages_hydrauliques__objets_lies (cheminement_id) -> public.cheminements (id)
+    %% FK externe : public.ouvrages_hydrauliques__objets_lies (ouvrage_voirie_id) -> public.ouvrages_voirie (id)
+    public__ouvrages_hydrauliques |o..o{ public__ouvrages_hydrauliques__objets_lies : "autre_ouvrage_hydraulique_id"
+    %% FK externe : public.ouvrages_hydrauliques__objets_lies (reseau_hydraulique_id) -> public.reseaux_hydrauliques (id)
+    %% FK externe : public.ouvrages_hydrauliques__objets_lies (ouvrage_telecom_energie_id) -> public.ouvrages_telecom_energie (id)
+    %% FK externe : public.ouvrages_hydrauliques__objets_lies (reseau_technique_id) -> public.reseaux_techniques (id)
+    public__ouvrages_particuliers |o..o{ public__ouvrages_hydrauliques__objets_lies : "ouvrage_particulier_id"
+    public__equipements_mesure |o..o{ public__ouvrages_hydrauliques__objets_lies : "equipement_mesure_id"
+    %% FK externe : public.ouvrages_hydrauliques__objets_lies (digue_id) -> public.digues (id)
+    %% FK externe : public.amenagements_hydrauliques__structures (amenagement_hydraulique_id) -> public.amenagements_hydrauliques (id)
+    %% FK externe : public.observations (amenagement_hydraulique_id) -> public.amenagements_hydrauliques (id)
+    %% FK externe : public.ouvrages_hydrauliques (amenagement_hydraulique_id) -> public.amenagements_hydrauliques (id)
+    referentiel__categories_desordre |o..o{ public__desordres : "categorie_desordre_id"
+    %% FK externe : public.observations (cheminement_id) -> public.cheminements (id)
+    referentiel__cotes |o..o{ public__desordres : "cote_id"
+    referentiel__cotes |o..o{ public__photos : "cote_id"
+    public__desordres ||..o{ public__desordres__troncons : "desordre_id"
+    public__desordres |o..o{ public__observations : "desordre_id"
+    public__desordres ||..o{ public__ouvrages_particuliers__desordres : "desordre_id"
+    %% FK externe : public.troncons (digue_id) -> public.digues (id)
+    public__equipements_mesure |o..o{ public__observations : "equipement_mesure_id"
+    %% FK externe : public.observations (element_morphologique_id) -> public.elements_morphologiques_lit (id)
+    %% FK externe : public.observations (mobilier_id) -> public.mobilier (id)
+    %% FK externe : public.observations (objet_mesure_hydraulique_id) -> public.objets_mesures_hydrauliques (id)
+    %% FK externe : public.observations (observateur_id) -> public.contacts (id)
+    public__observations ||..o{ public__photos : "observation_id"
+    %% FK externe : public.observations (organe_protection_collective_id) -> public.organes_protection_collective (id)
+    public__ouvrages_hydrauliques |o..o{ public__observations : "ouvrage_hydraulique_id"
+    public__ouvrages_particuliers |o..o{ public__observations : "ouvrage_particulier_id"
+    public__ouvrages_particuliers ||..o{ public__ouvrages_particuliers__desordres : "ouvrage_particulier_id"
+    %% FK externe : public.observations (ouvrage_telecom_energie_id) -> public.ouvrages_telecom_energie (id)
+    %% FK externe : public.observations (ouvrage_voirie_id) -> public.ouvrages_voirie (id)
+    %% FK externe : public.photos (photographe_id) -> public.contacts (id)
+    referentiel__positions |o..o{ public__desordres : "position_id"
+    %% FK externe : public.observations (prestation_id) -> public.prestations (id)
+    %% FK externe : public.observations (profil_travers_id) -> public.profils_travers (id)
+    %% FK externe : public.observations (reseau_hydraulique_id) -> public.reseaux_hydrauliques (id)
+    %% FK externe : public.observations (reseau_technique_id) -> public.reseaux_techniques (id)
+    %% FK externe : public.observations (segment_hydrographique_id) -> public.segments_hydrographiques (id)
+    referentiel__sources_information |o..o{ public__desordres : "source_id"
+    public__amenagements_hydrauliques__structures |o..o{ public__observations : "structure_amenagement_hydraulique_id"
+    public__troncons |o..o{ public__observations : "structure_digue_id, structure_digue_qualifie"
+    %% FK externe : public.observations (structure_protection_id) -> public.structures_protection (id)
+    referentiel__suites_apporter |o..o{ public__observations : "suite_apporter_id"
+    %% FK externe : public.troncons (systeme_reperage_defaut_id) -> public.systemes_reperage (id)
+    public__troncons ||..o{ public__desordres__troncons : "troncon_id"
+    public__troncons |o..o{ public__equipements_mesure : "troncon_id"
+    public__troncons |o..o{ public__observations : "troncon_id"
+    public__troncons |o..o{ public__ouvrages_hydrauliques : "troncon_id"
+    public__troncons |o..o{ public__ouvrages_particuliers : "troncon_id"
+    referentiel__types_equipement_mesure ||..o{ public__equipements_mesure : "type_id"
+    referentiel__types_ouvrage_hydraulique |o..o{ public__ouvrages_hydrauliques : "type_id"
+    referentiel__types_desordre |o..o{ public__desordres : "type_desordre_id"
+    referentiel__rives |o..o{ public__troncons : "type_rive_id"
+    referentiel__types_troncon |o..o{ public__troncons : "type_troncon_id"
+    referentiel__typologies_troncon |o..o{ public__troncons : "typologie_troncon_id"
+    referentiel__urgences |o..o{ public__observations : "urgence_id"
+    %% FK externe : public.observations (vegetation_id) -> public.vegetation (id)
+    referentiel__categories_desordre |o..o{ referentiel__types_desordre : "categorie_id"
+    public__equipements_mesure ||..o{ public__equipements_mesure__desordres : "equipement_mesure_id"
+    public__desordres ||..o{ public__equipements_mesure__desordres : "desordre_id"
+    referentiel__materiaux_structure |o..o{ public__amenagements_hydrauliques__structures : "materiau_id"
+    referentiel__fonctions_structure |o..o{ public__amenagements_hydrauliques__structures : "fonction_id"
+    referentiel__natures_structure |o..o{ public__amenagements_hydrauliques__structures : "nature_id"
+    referentiel__sources_information |o..o{ public__amenagements_hydrauliques__structures : "source_id"
+    referentiel__types_ouvrage_particulier |o..o{ public__ouvrages_particuliers : "type_id"
+    referentiel__cotes |o..o{ public__equipements_mesure : "cote_id"
+    referentiel__positions |o..o{ public__equipements_mesure : "position_id"
+    referentiel__sources_information |o..o{ public__equipements_mesure : "source_id"
+    referentiel__materiaux_structure |o..o{ public__ouvrages_hydrauliques : "materiau_principal_a_id"
+    referentiel__materiaux_structure |o..o{ public__ouvrages_hydrauliques : "materiau_principal_b_id"
+    %% FK externe : public.observations (composant_berge_id) -> public.composants_berges (id)
+    %% FK externe : public.photos (systeme_reperage_id) -> public.systemes_reperage (id)
+    %% FK externe : public.photos (borne_debut_id) -> public.bornes_reperage (id)
+    %% FK externe : public.photos (borne_fin_id) -> public.bornes_reperage (id)
+    referentiel__types_seuil_batardable |o..o{ public__ouvrages_hydrauliques : "type_seuil_id"
+    %% FK externe : public.amenagements_hydrauliques__structures (created_by) -> public.contacts (id)
+    %% FK externe : public.amenagements_hydrauliques__structures (edited_by) -> public.contacts (id)
+    %% FK externe : public.desordres (created_by) -> public.contacts (id)
+    %% FK externe : public.desordres (edited_by) -> public.contacts (id)
+    %% FK externe : public.equipements_mesure (created_by) -> public.contacts (id)
+    %% FK externe : public.equipements_mesure (edited_by) -> public.contacts (id)
+    %% FK externe : public.observations (created_by) -> public.contacts (id)
+    %% FK externe : public.observations (edited_by) -> public.contacts (id)
+    %% FK externe : public.ouvrages_hydrauliques (created_by) -> public.contacts (id)
+    %% FK externe : public.ouvrages_hydrauliques (edited_by) -> public.contacts (id)
+    %% FK externe : public.ouvrages_particuliers (created_by) -> public.contacts (id)
+    %% FK externe : public.ouvrages_particuliers (edited_by) -> public.contacts (id)
+    %% FK externe : public.photos (created_by) -> public.contacts (id)
+    %% FK externe : public.photos (edited_by) -> public.contacts (id)
+    %% FK externe : public.troncons (created_by) -> public.contacts (id)
+    %% FK externe : public.troncons (edited_by) -> public.contacts (id)
+    %% FK externe : public.observations (trace_position_troncon_id) -> public.traces_positions_troncons (id)
+    %% FK externe : public.amenagements_hydrauliques__structures (zone_stockage_id) -> public.zones_stockage (id)
+    %% FK externe : public.ouvrages_hydrauliques (zone_stockage_id) -> public.zones_stockage (id)
+    %% FK externe : public.observations (zone_stockage_id) -> public.zones_stockage (id)
+    public__troncons |o..o{ public__observations : "berge_id, berge_id_type"
+    public__troncons |o..o{ public__ouvrages_hydrauliques__objets_lies : "berge_id, berge_id_type"
+    public__troncons |o..o{ public__troncons : "berge_support_id, berge_support_id_type"
+    referentiel__types_troncon_unifie ||..o{ public__troncons : "type_physique_id"
+    %% FK externe : public.troncons (amenagement_hydraulique_id) -> public.amenagements_hydrauliques (id)
+    public__troncons |o..o{ public__troncons : "troncon_support_id, troncon_support_qualifie"
+    %% FK externe : public.troncons (segment_hydrographique_support_id) -> public.segments_hydrographiques (id)
+    referentiel__sources_information |o..o{ public__troncons : "source_id"
+    referentiel__cotes |o..o{ public__troncons : "cote_id"
+    referentiel__positions |o..o{ public__troncons : "position_id"
+    referentiel__fonctions_structure |o..o{ public__troncons : "fonction_id"
+    referentiel__fonctions_structure |o..o{ public__troncons : "fonction_haut_id"
+    referentiel__fonctions_structure |o..o{ public__troncons : "fonction_bas_id"
+    referentiel__natures_structure |o..o{ public__troncons : "nature_id"
+    referentiel__natures_structure |o..o{ public__troncons : "nature_haut_id"
+    referentiel__natures_structure |o..o{ public__troncons : "nature_bas_id"
+    referentiel__materiaux_structure |o..o{ public__troncons : "materiau_id"
+    referentiel__materiaux_structure |o..o{ public__troncons : "materiau_haut_id"
+    referentiel__materiaux_structure |o..o{ public__troncons : "materiau_bas_id"
