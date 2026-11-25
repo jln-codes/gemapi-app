@@ -212,9 +212,14 @@ erDiagram
     %% par prestations_carte et prestations_fiches, sans recalcul dans les vues.
     SITES_TERRESTRES |o--o{ PRESTATIONS : "site_terrestre_id"
 
-    %% SIG-FUSION-REF-02 · Version 0.2 : nomenclature types_ouvrage_particulier (16 valeurs, voir le rapport).
-    %% Arbitrages de la version 0.1 conservés.
-    %% troncons.ck_troncons_crete_fields : voir la portée de la contrainte dans le rapport v0.1.
+    %% SIG-FUSION · Version 0.2 : 7 types physiques et 5 typologies constructives.
+    %% Les référentiels SIRS omettent valid. Ouvrages particuliers : 16 valeurs.
+    %% Tronçons : type_troncon_id est obligatoire. Les règles utilisent les mêmes codes.
+    %% Les FK composites de berge visent public.troncons (id, type_troncon_id).
+    %% BERGE est généré pour berge_id_type (observations, ouvrages_hydrauliques__objets_lies)
+    %% et pour berge_support_id_type (troncons). Les clés restent différées.
+    %% Les expressions GENERATED et les CHECK de troncons sont détaillés dans le rapport v0.2.
+    %% troncons.ck_troncons_crete_fields : la règle v0.1 est conservée avec type_troncon_id.
     %% urgences : RefUrgence:1 (0), RefUrgence:3 (2), RefUrgence:4 (3), RefUrgence:99 (IND).
     %% RefUrgence:2 (1) se rattache au niveau faible dans la correspondance documentaire.
     %% Projection documentaire SIG-FUSION. Socle ci-dessus, schémas sources qualifiés ci-dessous.
@@ -225,7 +230,7 @@ erDiagram
         uuid created_by FK "NULL"
         uuid edited_by FK "NULL"
         uuid id PK "NOT NULL"
-        text type_physique_id FK "NOT NULL"
+        text type_troncon_id FK "NOT NULL"
         uuid digue_id FK "NULL"
         uuid amenagement_hydraulique_id FK "NULL"
         uuid systeme_reperage_defaut_id FK "NULL"
@@ -235,7 +240,6 @@ erDiagram
         text commentaire "NULL"
         text designation "NULL"
         text type_rive_id FK "NULL"
-        text type_troncon_id FK "NULL"
         text typologie_troncon_id FK "NULL"
         geometry geometry "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry"
         geometry geometry_reperage "NULL; SQL __DIGUES_APP_POSTGIS_SCHEMA__.geometry(LineString,__DIGUES_APP_BUSINESS_SRID__)"
@@ -276,7 +280,7 @@ erDiagram
     %% public.troncons : UNIQUE (id, est_support_classique)
     %% public.troncons : UNIQUE (id, position_pied_autorisee)
     %% public.troncons : UNIQUE (id, position_sommet_autorisee)
-    %% public.troncons : UNIQUE (id, type_physique_id)
+    %% public.troncons : UNIQUE (id, type_troncon_id)
     public__desordres["public.desordres"] {
         uuid created_by FK "NULL"
         uuid edited_by FK "NULL"
@@ -498,7 +502,6 @@ erDiagram
         text id PK "NOT NULL"
         text libelle "NULL"
         text abrege "NULL"
-        boolean valid "NULL"
         text designation "NULL"
     }
     referentiel__cotes["referentiel.cotes"] {
@@ -506,63 +509,54 @@ erDiagram
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
-        boolean valid "NULL"
     }
     referentiel__fonctions_structure["referentiel.fonctions_structure"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__materiaux_structure["referentiel.materiaux_structure"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__natures_structure["referentiel.natures_structure"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__positions["referentiel.positions"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
-        boolean valid "NULL"
     }
     referentiel__rives["referentiel.rives"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
-        boolean valid "NULL"
     }
     referentiel__sources_information["referentiel.sources_information"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
-        boolean valid "NULL"
     }
     referentiel__suites_apporter["referentiel.suites_apporter"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
-        boolean valid "NULL"
     }
     referentiel__types_desordre["referentiel.types_desordre"] {
         text id PK "NOT NULL"
         text categorie_id FK "NULL"
         text libelle "NULL"
         text abrege "NULL"
-        boolean valid "NULL"
         text designation "NULL"
     }
     referentiel__types_equipement_mesure["referentiel.types_equipement_mesure"] {
@@ -570,14 +564,12 @@ erDiagram
         text code UK "NOT NULL"
         text abrege UK "NOT NULL"
         text libelle "NOT NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__types_ouvrage_hydraulique["referentiel.types_ouvrage_hydraulique"] {
         text id PK "NOT NULL"
         text code UK "NOT NULL"
         text abrege UK "NOT NULL"
         text libelle "NOT NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__types_ouvrage_particulier["referentiel.types_ouvrage_particulier"] {
         text id PK "NOT NULL"
@@ -590,33 +582,22 @@ erDiagram
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__types_troncon["referentiel.types_troncon"] {
-        text id PK "NOT NULL"
-        text designation "NULL"
-        text abrege "NULL"
-        text libelle "NULL"
-        boolean valid "NULL"
-    }
-    referentiel__types_troncon_unifie["referentiel.types_troncon_unifie"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
-        boolean valid "NOT NULL"
     }
     referentiel__typologies_troncon["referentiel.typologies_troncon"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
-        boolean valid "NULL"
     }
     referentiel__urgences["referentiel.urgences"] {
         text id PK "NOT NULL"
         text libelle "NULL"
-        boolean valid "NULL"
         text abrege "NULL"
         text designation "NULL"
     }
@@ -679,7 +660,6 @@ erDiagram
     referentiel__types_ouvrage_hydraulique |o..o{ public__ouvrages_hydrauliques : "type_id"
     referentiel__types_desordre |o..o{ public__desordres : "type_desordre_id"
     referentiel__rives |o..o{ public__troncons : "type_rive_id"
-    referentiel__types_troncon |o..o{ public__troncons : "type_troncon_id"
     referentiel__typologies_troncon |o..o{ public__troncons : "typologie_troncon_id"
     referentiel__urgences |o..o{ public__observations : "urgence_id"
     %% FK externe : public.observations (vegetation_id) -> public.vegetation (id)
@@ -724,7 +704,7 @@ erDiagram
     public__troncons |o..o{ public__observations : "berge_id, berge_id_type"
     public__troncons |o..o{ public__ouvrages_hydrauliques__objets_lies : "berge_id, berge_id_type"
     public__troncons |o..o{ public__troncons : "berge_support_id, berge_support_id_type"
-    referentiel__types_troncon_unifie ||..o{ public__troncons : "type_physique_id"
+    referentiel__types_troncon ||..o{ public__troncons : "type_troncon_id"
     %% FK externe : public.troncons (amenagement_hydraulique_id) -> public.amenagements_hydrauliques (id)
     public__troncons |o..o{ public__troncons : "troncon_support_id, troncon_support_qualifie"
     %% FK externe : public.troncons (segment_hydrographique_support_id) -> public.segments_hydrographiques (id)
