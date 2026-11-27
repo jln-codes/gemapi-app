@@ -1,8 +1,8 @@
 # Contrat de migration SIRS → GEMAPI-App-SIRS
 
-Version documentaire v0.5 — SIG-FUSION-05. Base v0.4 : `1246f650ace55cc171ea0941ce07f915932b013a`.
+Version documentaire v0.6 · SIG-FUSION-06 · Base v0.5 au commit `350d160eb7670611bac33b5380fb4b3cae7b94a6`.
 
-Ce contrat décrit une **future** adaptation du migrateur. Aucun SQL, GPKG, jeu opérationnel, `model.json` ou code de migration n'est modifié. La projection cible est `schema_development_v0.5.mmd`. Les ambiguïtés doivent produire un diagnostic nominatif d'objet (UUID, table/colonne, valeurs sources, cause, décision attendue), sans publication d'objet partiellement converti. Le support de diagnostic d'une exécution ne constitue ni une table d'archive métier ni un nouveau journal permanent.
+Ce contrat décrit une **future** adaptation du migrateur. Aucun SQL, GPKG, jeu opérationnel, `model.json` ou code de migration n'est modifié. La projection cible est `schema_development_v0.6.mmd`. Les ambiguïtés doivent produire un diagnostic nominatif d'objet (UUID, table/colonne, valeurs sources, cause, décision attendue), sans publication d'objet partiellement converti. Le support de diagnostic d'une exécution ne constitue ni une table d'archive métier ni un nouveau journal permanent.
 
 ## Règles communes d'import
 
@@ -47,11 +47,11 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 ## 5. Parents exclusifs des ouvrages hydrauliques
 
 1. **Source** : troncon_id, amenagement_hydraulique_id, zone_stockage_id ; éventuels objets multi-parents ou orphelins.
-2. **Destination** : troncon_id, ah_ouvrage_id, ah_stockage_id mutuellement exclusifs.
-3. **Conversion** : résoudre chaque identité avec une correspondance métier approuvée ; n'insérer qu'au plus un parent. Le contrat v0.5 est `num_nonnulls(...) <= 1`. Proposer séparément `=1` pour une cible finale obligatoire : décision non acquise sur les situations sans parent.
-4. **Échec** : plusieurs parents, absence de correspondance, AH parent global correspondant à plusieurs ouvrages. Zéro parent est permis provisoirement par la projection mais doit être diagnostiqué avant publication d'un lot d'import ; le lot ne peut être annoncé complet tant que le sort de ces objets n'est pas décidé.
-5. **Information** : ne pas choisir un parent au hasard, fabriquer un parent ni supprimer une référence concurrente silencieusement. Les UUID d'ouvrages sont conservés.
-6. **Tests futurs** : matrice des huit combinaisons de parents ; seuls zéro et un parent passent le CHECK v0.5 ; conflits et orphelins apparaissent au diagnostic, aucun appariement par nom/proximité.
+2. **Destination** — Chaque ouvrage a exactement un parent parmi `public.troncons`, `milieux.ah_ouvrage` et `milieux.ah_stockage`. La règle est `ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1)`. Les trois FK portent `ON DELETE RESTRICT`.
+3. **Conversion** — Résoudre chaque référence par une correspondance explicite et vérifiable (famille et identifiant source, famille et UUID cible, preuve de correspondance). Préserver l’UUID de l’ouvrage. Une seule identité de parent résolue et aucune référence contradictoire permettent la conversion.
+4. **Absence** — Zéro parent identifiable bloque la conversion. Consigner les identifiants absents ou non résolus et conserver l’objet source. Aucun parent fictif.
+5. **Conflit** — Plusieurs parents candidats bloquent la conversion. Présenter toutes les références et preuves pour décision explicite. Ni proximité géométrique ni ressemblance des noms ne justifient une affectation. Une référence non résolue à côté d’un candidat doit aussi être instruite.
+6. **Tests futurs** — Sur les huit combinaisons de présence, seules les trois à un parent passent. Tester une FK inconnue, une tentative de suppression d’un parent utilisé et une réaffectation explicite avant suppression.
 
 ## 6. Repérage SIRS et abscisses géométriques
 
@@ -68,17 +68,17 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 2. **Destination** : une FK simple troncon_id vers public.troncons(id), tous types physiques autorisés.
 3. **Conversion** : après résolution explicite des identités, former l'ensemble des UUID non NULL. Un UUID distinct → troncon_id. Plusieurs pointeurs identiques → un pointeur, avec diagnostic de doublon. Aucun UUID → examiner les autres cibles autorisées. Supprimer les discriminants BERGE et true des observations seulement.
 4. **Échec** : plusieurs UUID distincts ou coexistence avec une autre cible métier. Aucun écrasement même si géométries ou noms sont proches.
-5. **Information** : qualification du type portée par le tronçon ; pas de fusion d'objets ni modification de ses supports. Les rôles historiques des pointeurs restent dans le diagnostic de conversion si nécessaire, pas comme plusieurs cibles actives.
-6. **Tests futurs** : toutes combinaisons NULL/égales/distinctes ; 13 cibles en exclusivité ; FK et UUID ; absence des anciennes colonnes/discriminants et préservation des supports internes.
+5. **Information** : qualification du type portée par le tronçon ; chaque objet garde son identité et ses géométries. La non-reprise des supports suit la règle 13. Les rôles historiques des pointeurs restent dans le diagnostic de conversion si nécessaire, pas comme plusieurs cibles actives.
+6. **Tests futurs** : toutes combinaisons NULL/égales/distinctes ; 12 cibles en exclusivité ; FK et UUID ; absence des anciennes colonnes/discriminants et préservation des identités distinctes.
 
 ## 8. Cibles d'observation et constats datés
 
 1. **Source** : toute observation, avec sa date et ses cibles SIRS.
-2. **Destination** : exactement une des 13 cibles du Mermaid, date_observation NOT NULL ; conservation de l'UUID, désignation, évolution, suite, urgence, valid, version et nombre_desordres.
+2. **Destination** : exactement une des 12 cibles du Mermaid, date_observation NOT NULL ; conservation de l'UUID, désignation, évolution, suite, urgence, valid, version et nombre_desordres.
 3. **Conversion** : reprendre date et contenu attestés. AH/stockage nécessitent la correspondance de la règle 11. Site direct possible avec ou sans enfants. Une observation ordinaire n'exige aucun désordre. Les visites successives restent des observations distinctes, jamais agrégées automatiquement.
 4. **Échec** : cible hors périmètre (réseaux, voirie, profils, organes, prestations, etc.), zéro ou plusieurs cibles, date absente. Diagnostiquer l'observation et ses photos comme ensemble non convertible, sans la recaser arbitrairement sur un parent ni utiliser la date d'import.
 5. **Information** : suppression des colonnes hors périmètre décidée, suppression silencieuse du contenu des constats non autorisée. Urgence et nombre_desordres ne reçoivent aucune nouvelle règle de calcul automatique.
-6. **Tests futurs** : les 13 cibles isolées passent ; toutes paires et zéro échouent ; sites sans enfant admis ; dates absentes rejetées ; aucune création de désordre implicite.
+6. **Tests futurs** : les 12 cibles isolées passent ; toutes paires et zéro échouent ; sites sans enfant admis ; dates absentes rejetées ; aucune création de désordre implicite.
 
 ## 9. Désordres persistants et archivage
 
@@ -101,21 +101,27 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 ## 11. Identités AH, stockages et structures
 
 1. **Source** : public.amenagements_hydrauliques, public.zones_stockage et leurs structures.
-2. **Destination** : pour observations et ouvrages hydrauliques, ah_ouvrage_id/ah_stockage_id internes ; pour structures AH, cibles internes seulement **proposées**, deux FK externes conservées en v0.5.
+2. **Destination** : pour observations et ouvrages hydrauliques, ah_ouvrage_id/ah_stockage_id internes ; la classe historique `StructureAmenagementHydraulique` est non projetée.
 3. **Conversion** : une table de correspondance d'import approuvée associe source, UUID, famille et destination. Aucun rapprochement sur nom, ordre ou seule géométrie. Un AH global n'est pas un ouvrage linéaire constitutif. Un ancien stockage doit correspondre au contrat Polygon et au stockage unique par AH du socle, sans regroupement automatique.
 4. **Échec** : absence, multiplicité ou conflit de correspondance ; ancien stockage sans parent, plusieurs stockages sources pour le même AH, géométrie incompatible. Aucun UUID inventé ni découpage automatique de structures.
-5. **Information** : conserver identité, géométrie et couches des structures individualisées ; ne pas les absorber dans nature/matériau d'un tronçon. Le modèle n'est pas autonome tant que ces deux FK externes et le support hydrographique subsistent.
-6. **Tests futurs** : correspondances bijectives quand l'identité est la même ; traitement explicite des cardinalités différentes ; compatibilité des géométries ; aucune FK vers AH global pour observations/ouvrages hydrauliques ; statu quo des structures tant que non arbitré.
+5. **Information** : inventorier chaque document de structure, son UUID, ses références entrantes et sortantes, ses observations et leurs photographies (UUID et fichier ou clé). Conserver les sources intactes. Aucun objet créé pour remplacer une structure, aucune réaffectation automatique vers un AH, un ouvrage AH, un stockage ou un tronçon. Une observation dont la seule cible était cette structure est non convertible sans décision de réaffectation explicite. Signaler chaque photo avec son observation et conserver le fichier.
+6. **Tests futurs** : correspondances bijectives quand l'identité est la même ; traitement explicite des cardinalités différentes ; compatibilité des géométries ; aucune FK vers AH global pour observations/ouvrages hydrauliques ; rapprocher l’inventaire des structures, observations et photos avec le diagnostic pour détecter toute omission ou perte silencieuse.
 
 ## 12. Objets liés, référentiels et attributs non repris
 
 1. **Source** : objets liés vers familles absentes ; référentiels et attributs SIRS déjà écartés par v0.1 à v0.4.
-2. **Destination** : six cibles internes d'objets liés et 22 référentiels v0.5. digue_id technique → milieux.digues sur correspondance explicite. Les trois associations désordre/équipement ou ouvrage conservées ne sont pas remplacées par de nouveaux N:N.
+2. **Destination** : six cibles internes d'objets liés et 22 référentiels v0.6. digue_id technique → milieux.digues sur correspondance explicite. Les trois associations désordre/équipement ou ouvrage conservées ne sont pas remplacées par de nouveaux N:N.
 3. **Conversion** : retirer les termes voirie/réseaux/télécom de la contrainte d'objet lié ; conserver exactement une des six cibles restantes. Pour les catalogues, préserver les codes déjà retenus ; les quatre types mobilier ajoutés en v0.4 restent BAR/POR/BOR/OBS. Échelles, piézomètres, repères et stations suivent les correspondances d'équipements décidées en v0.2. Urgences v0.2 : RefUrgence:2 rejoint RefUrgence:1 (Faible), sans nouvelle classification.
 4. **Échec** : ligne liée devenue sans cible, cible inconnue, code absent du référentiel, plusieurs objets candidats. Diagnostic, pas de table fictive. Les types Gabarit, Parking, Grille avaloir et Bouchure ne sont pas ajoutés automatiquement.
 5. **Information** : suppression des familles/colonnes projetées ne vaut pas acceptation de toute perte métier source. Signaler notamment les mesures de tronçons et caractéristiques hydrauliques retirées en v0.4, les spécialités de cheminements/végétation non reprises et les relations externes non convertibles. Conserver les valeurs originales dans la source tant que leur sort n'est pas validé. La désignation remplace libelle : reprendre si destination vide, garder si égal, conflit bloquant sinon.
 6. **Tests futurs** : catalogue exact, références résolues, aucun code écrasé, contrainte de six cibles, qualification des pertes et intégrité UUID. valid/version et classifications de prestations conservés ; aucune suppression automatique.
 
+## 13. Non-reprise des supports de tronçons
+
+Reprendre chaque tronçon individuellement avec son UUID, son type physique et ses géométries propres. Les sept codes restent INDETERMINE, BERGE, CRETE, TALUS, TALUS_RISBERME, RISBERME et FRANC_BORD. La digue reste obligatoire et exige une identité vérifiée. Le type constructif et les champs de couche suivent leur projection existante.
+
+Pour chaque ancienne référence de support renseignée, inventorier le tronçon porteur, la colonne (tronçon classique, berge ou segment hydrographique), l’identifiant référencé et la décision de non-reprise. Conserver la source de ce constat. Aucun lien parent-enfant de remplacement. Vérifier la conservation des UUID, types, formes et axes avant/après conversion ainsi que la concordance du nombre de références abandonnées avec l’inventaire. La qualification BERGE des objets liés aux ouvrages continue de s’appliquer indépendamment.
+
 ## Limites et suite
 
-Ce contrat ne choisit ni A ni B pour les supports. L'audit recommande d'instruire B sans l'appliquer. Les trois FK externes, les orphelins d'ouvrages hydrauliques, la classification du Grillage CABBALR, les scénarios fictifs et la validation des correspondances d'AH restent ouverts. La future implémentation doit adapter les fonctions, vues et triggers listés dans l'audit, puis valider une installation neuve et QGIS sous Windows. Les contrôles documentaires v0.5 ne prouvent aucun comportement applicatif ou résultat de migration.
+La v0.6 ferme les trois FK externes au niveau documentaire. Les correspondances d’identités AH, le traitement individuel des objets bloqués, la classification du Grillage CABBALR et les scénarios fictifs restent à instruire. La future implémentation devra adapter les fonctions, vues et triggers recensés dans l’audit v0.5 puis valider l’installation neuve, les contraintes et les usages QGIS, notamment sous Windows.
