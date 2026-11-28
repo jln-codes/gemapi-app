@@ -18,14 +18,14 @@ REVOKE milieux_consultation, milieux_prestations, milieux_patrimoine
 GRANT milieux_prestations TO "agent.exemple";
 
 -- Utiliser l'UUID exact de la fiche métier, obtenu avec
--- SELECT id, nom, prenom, login FROM milieux.techniciens ORDER BY nom, prenom;
+-- SELECT id, nom, prenom, login FROM gemapi.techniciens ORDER BY nom, prenom;
 DO $$
 DECLARE n integer;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent.exemple' AND rolcanlogin) THEN
     RAISE EXCEPTION 'Compte LOGIN agent.exemple absent';
   END IF;
-  UPDATE milieux.techniciens SET login='agent.exemple'
+  UPDATE gemapi.techniciens SET login='agent.exemple'
   WHERE id='00000000-0000-0000-0000-000000000000'::uuid;
   GET DIAGNOSTICS n = ROW_COUNT;
   IF n <> 1 THEN
@@ -35,7 +35,7 @@ END $$;
 COMMIT;
 
 -- Contrôle manuel :
--- SELECT id, prenom, nom, login FROM milieux.techniciens WHERE login='agent.exemple';
+-- SELECT id, prenom, nom, login FROM gemapi.techniciens WHERE login='agent.exemple';
 -- SELECT r.rolname AS profil FROM pg_auth_members m
 -- JOIN pg_roles r ON r.oid=m.roleid
 -- JOIN pg_roles u ON u.oid=m.member

@@ -4,8 +4,8 @@ Dépôt : [jln-codes/gemapi-app](https://github.com/jln-codes/gemapi-app).
 L'historique antérieur à la refonte du dépôt est conservé dans
 [gemapi-app-legacy](https://github.com/jln-codes/gemapi-app-legacy).
 
-Modèle PostgreSQL/PostGIS V0.13, données de démonstration et plugin QGIS
-**GEMAPI-App 0.8.3**, assistant Mistral, dictée et réponses vocales Voxtral facultatives
+Modèle patrimonial PostgreSQL/PostGIS v0.6.1, données de démonstration et plugin QGIS
+**GEMAPI-App 0.8.6**, assistant Mistral, dictée et réponses vocales Voxtral facultatives
 (QGIS 3.44 minimum).
 
 ## Organisation
@@ -53,17 +53,15 @@ migration des données métier.
 - [LiDAR HD 2026](https://github.com/jln-codes/qgis-lidar-fr) est développé, testé
   et distribué dans son dépôt autonome. Les deux extensions partagent seulement
   la barre QGIS **SIG-Milieux**, sans dépendance technique.
-- Ouvrir [le projet Démo](demo/prestations_demo.qgz) pour `sig-milieux-demo`,
-  ou [le projet CABBALR](cabbalr/prestations_cabbalr.qgz) pour les données réelles.
-  Les [instructions QGIS](docs/qgis_relations.md#synchroniser-les-deux-projets)
-  expliquent comment synchroniser leurs styles, formulaires et relations en
-  conservant les connexions propres à chacun.
-- [Installer une base de démonstration](demo/README.md) : après activation de
-  PostGIS dans une base neuve, lancer depuis la racine
-  `bash demo/data/importer_base_neuve.sh nom_base`.
+- Créer une base locale vide dédiée, puis exécuter
+  `bash demo/data/importer_base_neuve.sh nom_base`. La démonstration et le plugin
+  utilisent le schéma fixe `gemapi`. Renseigner le service libpq `gemapi_demo`
+  et ouvrir `demo/prestations_demo.qgz`. [Guide de reconstruction](demo/README.md)
+- Pour une installation neuve sans données fictives, exécuter `model/schema.sql`,
+  puis attribuer les droits avec `model/roles_milieux.sql`. [Profils PostgreSQL](model/role.md)
 - [Installer, utiliser et tester le plugin](plugin/README.md) : générer le ZIP
   avec `python3 plugin/tools/build_plugin.py`, puis installer
-  `plugin/dist/gemapi-app-0.8.3.zip` dans QGIS.
+  `plugin/dist/gemapi-app-0.8.6.zip` dans QGIS.
 
 Le ZIP standard embarque uniquement le package `gemapi_app/`, ses modules, les
 interfaces Qt, l'icône et le logo institutionnel. Il n'embarque aucune donnée,
@@ -74,12 +72,11 @@ aucun schéma, test, outil ou rapport généré.
 `development` porte le socle courant ; `main` reçoit seulement les versions
 validées, normalement par fast-forward. `gemapi-app-sirs` reçoit automatiquement chaque push
 sur `development`, par fusion normale préservant ses propres commits. La production
-n'intervient pas dans ce flux. Les développements SIRS restent spécialisés, de
-préférence sous `sirs/`, avec des bases PostgreSQL/PostGIS locales ; ils ne modifient
-ni Supabase, ni les données, ni le plugin commun. Voir [AGENTS.md](AGENTS.md).
+n'intervient pas dans ce flux. Cette branche porte son modèle dans `model/schema.sql` et son plugin dans `plugin/`. Voir [AGENTS.md](AGENTS.md).
 
-La branche spécialisée se nomme définitivement `gemapi-app-sirs`. Le nom SIRS reste
-légitime pour le modèle métier et son répertoire `sirs/`. Le worktree Ubuntu conserve
+La branche spécialisée prépare le modèle destiné à être intégré dans `gemapi-dev`. Son archivage est prévu après cette intégration.
+
+La branche spécialisée se nomme définitivement `gemapi-app-sirs`. Le worktree Ubuntu conserve
 exactement son chemin `~/Projects/gemapi-app-sirs` ; seule sa branche est renommée
 et suit `origin/gemapi-app-sirs`.
 

@@ -39,10 +39,10 @@ def command(*args, input_text=None, check=True):
     return result
 
 
-def sql(container, statement, check=True):
+def sql(container, statement, check=True, database="postgres"):
     for _ in range(30):
         result = command("docker", "exec", "-i", container, "psql", "-X", "-A", "-t",
-                         "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres",
+                         "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", database,
                          input_text=statement, check=False)
         if ("database system is shutting down" in result.stderr or
                 "database system is starting up" in result.stderr or
@@ -55,9 +55,12 @@ def sql(container, statement, check=True):
     raise RuntimeError("PostgreSQL de test n'est pas stabilisé après son initialisation")
 
 
-def install_demo(container):
+def install_demo(container, dedicated_postgis=False):
     """Build the canonical demonstration in a new database inside this test container."""
     command("docker", "exec", container, "createdb", "-U", "postgres", "demo_qualification")
+    if dedicated_postgis:
+        command("docker", "exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
+                "-d", "demo_qualification", "-c", "CREATE SCHEMA extensions; CREATE EXTENSION postgis SCHEMA extensions")
     command("docker", "exec", container, "mkdir", "-p", "/tmp/demo", "/tmp/model")
     command("docker", "cp", str(ROOT / "demo/data"), container + ":/tmp/demo/data")
     command("docker", "cp", str(ROOT / "model/schema.sql"), container + ":/tmp/model/schema.sql")
@@ -79,36 +82,36 @@ def check_ah_relations(container):
     polygon = "ST_GeomFromText('POLYGON((0 0,2 0,2 2,0 0))',3950)"
     line = "ST_GeomFromText('LINESTRING(0 0,2 2)',3950)"
     for index, parent_id in enumerate(parent_ids):
-        sql(container, f"INSERT INTO milieux.ah(id,nom) VALUES ('{parent_id}','Cas AH {index}')")
+        sql(container, f"INSERT INTO gemapi.ah(id,nom) VALUES ('{parent_id}','Cas AH {index}')")
     # The parent alone must survive its own committed transaction.
-    assert sql(container, f"SELECT count(*) FROM milieux.ah WHERE id='{parent_ids[0]}' "
-               "AND NOT EXISTS (SELECT 1 FROM milieux.ah_stockage WHERE ah_id=ah.id) "
-               "AND NOT EXISTS (SELECT 1 FROM milieux.ah_ouvrage WHERE ah_id=ah.id)").stdout.strip() == "1"
+    assert sql(container, f"SELECT count(*) FROM gemapi.ah WHERE id='{parent_ids[0]}' "
+               "AND NOT EXISTS (SELECT 1 FROM gemapi.ah_stockage WHERE ah_id=ah.id) "
+               "AND NOT EXISTS (SELECT 1 FROM gemapi.ah_ouvrage WHERE ah_id=ah.id)").stdout.strip() == "1"
     for index in (1, 3):
-        sql(container, "INSERT INTO milieux.ah_stockage(ah_id,nom,geom) "
+        sql(container, "INSERT INTO gemapi.ah_stockage(ah_id,nom,geom) "
                        f"VALUES ('{parent_ids[index]}','Stockage {index}',{polygon})")
-        duplicate = sql(container, "INSERT INTO milieux.ah_stockage(ah_id,nom,geom) "
+        duplicate = sql(container, "INSERT INTO gemapi.ah_stockage(ah_id,nom,geom) "
                         f"VALUES ('{parent_ids[index]}','Second stockage',{polygon})", check=False)
         assert duplicate.returncode != 0 and "ah_stockage_ah_id_key" in duplicate.stderr, duplicate.stderr
     for index in (2, 3):
         for child in range(2):
-            sql(container, "INSERT INTO milieux.ah_ouvrage(ah_id,geom) "
+            sql(container, "INSERT INTO gemapi.ah_ouvrage(ah_id,geom) "
                            f"VALUES ('{parent_ids[index]}',{line})")
-    counts = sql(container, "SELECT a.nom,(SELECT count(*) FROM milieux.ah_stockage s "
-                            "WHERE s.ah_id=a.id),(SELECT count(*) FROM milieux.ah_ouvrage o "
-                            "WHERE o.ah_id=a.id) FROM milieux.ah a "
+    counts = sql(container, "SELECT a.nom,(SELECT count(*) FROM gemapi.ah_stockage s "
+                            "WHERE s.ah_id=a.id),(SELECT count(*) FROM gemapi.ah_ouvrage o "
+                            "WHERE o.ah_id=a.id) FROM gemapi.ah a "
                             "WHERE a.id IN (" + ",".join(f"'{uid}'" for uid in parent_ids) + ") "
                             "ORDER BY a.nom").stdout.strip().splitlines()
     assert counts == ["Cas AH 0|0|0", "Cas AH 1|1|0", "Cas AH 2|0|2", "Cas AH 3|1|2"]
     for table, required, geometry in (("ah_stockage", "nom,geom", f"'Orphelin',{polygon}"),
                                       ("ah_ouvrage", "geom", line)):
-        orphan = sql(container, f"INSERT INTO milieux.{table}(ah_id,{required}) "
+        orphan = sql(container, f"INSERT INTO gemapi.{table}(ah_id,{required}) "
                        f"VALUES ('{missing_parent}',{geometry})", check=False)
         assert orphan.returncode != 0 and "foreign key" in orphan.stderr.lower(), orphan.stderr
-        missing = sql(container, f"INSERT INTO milieux.{table}({required}) "
+        missing = sql(container, f"INSERT INTO gemapi.{table}({required}) "
                       f"VALUES ({geometry})", check=False)
         assert missing.returncode != 0 and "null value" in missing.stderr.lower(), missing.stderr
-    restricted = sql(container, f"DELETE FROM milieux.ah WHERE id='{parent_ids[3]}'", check=False)
+    restricted = sql(container, f"DELETE FROM gemapi.ah WHERE id='{parent_ids[3]}'", check=False)
     assert restricted.returncode != 0 and "foreign key" in restricted.stderr.lower(), restricted.stderr
 
 
@@ -118,25 +121,25 @@ def check_site_relations(container):
     polygon = "ST_GeomFromText('MULTIPOLYGON(((0 0,2 0,2 2,0 0)))',3950)"
     point = "ST_GeomFromText('MULTIPOINT((1 1))',3950)"
     # Each call commits: an empty site must exist beyond its creation transaction.
-    sql(container, "INSERT INTO milieux.sites_terrestres(id,nom,geom) "
+    sql(container, "INSERT INTO gemapi.sites_terrestres(id,nom,geom) "
                    f"VALUES ('{parent}','Sans zone',{polygon})")
-    assert sql(container, f"SELECT count(*) FROM milieux.sites_terrestres "
+    assert sql(container, f"SELECT count(*) FROM gemapi.sites_terrestres "
                f"WHERE id='{parent}'").stdout.strip() == "1"
     for zone in (first, second):
-        sql(container, "INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) "
+        sql(container, "INSERT INTO gemapi.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) "
                        f"VALUES ('ARBRES','{zone}','{parent}','Zone',{point})")
-    assert sql(container, "SELECT count(*) FROM public.vegetation "
+    assert sql(container, "SELECT count(*) FROM gemapi.vegetation "
                f"WHERE site_terrestre_id='{parent}'").stdout.strip() == "2"
     for owner, message in (("NULL", "check constraint"), (f"'{missing}'", "foreign key")):
-        refused = sql(container, "INSERT INTO public.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
+        refused = sql(container, "INSERT INTO gemapi.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
                       f"VALUES ('ARBRES',{owner},'Orpheline',{point})", check=False)
         assert refused.returncode != 0 and message in refused.stderr.lower(), refused.stderr
-    refused = sql(container, f"DELETE FROM milieux.sites_terrestres WHERE id='{parent}'", check=False)
+    refused = sql(container, f"DELETE FROM gemapi.sites_terrestres WHERE id='{parent}'", check=False)
     assert refused.returncode != 0 and "foreign key" in refused.stderr.lower(), refused.stderr
-    sql(container, f"DELETE FROM public.vegetation WHERE site_terrestre_id='{parent}'")
-    sql(container, f"UPDATE milieux.sites_terrestres SET nom='À nouveau sans zone' WHERE id='{parent}'")
-    assert sql(container, f"SELECT count(*) FROM milieux.sites_terrestres WHERE id='{parent}'").stdout.strip() == "1"
-    sql(container, f"DELETE FROM milieux.sites_terrestres WHERE id='{parent}'")
+    sql(container, f"DELETE FROM gemapi.vegetation WHERE site_terrestre_id='{parent}'")
+    sql(container, f"UPDATE gemapi.sites_terrestres SET nom='À nouveau sans zone' WHERE id='{parent}'")
+    assert sql(container, f"SELECT count(*) FROM gemapi.sites_terrestres WHERE id='{parent}'").stdout.strip() == "1"
+    sql(container, f"DELETE FROM gemapi.sites_terrestres WHERE id='{parent}'")
 
 
 def check_cartographic_ah(container, values, ouvrage):
@@ -162,15 +165,15 @@ def check_cartographic_ah(container, values, ouvrage):
             "p.geom IS NULL,p.quantite=c.quantite AND p.quantite=17 "
             "AND p.unite=c.unite AND p.unite='unités',ST_SRID(c.geom)=3950,"
             "ST_IsValid(c.geom) AND NOT ST_IsEmpty(c.geom) "
-            "FROM milieux.prestations p JOIN milieux.prestations_carte c USING(id) "
+            "FROM gemapi.prestations p JOIN gemapi.prestations_carte c USING(id) "
             f"WHERE p.intitule='{title}'").stdout.strip()
         assert actual == ('t|t|t|t|t' if own is None else 't|f|t|t|t'), (family, actual)
     assert sql(container,
-        "SELECT (SELECT count(*) FROM milieux.prestations)=count(*),"
-        "count(*)=count(DISTINCT id) FROM milieux.prestations_carte").stdout.strip() == 't|t'
+        "SELECT (SELECT count(*) FROM gemapi.prestations)=count(*),"
+        "count(*)=count(DISTINCT id) FROM gemapi.prestations_carte").stdout.strip() == 't|t'
     assert sql(container,
-        "SELECT count(*) FROM milieux.prestations p "
-        "JOIN milieux.prestations_fiches f USING(id) "
+        "SELECT count(*) FROM gemapi.prestations p "
+        "JOIN gemapi.prestations_fiches f USING(id) "
         "WHERE p.intitule IN ('PERF08-GEOM-4','PERF08-GEOM-5') "
         "AND p.geom IS NULL AND f.possede_geometrie AND p.possede_geometrie "
         "AND (f.longueur_m IS NOT NULL OR f.surface_m2 IS NOT NULL) "
@@ -181,23 +184,23 @@ def check_cartographic_ah(container, values, ouvrage):
                   'origine_mesures')
         left = ','.join('p.' + f for f in fields)
         right = ','.join('v.' + f for f in fields)
-        assert sql(container, f"SELECT count(*) FROM milieux.prestations p "
-                   f"JOIN milieux.{view} v USING(id) "
+        assert sql(container, f"SELECT count(*) FROM gemapi.prestations p "
+                   f"JOIN gemapi.{view} v USING(id) "
                    f"WHERE ROW({left}) IS DISTINCT FROM ROW({right})").stdout.strip() == '0'
     # The displayed values follow the persisted trigger results after edits;
     # no separate view formula or write-back to prestations.geom is needed.
-    sql(container, "UPDATE milieux.ah_stockage SET geom=ST_Scale(geom,2,2) "
+    sql(container, "UPDATE gemapi.ah_stockage SET geom=ST_Scale(geom,2,2) "
                    f"WHERE id='{ZEC}'")
     assert sql(container, "SELECT p.geom IS NULL,p.surface_m2=4,c.surface_m2=4,"
                "f.surface_m2=4,ST_Area(c.geom)=4,p.quantite=17 "
-               "FROM milieux.prestations p JOIN milieux.prestations_carte c USING(id) "
-               "JOIN milieux.prestations_fiches f USING(id) "
+               "FROM gemapi.prestations p JOIN gemapi.prestations_carte c USING(id) "
+               "JOIN gemapi.prestations_fiches f USING(id) "
                "WHERE p.intitule='PERF08-GEOM-4'").stdout.strip() == 't|t|t|t|t|t'
     # A missing parent geometry is forbidden by the canonical NOT NULL contract;
     # do not weaken it to manufacture a production-representative fixture.
-    assert sql(container, f"UPDATE milieux.ah_stockage SET geom=NULL WHERE id='{ZEC}'",
+    assert sql(container, f"UPDATE gemapi.ah_stockage SET geom=NULL WHERE id='{ZEC}'",
                check=False).returncode != 0
-    assert sql(container, f"UPDATE milieux.ah_ouvrage SET geom=NULL WHERE id='{ouvrage}'",
+    assert sql(container, f"UPDATE gemapi.ah_ouvrage SET geom=NULL WHERE id='{ouvrage}'",
                check=False).returncode != 0
     print('PERF08-GEOM: six rattachements, repli AH, priorité propre, UUID et mesures validés')
 
@@ -222,32 +225,32 @@ def main():
         check_ah_relations(container)
         check_site_relations(container)
         columns = sql(container, "SELECT count(*) FROM information_schema.columns "
-                      "WHERE table_schema='milieux' AND table_name='prestations' "
+                      "WHERE table_schema='gemapi' AND table_name='prestations' "
                       "AND column_name IN ('photo_1','photo_1_commentaire',"
                       "'photo_2','photo_2_commentaire');")
         assert columns.stdout.strip() == "4"
-        sql(container, f"BEGIN; INSERT INTO milieux.prestataires (id, nom) VALUES ('{PRESTATAIRE}', 'Test'); "
-                       f"INSERT INTO milieux.techniciens (id, nom) VALUES ('{TECHNICIEN}', 'Responsable test'); "
-                       f"INSERT INTO milieux.types_prestations (id, code, libelle, categorie_id) "
+        sql(container, f"BEGIN; INSERT INTO gemapi.prestataires (id, nom) VALUES ('{PRESTATAIRE}', 'Test'); "
+                       f"INSERT INTO gemapi.techniciens (id, nom) VALUES ('{TECHNICIEN}', 'Responsable test'); "
+                       f"INSERT INTO gemapi.types_prestations (id, code, libelle, categorie_id) "
                        f"VALUES ('{TYPE_PRESTATION}', 'TEST', 'Test', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa'); "
-                       "INSERT INTO milieux.ah(id,nom) VALUES ('55555555-5555-5555-5555-555555555555','AH test'); "
-                       f"INSERT INTO milieux.ah_stockage (id, ah_id, nom, geom) VALUES ('{ZEC}', '55555555-5555-5555-5555-555555555555', 'Test', "
+                       "INSERT INTO gemapi.ah(id,nom) VALUES ('55555555-5555-5555-5555-555555555555','AH test'); "
+                       f"INSERT INTO gemapi.ah_stockage (id, ah_id, nom, geom) VALUES ('{ZEC}', '55555555-5555-5555-5555-555555555555', 'Test', "
                        "ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))',3950)); "
-                       "INSERT INTO milieux.ah_ouvrage(ah_id,geom) VALUES "
+                       "INSERT INTO gemapi.ah_ouvrage(ah_id,geom) VALUES "
                        "('55555555-5555-5555-5555-555555555555',ST_GeomFromText('LINESTRING(0 0,1 0)',3950)); "
-                       f"INSERT INTO milieux.cours_eau (id, nom, type_ecoulement, source, geom) "
+                       f"INSERT INTO gemapi.cours_eau (id, nom, type_ecoulement, source, geom) "
                        f"VALUES ('{FOSSE}', 'Test', 'fossé', 'TEST', "
                        "ST_Multi(ST_GeomFromText('LINESTRING(0 0,1 1)',3950))), "
                        f"('{RIVIERE}', 'Test', 'rivière', 'TEST', "
                        "ST_Multi(ST_GeomFromText('LINESTRING(0 0,1 1)',3950))); "
-                       "INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES ('66666666-6666-6666-6666-666666666666','Site test',ST_GeomFromText('MULTIPOLYGON(((0 0,1 0,1 1,0 0)))',3950)); "
-                       f"INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES ('ARBRES','{SITE}', '66666666-6666-6666-6666-666666666666', 'Test', "
+                       "INSERT INTO gemapi.sites_terrestres(id,nom,geom) VALUES ('66666666-6666-6666-6666-666666666666','Site test',ST_GeomFromText('MULTIPOLYGON(((0 0,1 0,1 1,0 0)))',3950)); "
+                       f"INSERT INTO gemapi.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES ('ARBRES','{SITE}', '66666666-6666-6666-6666-666666666666', 'Test', "
                        "ST_GeomFromText('MULTIPOINT((0 0))',3950)); "
-                       f"INSERT INTO milieux.digues(id,nom) VALUES ('{DIGUE}','Digue de contrôle'); "
-                       f"UPDATE milieux.cours_eau SET direction=TRUE WHERE id='{RIVIERE}'; "
-                       "INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
+                       f"INSERT INTO gemapi.digues(id,nom) VALUES ('{DIGUE}','Digue de contrôle'); "
+                       f"UPDATE gemapi.cours_eau SET direction=TRUE WHERE id='{RIVIERE}'; "
+                       "INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
                        f"VALUES ('{DIGUE}','{RIVIERE}','G',0.1,0.8); COMMIT;")
-        status_id = sql(container, "SELECT id::text FROM milieux.statuts_prestations "
+        status_id = sql(container, "SELECT id::text FROM gemapi.statuts_prestations "
                         "WHERE code='PLANIFIE'").stdout.strip()
         values = {"intitule": "Test d'atomicité", "prestataire_id": PRESTATAIRE,
                   "type_prestation_id": TYPE_PRESTATION, "statut_id": status_id,
@@ -257,20 +260,20 @@ def main():
         selected = [("cours_eau", FOSSE)]
         result = sql(container, build_insert(values, selected, "POINT(700000 6600000)"))
         assert result.stdout.strip().endswith("|0"), result.stdout
-        counts = sql(container, "SELECT (SELECT count(*) FROM milieux.prestations), "
-                                "(SELECT count(ah_stockage_id) FROM milieux.prestations), "
-                                "(SELECT count(cours_eau_id) FROM milieux.prestations), "
-                                "(SELECT count(vegetation_id) FROM milieux.prestations);")
+        counts = sql(container, "SELECT (SELECT count(*) FROM gemapi.prestations), "
+                                "(SELECT count(ah_stockage_id) FROM gemapi.prestations), "
+                                "(SELECT count(cours_eau_id) FROM gemapi.prestations), "
+                                "(SELECT count(vegetation_id) FROM gemapi.prestations);")
         assert counts.stdout.strip() == "1|0|1|0", counts.stdout
-        assert sql(container, "SELECT photo_1,photo_1_commentaire FROM milieux.prestations "
+        assert sql(container, "SELECT photo_1,photo_1_commentaire FROM gemapi.prestations "
                    "WHERE intitule='Test d''atomicité';").stdout.strip() == "essais/une-photo.jpg|Avant travaux"
         failure = sql(container, build_insert(values, [("cours_eau", MISSING)],
                                               "POINT(700000 6600000)"),
                       check=False)
         assert failure.returncode != 0, "La clé étrangère aurait dû bloquer l'insertion"
-        counts = sql(container, "SELECT (SELECT count(*) FROM milieux.prestations), "
-                                "(SELECT count(ah_stockage_id) FROM milieux.prestations), "
-                                "(SELECT count(cours_eau_id) FROM milieux.prestations);")
+        counts = sql(container, "SELECT (SELECT count(*) FROM gemapi.prestations), "
+                                "(SELECT count(ah_stockage_id) FROM gemapi.prestations), "
+                                "(SELECT count(cours_eau_id) FROM gemapi.prestations);")
         assert counts.stdout.strip() == "1|0|1", counts.stdout
         # Existing geometric prestations remain valid with their first link.
         geometries = (
@@ -284,26 +287,26 @@ def main():
             row = sql(container, build_insert({**values, "intitule": title}, links, wkt))
             assert row.stdout.strip().endswith("|0"), row.stdout
             stored = sql(container, "SELECT ST_GeometryType(geom), ST_SRID(geom) "
-                                    "FROM milieux.prestations WHERE intitule = "
+                                    "FROM gemapi.prestations WHERE intitule = "
                                     f"'{title}';")
             assert stored.stdout.strip() == f"{kind}|3950", stored.stdout
         # A link failure must also roll back a prestation with a geometry.
         failure = sql(container, build_insert(values, [("cours_eau", MISSING)],
                                               "POINT(700000 6600000)"), check=False)
         assert failure.returncode != 0
-        counts = sql(container, "SELECT (SELECT count(*) FROM milieux.prestations), "
-                                "(SELECT count(ah_stockage_id) FROM milieux.prestations), "
-                                "(SELECT count(cours_eau_id) FROM milieux.prestations);")
+        counts = sql(container, "SELECT (SELECT count(*) FROM gemapi.prestations), "
+                                "(SELECT count(ah_stockage_id) FROM gemapi.prestations), "
+                                "(SELECT count(cours_eau_id) FROM gemapi.prestations);")
         assert counts.stdout.strip() == "5|1|4", counts.stdout
-        assert sql(container, "SELECT count(*) FROM milieux.prestations WHERE rive='Indéfinie'").stdout.strip() == "5"
-        assert sql(container, "UPDATE milieux.prestations SET rive='Gauche' WHERE id IN "
-                   "(SELECT id FROM milieux.prestations WHERE cours_eau_id IS NOT NULL) "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations WHERE rive='Indéfinie'").stdout.strip() == "5"
+        assert sql(container, "UPDATE gemapi.prestations SET rive='Gauche' WHERE id IN "
+                   "(SELECT id FROM gemapi.prestations WHERE cours_eau_id IS NOT NULL) "
                    "RETURNING rive").stdout.strip().count("Gauche") > 0
-        assert sql(container, "UPDATE milieux.prestations SET rive='Gauche' WHERE id IN "
-                   "(SELECT id FROM milieux.prestations WHERE ah_stockage_id IS NOT NULL)",
+        assert sql(container, "UPDATE gemapi.prestations SET rive='Gauche' WHERE id IN "
+                   "(SELECT id FROM gemapi.prestations WHERE ah_stockage_id IS NOT NULL)",
                    check=False).returncode != 0
-        assert sql(container, "UPDATE milieux.prestations SET rive=NULL", check=False).returncode != 0
-        terminee = sql(container, "SELECT id::text FROM milieux.statuts_prestations "
+        assert sql(container, "UPDATE gemapi.prestations SET rive=NULL", check=False).returncode != 0
+        terminee = sql(container, "SELECT id::text FROM gemapi.statuts_prestations "
                        "WHERE code='TERMINE'").stdout.strip()
         sql(container, build_insert({**values, "intitule": "Travaux terminés",
                                      "statut_id": terminee,
@@ -311,7 +314,7 @@ def main():
                                      "date_debut": "2026-10-01",
                                      "date_fin": "2027-03-01"}, [("digues", DIGUE)],
                                     "POINT(700000 6600000)"))
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    "WHERE rive='Les deux' AND position='Crête'").stdout.strip() == "1"
         for criteria, expected in (({}, "6"), ({"completion": "completed"}, "1"),
                                    ({"completion": "incomplete"}, "5"),
@@ -320,10 +323,10 @@ def main():
             assert sql(container, build_report_query(criteria, count_only=True)).stdout.strip() == expected
         sql(container, build_insert({**values, "intitule": ""}, [("digues", DIGUE)],
                                     "POINT(700000 6600000)"))
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    "WHERE intitule IS NULL").stdout.strip() == "1"
         for code in ("EN_COURS", "ANNULE"):
-            status = sql(container, "SELECT id::text FROM milieux.statuts_prestations "
+            status = sql(container, "SELECT id::text FROM gemapi.statuts_prestations "
                          f"WHERE code='{code}'").stdout.strip()
             sql(container, build_insert({**values, "intitule": code,
                                          "statut_id": status}, [("digues", DIGUE)],
@@ -332,7 +335,7 @@ def main():
             {"completion": "incomplete"}, count_only=True)).stdout.strip() == "8"
         assert sql(container, build_report_query(
             {"completion": "completed"}, count_only=True)).stdout.strip() == "1"
-        ouvrage = sql(container, "SELECT id::text FROM milieux.ah_ouvrage "
+        ouvrage = sql(container, "SELECT id::text FROM gemapi.ah_ouvrage "
                       "WHERE ah_id='55555555-5555-5555-5555-555555555555'").stdout.strip()
         for title, family, object_id in (("Sans géométrie stockage", "ah_stockage", ZEC),
                                           ("Sans géométrie ouvrage", "ah_ouvrage", ouvrage),
@@ -340,7 +343,7 @@ def main():
             result = sql(container, build_insert({**values, "intitule": title},
                                                  [(family, object_id)]))
             assert result.stdout.strip().endswith("|0"), result.stdout
-            assert sql(container, "SELECT count(*) FROM milieux.prestations WHERE geom IS NULL "
+            assert sql(container, "SELECT count(*) FROM gemapi.prestations WHERE geom IS NULL "
                        f"AND intitule='{title}'").stdout.strip() == "1"
         for family, object_id in (("cours_eau", FOSSE), ("digues", DIGUE)):
             try:
@@ -349,15 +352,15 @@ def main():
                 assert "géométrie" in str(error)
             else:
                 raise AssertionError(f"Le formulaire doit refuser {family} sans géométrie")
-        assert sql(container, "UPDATE milieux.prestations SET geom=NULL WHERE id IN "
-                   "(SELECT id FROM milieux.prestations WHERE cours_eau_id IS NOT NULL)",
+        assert sql(container, "UPDATE gemapi.prestations SET geom=NULL WHERE id IN "
+                   "(SELECT id FROM gemapi.prestations WHERE cours_eau_id IS NOT NULL)",
                    check=False).returncode != 0
-        assert sql(container, "UPDATE milieux.prestations SET geom=NULL WHERE id IN "
-                   "(SELECT id FROM milieux.prestations WHERE digue_id IS NOT NULL)",
+        assert sql(container, "UPDATE gemapi.prestations SET geom=NULL WHERE id IN "
+                   "(SELECT id FROM gemapi.prestations WHERE digue_id IS NOT NULL)",
                    check=False).returncode != 0
-        assert sql(container, "UPDATE milieux.prestations SET geom=NULL WHERE intitule='point avec liens' "
+        assert sql(container, "UPDATE gemapi.prestations SET geom=NULL WHERE intitule='point avec liens' "
                    "RETURNING geom IS NULL").stdout.strip().startswith("t")
-        assert sql(container, "SELECT count(*) FROM milieux.prestations WHERE geom IS NULL").stdout.strip() == "4"
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations WHERE geom IS NULL").stdout.strip() == "4"
         check_cartographic_ah(container, values, ouvrage)
         print("PostGIS de test : géométrie conditionnelle, types autorisés et liens atomiques validés")
     finally:

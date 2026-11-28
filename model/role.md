@@ -2,7 +2,7 @@
 
 Matrice cible : chaque utilisateur PostgreSQL possède un compte individuel `LOGIN`. Les rôles collectifs `NOLOGIN` sont hiérarchiques : Consultation → Gestion des prestations → Gestion du patrimoine ; chaque rôle hérite des droits du précédent.
 
-Les trois profils couvrent les schémas `milieux`, `public` et `referentiel`.
+Les trois profils couvrent le schéma applicatif unique `gemapi`. Leurs noms de rôles PostgreSQL conservent le préfixe `milieux_`.
 Une prestation peut viser dix catégories de patrimoine. Le profil Prestations
 peut choisir une cible existante. Les triggers prennent les verrous nécessaires
 à la validation de la section AH et au calcul des mesures empruntées. Les
@@ -13,14 +13,16 @@ interventions sur une section AH conservent leur géométrie propre obligatoire.
 | `prestations` | S | SIUD | SIUD |
 | `ah`, `ah_stockage`, `ah_ouvrage`, `ah_sections`, `sites_terrestres`, `cours_eau`, `digues`, `digues_reperes` | S | S | SIUD |
 | `techniciens`, `prestataires`, `communes`, `prestations_categorie`, `types_prestations`, `statuts_prestations` | S | S | S |
-| 10 tables métier et 4 associations patrimoniales de `public` | S | S | SIUD |
-| 19 catalogues de `referentiel` | S | S | S |
+| 10 tables métier et 4 associations patrimoniales | S | S | SIUD |
+| 19 catalogues patrimoniaux | S | S | S |
 | Vues `prestations_carte`, `prestations_fiches`, `digues_carte`, `ah_sections_carte`, `prestations__ah`, `prestations__sites_terrestres` | S | S | S |
 | `TRUNCATE` (toutes les tables) | — | — | — |
 
 S = `SELECT`, I = `INSERT`, U = `UPDATE`, D = `DELETE` ; — = aucun droit. Le service SIG administre l'installation PostgreSQL, les référentiels réservés et la structure des tables. PostgreSQL garantit ces droits, indépendamment du plugin QGIS. `DELETE` peut supprimer plusieurs lignes.
 
 Traçabilité : `modifie_par` enregistre le compte PostgreSQL authentifié (`session_user`). Le technicien responsable (`prestations.technicien_id`) est un attribut métier, qu'il dispose ou non d'un compte PostgreSQL ; il ne confère aucun droit.
+
+Sur une base neuve, appliquer `model/schema.sql`, puis `model/roles_milieux.sql` avec le compte administrateur. L’emplacement de PostGIS est détecté dans `pg_extension`. Les droits sur les tables visent le seul schéma `gemapi`.
 
 `roles_milieux.sql` crée uniquement les trois rôles collectifs `NOLOGIN`. Les
 vues `prestations__*` sont des vues de consultation, pas des tables d'association
@@ -29,9 +31,10 @@ verrouillage du support hydrographique nécessaires aux préparations serveur
 des digues et sections AH ; leurs géométries ne sont pas éditées librement.
 
 Les comptes `LOGIN` héritent d'un seul profil métier, sans option ADMIN,
-SUPERUSER, CREATEDB, CREATEROLE, REPLICATION ou BYPASSRLS. Leur `search_path`
-doit inclure `pg_catalog`, le schéma effectif de PostGIS puis `milieux` ; les
-paramètres de rôle ne sont pas hérités par simple appartenance à un groupe.
+SUPERUSER, CREATEDB, CREATEROLE, REPLICATION ou BYPASSRLS. Le fournisseur QGIS
+doit pouvoir résoudre les fonctions PostGIS. Le service libpq peut fixer son
+`search_path` à `pg_catalog`, au schéma effectif de PostGIS puis à `pg_temp`.
+Les requêtes applicatives qualifient explicitement leurs tables dans `gemapi`.
 Les mots de passe doivent être définis hors des SQL versionnés. Le poste CABBALR
 conserve ses trois mots de passe dans `CABBALR_IDENTIFIANTS.local.txt`, fichier
 texte privé à la racine, ignoré par Git. QGIS les demande à l'ouverture du projet,

@@ -17,7 +17,7 @@ def focus_prestation(iface, connection, prestation_id, project=None):
         iface.mainWindow().activateWindow()
         canvas.setFocus(Qt.OtherFocusReason)
         rows = connection.executeSql(
-            "SELECT ST_AsText(geom),ST_SRID(geom) FROM milieux.prestations_carte "
+            "SELECT ST_AsText(geom),ST_SRID(geom) FROM gemapi.prestations_carte "
             f"WHERE id='{uid}'::uuid AND geom IS NOT NULL LIMIT 1")
         if len(rows) != 1 or not rows[0][0]:
             raise ValueError("No effective geometry")

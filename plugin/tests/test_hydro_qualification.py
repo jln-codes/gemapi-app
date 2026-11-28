@@ -98,24 +98,24 @@ def postgres_tests():
         sql(container,'CREATE EXTENSION IF NOT EXISTS postgis;')
         sql(container,(ROOT / 'model/schema.sql').read_text())
         uid = str(uuid4())
-        sql(container, f"INSERT INTO milieux.cours_eau(id,nom,source,geom) VALUES ('{uid}','Support fictif','TEST',ST_GeomFromText('MULTILINESTRING((0 0,1 1))',3950))")
+        sql(container, f"INSERT INTO gemapi.cours_eau(id,nom,source,geom) VALUES ('{uid}','Support fictif','TEST',ST_GeomFromText('MULTILINESTRING((0 0,1 1))',3950))")
         def state():
-            return sql(container,f"SELECT COALESCE(direction::text,'NULL'),section,valide FROM milieux.cours_eau WHERE id='{uid}'").stdout.strip()
+            return sql(container,f"SELECT COALESCE(direction::text,'NULL'),section,valide FROM gemapi.cours_eau WHERE id='{uid}'").stdout.strip()
         assert state() == 'NULL|1|f'
         for direction, expected in [('true','true|1|t'),('false','false|1|f'),('NULL','NULL|1|f')]:
-            sql(container,f"UPDATE milieux.cours_eau SET direction={direction} WHERE id='{uid}'")
+            sql(container,f"UPDATE gemapi.cours_eau SET direction={direction} WHERE id='{uid}'")
             assert state() == expected
-        sql(container,f"UPDATE milieux.cours_eau SET direction=true WHERE id='{uid}'; UPDATE milieux.cours_eau SET nom='attribut',geom=ST_GeomFromWKB(ST_AsBinary(geom),3950) WHERE id='{uid}'")
+        sql(container,f"UPDATE gemapi.cours_eau SET direction=true WHERE id='{uid}'; UPDATE gemapi.cours_eau SET nom='attribut',geom=ST_GeomFromWKB(ST_AsBinary(geom),3950) WHERE id='{uid}'")
         assert state() == 'true|1|t'
-        sql(container,f"UPDATE milieux.cours_eau SET geom=ST_GeomFromText('MULTILINESTRING((0 0,2 2),(2 2,3 3))',3950),direction=true WHERE id='{uid}'")
+        sql(container,f"UPDATE gemapi.cours_eau SET geom=ST_GeomFromText('MULTILINESTRING((0 0,2 2),(2 2,3 3))',3950),direction=true WHERE id='{uid}'")
         assert state() == 'NULL|2|f'
-        sql(container,f"UPDATE milieux.cours_eau SET direction=true WHERE id='{uid}'")
+        sql(container,f"UPDATE gemapi.cours_eau SET direction=true WHERE id='{uid}'")
         assert state() == 'true|2|f'
-        sql(container,f"DELETE FROM milieux.cours_eau WHERE id='{uid}'")
+        sql(container,f"DELETE FROM gemapi.cours_eau WHERE id='{uid}'")
         sql(container,(ROOT / 'demo/data/11_cours_eau.sql').read_text())
         with sqlite3.connect(ROOT / 'demo/gpkg/cours_eau.gpkg') as db:
             expected = db.execute('SELECT id,section,valide FROM cours_eau ORDER BY id').fetchall()
-        actual = sql(container,'SELECT id,section,valide::int FROM milieux.cours_eau ORDER BY id').stdout.strip().splitlines()
+        actual = sql(container,'SELECT id,section,valide::int FROM gemapi.cours_eau ORDER BY id').stdout.strip().splitlines()
         assert actual == ['|'.join(map(str,r)) for r in expected]
         print('PostgreSQL 16 : qualification, invalidation et import des 58 UUID OK')
     finally:

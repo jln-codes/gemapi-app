@@ -50,7 +50,7 @@ def main():
             (river_ids[3], "Rivière des Prairies", "MULTILINESTRING((1684000 9233000,1684100 9233100))"),
         )
         for uid, name, geometry in river_rows:
-            sql(container, "INSERT INTO milieux.cours_eau"
+            sql(container, "INSERT INTO gemapi.cours_eau"
                            "(id,nom,type_ecoulement,direction,source,geom) VALUES "
                            f"('{uid}','{name}','rivière',FALSE,'DEMO_TEST',"
                            f"ST_GeomFromText('{geometry}',3950));")
@@ -63,7 +63,7 @@ def main():
         def layer(table, geom=""):
             uri = QgsDataSourceUri()
             uri.setConnection("127.0.0.1", port, "postgres", "postgres", "")
-            uri.setDataSource("milieux", table, geom, "", "id")
+            uri.setDataSource("gemapi", table, geom, "", "id")
             if geom:
                 uri.setSrid("3950")
                 uri.setWkbType({"cours_eau": QgsWkbTypes.MultiLineString,
@@ -152,10 +152,10 @@ def main():
         create._update_geometry_status()
         create._save()
         assert create.saved_prestation_id, create.statusLabel.text()
-        created_id = sql(container, "SELECT id::text FROM milieux.prestations "
+        created_id = sql(container, "SELECT id::text FROM gemapi.prestations "
                          "WHERE intitule='UX-HYDRO création fictive';").stdout.strip()
         created_links = set(sql(container, "SELECT cours_eau_id::text FROM "
-                                "milieux.prestations "
+                                "gemapi.prestations "
                                 f"WHERE id='{created_id}';").stdout.split())
         assert created_links == expected
         assert connection.executeSql(build_report_query(
@@ -164,18 +164,18 @@ def main():
             build_management_query({"cours_eau": [group_ids[0]]})))
 
         partial_id = str(uuid4())
-        type_id = sql(container, "SELECT id::text FROM milieux.types_prestations LIMIT 1").stdout.strip()
-        provider_id = sql(container, "SELECT id::text FROM milieux.prestataires LIMIT 1").stdout.strip()
-        status_id = sql(container, "SELECT id::text FROM milieux.statuts_prestations "
+        type_id = sql(container, "SELECT id::text FROM gemapi.types_prestations LIMIT 1").stdout.strip()
+        provider_id = sql(container, "SELECT id::text FROM gemapi.prestataires LIMIT 1").stdout.strip()
+        status_id = sql(container, "SELECT id::text FROM gemapi.statuts_prestations "
                         "WHERE code='PLANIFIE'").stdout.strip()
-        technician_id = sql(container, "SELECT id::text FROM milieux.techniciens LIMIT 1").stdout.strip()
-        sql(container, "BEGIN; INSERT INTO milieux.prestations"
+        technician_id = sql(container, "SELECT id::text FROM gemapi.techniciens LIMIT 1").stdout.strip()
+        sql(container, "BEGIN; INSERT INTO gemapi.prestations"
                        "(id,intitule,type_prestation_id,prestataire_id,statut_id,technicien_id,"
                        "date_debut,date_fin,geom) VALUES "
                        f"('{partial_id}','UX-HYDRO partielle','{type_id}','{provider_id}',"
                        f"'{status_id}','{technician_id}','2027-01-01','2027-01-15',"
                        "ST_GeomFromText('POINT(1682000 9232000)',3950)); "
-                       f"UPDATE milieux.prestations SET cours_eau_id='{group_ids[0]}' WHERE id='{partial_id}'; COMMIT;")
+                       f"UPDATE gemapi.prestations SET cours_eau_id='{group_ids[0]}' WHERE id='{partial_id}'; COMMIT;")
 
         def opened():
             dialog = CreationDialog(iface, mode="edit")
@@ -188,13 +188,13 @@ def main():
                    for i in range(edit.selectedList.count()))
         edit._save_edit()
         assert "Aucune modification" in edit.statusLabel.text()
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    f"WHERE id='{partial_id}';").stdout.strip() == "1"
         edit.shutdown()
 
         # Reopen after a fictitious new adjacent object was added to the source.
         third_id = str(uuid4())
-        sql(container, "INSERT INTO milieux.cours_eau"
+        sql(container, "INSERT INTO gemapi.cours_eau"
                        "(id,nom,type_ecoulement,direction,source,geom) VALUES "
                        f"('{third_id}','Rivière des Trois Saules','rivière',"
                        "FALSE,'DEMO_TEST',ST_GeomFromText("
@@ -206,7 +206,7 @@ def main():
                    for i in range(edit.selectedList.count()))
         edit.intituleEdit.setText("UX-HYDRO autre champ modifié")
         edit._save_edit()
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    f"WHERE id='{partial_id}';").stdout.strip() == "1"
 
         edit = opened()
@@ -219,7 +219,7 @@ def main():
         edit._add_objects()
         assert edit._associations() == [("cours_eau", third_id)]
         edit._save_edit()
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    f"WHERE id='{partial_id}';").stdout.strip() == "1"
 
         edit = opened()
@@ -228,7 +228,7 @@ def main():
         assert edit._associations() == []
         assert not edit.saveButton.isEnabled()
         edit._save_edit()
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    f"WHERE id='{partial_id}';").stdout.strip() == "1"
         edit.shutdown()
 
@@ -262,7 +262,7 @@ def main():
         assert without_geom.grab().save(str(shot))
         without_geom._save()
         assert without_geom.saved_prestation_id, without_geom.statusLabel.text()
-        no_geom_id = sql(container, "SELECT id::text FROM milieux.prestations "
+        no_geom_id = sql(container, "SELECT id::text FROM gemapi.prestations "
                          "WHERE intitule='UX-HYDRO sans géométrie' AND geom IS NULL;").stdout.strip()
         assert no_geom_id
         mapped = prepare_rows(connection.executeSql(build_report_query({}, include_geometry=True)))
@@ -293,7 +293,7 @@ def main():
         assert no_geom_edit.saveButton.isEnabled()
         no_geom_edit.intituleEdit.setText("UX-HYDRO sans géométrie modifiée")
         no_geom_edit._save_edit()
-        assert sql(container, "SELECT count(*) FROM milieux.prestations "
+        assert sql(container, "SELECT count(*) FROM gemapi.prestations "
                    f"WHERE id='{no_geom_id}' AND geom IS NULL "
                    "AND intitule='UX-HYDRO sans géométrie modifiée'").stdout.strip() == "1"
         no_geom_edit.selectedList.selectAll()

@@ -6,7 +6,8 @@ from time import perf_counter
 
 from qgis.core import QgsDataSourceUri, QgsProject, QgsProviderRegistry
 
-from .perf import ENABLED as PERF_ENABLED, connect, cache_event
+from .perf import ENABLED as PERF_ENABLED, connect, cache_event, profiled
+from .record import TARGETS
 
 
 CACHE_ENABLED = os.environ.get("SIG_PRESTATIONS_CACHE", "1").strip().lower() not in (
@@ -14,17 +15,24 @@ CACHE_ENABLED = os.environ.get("SIG_PRESTATIONS_CACHE", "1").strip().lower() not
 
 
 def _connection_info(project):
+    anchors = {"prestations", "prestations_fiches", "prestations_carte"}
+    has_anchor = False
     infos = set()
     for layer in project.mapLayers().values():
         if not layer.isValid() or layer.providerType() != "postgres":
             continue
         uri = QgsDataSourceUri(layer.source())
-        if uri.schema() == "milieux" and uri.table() in ("prestations", "prestations_fiches", "prestations_carte"):
-            infos.add(uri.connectionInfo(False))
+        if uri.schema() != "gemapi":
+            if uri.table() in anchors or uri.table() in TARGETS:
+                raise ValueError(f"La couche {uri.table()} doit utiliser le schéma gemapi.")
+            continue
+        if uri.table() in anchors:
+            has_anchor = True
+        infos.add(uri.connectionInfo(False))
     if len(infos) > 1:
         raise ValueError("Plusieurs connexions PostgreSQL de prestations sont présentes dans le projet.")
-    if not infos:
-        raise ValueError("Chargez milieux.prestations ou milieux.prestations_fiches depuis PostgreSQL.")
+    if not has_anchor:
+        raise ValueError("Chargez gemapi.prestations ou gemapi.prestations_fiches depuis PostgreSQL.")
     return infos.pop()
 
 
@@ -38,6 +46,11 @@ def _open(connection_info):
     if metadata is None:
         raise ValueError("Le fournisseur PostgreSQL de QGIS est indisponible.")
     return connect(metadata, connection_info)
+
+
+@profiled("manager.connection")
+def connection_from_project():
+    return _open(_connection_info(QgsProject.instance()))
 
 
 class SessionData:

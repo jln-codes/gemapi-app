@@ -230,7 +230,7 @@ def main():
         def executeSql(self, query):
             if "information_schema.columns" in query:
                 return [[1]]
-            if "FROM milieux.prestations WHERE statut_id IS NULL" in query:
+            if "FROM gemapi.prestations WHERE statut_id IS NULL" in query:
                 return [[12]]
             raise AssertionError(query)
 
@@ -340,8 +340,8 @@ def main():
 
     class SpatialReadConnection:
         def executeSql(self, query):
-            if query.startswith("SELECT id::text,nom FROM milieux."):
-                if "milieux.ah" in query:
+            if query.startswith("SELECT id::text,nom FROM gemapi."):
+                if "gemapi.ah" in query:
                     return [(patrimony_ids[0], "ZEC proche"),
                             (patrimony_ids[1], "ZEC distante")]
                 return []
@@ -496,7 +496,7 @@ def main():
         calls = 0
 
         def executeSql(self, query):
-            if "INSERT INTO milieux.prestations" not in query:
+            if "INSERT INTO gemapi.prestations" not in query:
                 return super().executeSql(query)
             self.calls += 1
             assert "SRID=3950;" in query
@@ -548,16 +548,16 @@ def main():
                 return [[True, True, True, True]]
             if query.startswith("SELECT DISTINCT annee"):
                 return [[2026], [2027]]
-            if query.startswith("SELECT id::text,libelle FROM milieux.statuts_prestations"):
+            if query.startswith("SELECT id::text,libelle FROM gemapi.statuts_prestations"):
                 return [[status_id, "Planifié"]]
-            if query.startswith("SELECT id::text,nom FROM milieux.prestataires"):
+            if query.startswith("SELECT id::text,nom FROM gemapi.prestataires"):
                 return [[provider_id, "Prestataire de test"]]
-            if query.startswith("SELECT id::text,nom,actif FROM milieux.prestataires"):
+            if query.startswith("SELECT id::text,nom,actif FROM gemapi.prestataires"):
                 return [[provider_id, "Prestataire de test", True]]
             if query.startswith("SELECT o.id::text"):
-                if "FROM milieux.ah_stockage" in query:
+                if "FROM gemapi.ah_stockage" in query:
                     return [[first_object, "AH — ZEC Alpha"]]
-                if "FROM public.vegetation" in query:
+                if "FROM gemapi.vegetation" in query:
                     return [[first_object, "Site — Zone Alpha"]]
                 return []
             uid = first_id if first_id in query else second_id
@@ -570,9 +570,9 @@ def main():
                          dialog.technicienCombo.itemData(1), "Responsable de test",
                          "Indéfini", "Indéfinie"]]
             if query.startswith("SELECT id::text"):
-                if "FROM milieux.ah_stockage" in query:
+                if "FROM gemapi.ah_stockage" in query:
                     return [[first_object, "ZEC Alpha"]]
-                if "FROM milieux.cours_eau" in query:
+                if "FROM gemapi.cours_eau" in query:
                     return [[second_object, "Fossé Bêta"]]
                 return []
             if query.startswith("SELECT id,titre,version FROM"):

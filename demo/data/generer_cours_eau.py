@@ -66,9 +66,9 @@ def main():
     rows = current_rows()
     sql = ["-- MOD-HYDRO-01 : cours d'eau fictifs ; UUID historiques conservés.",
            "BEGIN;",
-           "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'milieux'), true) FROM pg_catalog.pg_extension AS e JOIN pg_catalog.pg_namespace AS n ON n.oid = e.extnamespace WHERE e.extname='postgis';"]
+           "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'gemapi'), true) FROM pg_catalog.pg_extension AS e JOIN pg_catalog.pg_namespace AS n ON n.oid = e.extnamespace WHERE e.extname='postgis';"]
     for uid, name, kind, direction, provenance, wkb in rows:
-        sql.append("INSERT INTO milieux.cours_eau (id,nom,type_ecoulement,direction,source,geom) VALUES ("
+        sql.append("INSERT INTO gemapi.cours_eau (id,nom,type_ecoulement,direction,source,geom) VALUES ("
                    + ",".join((quote(uid), quote(name), quote(kind), "NULL" if direction is None else "TRUE" if direction else "FALSE", quote(provenance),
                                "ST_GeomFromWKB(decode('" + wkb + "','hex'),3950)")) + ");")
     sql.extend(["COMMIT;", ""])

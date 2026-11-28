@@ -11,10 +11,10 @@ PACKAGE = ROOT / "gpkg" / "sites_terrestres.gpkg"
 SQL = ROOT / "data" / "10_sites_terrestres.sql"
 SHAPES = {"POINT", "MULTIPOINT", "LINESTRING", "MULTILINESTRING", "POLYGON", "MULTIPOLYGON"}
 TABLES = (
-    ("milieux.sites_terrestres", ("id", "nom"), "geom", {"MULTIPOLYGON"}),
-    ("public.mobilier", ("id", "designation", "type_id", "site_terrestre_id", "commentaire"), "geometry", SHAPES),
-    ("public.cheminements", ("id", "designation", "type_cheminement_id", "site_terrestre_id", "commentaire"), "geometry", SHAPES),
-    ("public.vegetation", ("id", "designation", "famille_vegetation", "site_terrestre_id", "commentaire"), "geometry", SHAPES),
+    ("gemapi.sites_terrestres", ("id", "nom"), "geom", {"MULTIPOLYGON"}),
+    ("gemapi.mobilier", ("id", "designation", "type_id", "site_terrestre_id", "commentaire"), "geometry", SHAPES),
+    ("gemapi.cheminements", ("id", "designation", "type_cheminement_id", "site_terrestre_id", "commentaire"), "geometry", SHAPES),
+    ("gemapi.vegetation", ("id", "designation", "famille_vegetation", "site_terrestre_id", "commentaire"), "geometry", SHAPES),
 )
 
 
@@ -29,7 +29,7 @@ def main():
         "-- Sites terrestres fictifs canoniques courants.",
         "BEGIN;",
         "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', "
-        "n.nspname, 'milieux'), true) FROM pg_catalog.pg_extension e JOIN "
+        "n.nspname, 'gemapi'), true) FROM pg_catalog.pg_extension e JOIN "
         "pg_catalog.pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='postgis';",
     ]
     for table, fields, geom_col, types in TABLES:

@@ -66,15 +66,15 @@ def check_patrimony_groups(connection, records):
         for uid, *parents in connection.executeSql(
             "SELECT p.id::text,p.cours_eau_id::text,p.digue_id::text,"
             "s.ah_id::text,o.ah_id::text,COALESCE(p.site_terrestre_id,z.site_terrestre_id)::text "
-            "FROM milieux.prestations p "
-            "LEFT JOIN milieux.ah_stockage s ON s.id=p.ah_stockage_id "
-            "LEFT JOIN milieux.ah_ouvrage o ON o.id=p.ah_ouvrage_id "
-            "LEFT JOIN milieux.prestations__sites_terrestres z ON z.prestation_id=p.id")
+            "FROM gemapi.prestations p "
+            "LEFT JOIN gemapi.ah_stockage s ON s.id=p.ah_stockage_id "
+            "LEFT JOIN gemapi.ah_ouvrage o ON o.id=p.ah_ouvrage_id "
+            "LEFT JOIN gemapi.prestations__sites_terrestres z ON z.prestation_id=p.id")
     }
     proofs = defaultdict(lambda: defaultdict(set))
     for uid, parent, section in connection.executeSql(
-        "SELECT p.id::text,s.ah_id::text,s.id::text FROM milieux.prestations p "
-        "JOIN milieux.ah_sections_carte s ON s.cours_eau_id=p.cours_eau_id "
+        "SELECT p.id::text,s.ah_id::text,s.id::text FROM gemapi.prestations p "
+        "JOIN gemapi.ah_sections_carte s ON s.cours_eau_id=p.cours_eau_id "
         "WHERE s.etat_reference='CONFORME' AND s.cours_eau_qualifie IS TRUE "
         "AND ST_Intersects(p.geom,s.geom_reference)"
     ):
@@ -139,7 +139,7 @@ def check_measures(connection, records):
             "CASE WHEN ST_Dimension(geom)=1 THEN ST_Length(geom) END,"
             "CASE WHEN ST_Dimension(geom)=2 THEN ST_Area(geom) END,"
             "CASE WHEN ST_Dimension(geom)=0 "
-            "THEN ST_NumGeometries(geom) END FROM milieux.prestations")
+            "THEN ST_NumGeometries(geom) END FROM gemapi.prestations")
     }
     for row in records:
         assert tuple(row[key] for key in ("quantite", "unite", "own_length",
@@ -157,36 +157,36 @@ def check_measures(connection, records):
 def check_selection_and_dialog(container, connection):
     assert not fetched(connection, {"years": [2024]})
 
-    prestataire = sql(container, "SELECT id::text FROM milieux.prestataires LIMIT 1").stdout.strip()
-    type_prestation = sql(container, "SELECT id::text FROM milieux.types_prestations LIMIT 1").stdout.strip()
-    responsable = sql(container, "SELECT id::text FROM milieux.techniciens LIMIT 1").stdout.strip()
-    zec = sql(container, "SELECT id::text FROM milieux.ah_stockage LIMIT 1").stdout.strip()
-    fosse = sql(container, "SELECT id::text FROM milieux.cours_eau LIMIT 1").stdout.strip()
+    prestataire = sql(container, "SELECT id::text FROM gemapi.prestataires LIMIT 1").stdout.strip()
+    type_prestation = sql(container, "SELECT id::text FROM gemapi.types_prestations LIMIT 1").stdout.strip()
+    responsable = sql(container, "SELECT id::text FROM gemapi.techniciens LIMIT 1").stdout.strip()
+    zec = sql(container, "SELECT id::text FROM gemapi.ah_stockage LIMIT 1").stdout.strip()
+    fosse = sql(container, "SELECT id::text FROM gemapi.cours_eau LIMIT 1").stdout.strip()
     extended, via_only, incomplete, reference = (str(uuid4()) for _ in range(4))
-    sql(container, "BEGIN; INSERT INTO milieux.prestations "
+    sql(container, "BEGIN; INSERT INTO gemapi.prestations "
                    "(id,intitule,type_prestation_id,prestataire_id,statut_id,technicien_id,"
                    "date_debut,date_fin,description,geom) "
                    f"VALUES ('{extended}','Élagage terminé','{type_prestation}','{prestataire}',"
-                   "(SELECT id FROM milieux.statuts_prestations WHERE code='TERMINE'),"
+                   "(SELECT id FROM gemapi.statuts_prestations WHERE code='TERMINE'),"
                    f"'{responsable}',"
                    "'2023-01-01','2025-12-31','Rivière et ZEC : été à Béthune',"
                    "ST_GeomFromText('LINESTRING(1674475 9259011,1674575 9259011)',3950)), "
                    f"('{via_only}','Via ZEC','{type_prestation}','{prestataire}',"
-                   "(SELECT id FROM milieux.statuts_prestations WHERE code='TERMINE'),"
+                   "(SELECT id FROM gemapi.statuts_prestations WHERE code='TERMINE'),"
                    f"'{responsable}',"
                    "'2024-02-01','2024-03-01','',ST_GeomFromText('POINT(1674500 9259050)',3950)), "
                    f"('{incomplete}','Non complétée','{type_prestation}','{prestataire}',"
-                   "(SELECT id FROM milieux.statuts_prestations WHERE code='PLANIFIE'),"
+                   "(SELECT id FROM gemapi.statuts_prestations WHERE code='PLANIFIE'),"
                    f"'{responsable}',"
                    "'2023-01-01','2025-12-31','',"
                    "ST_GeomFromText('POLYGON((1674475 9259011,1674575 9259011,1674575 9259111,1674475 9259111,1674475 9259011))',3950)), "
                    f"('{reference}','Référence patrimoniale','{type_prestation}','{prestataire}',"
-                   "(SELECT id FROM milieux.statuts_prestations WHERE code='ANNULE'),"
+                   "(SELECT id FROM gemapi.statuts_prestations WHERE code='ANNULE'),"
                    f"'{responsable}',"
                    "'2023-05-01','2023-05-31','Deux points disjoints',"
                    "ST_GeomFromText('MULTIPOINT((1674500 9259050),(1675000 9259550))',3950)); "
-                   f"UPDATE milieux.prestations SET ah_stockage_id='{zec}' WHERE id IN ('{extended}','{via_only}','{reference}'); "
-                   f"UPDATE milieux.prestations SET cours_eau_id='{fosse}' WHERE id='{incomplete}'; COMMIT;")
+                   f"UPDATE gemapi.prestations SET ah_stockage_id='{zec}' WHERE id IN ('{extended}','{via_only}','{reference}'); "
+                   f"UPDATE gemapi.prestations SET cours_eau_id='{fosse}' WHERE id='{incomplete}'; COMMIT;")
     all_rows = fetched(connection, {})
     assert len(all_rows) == 104
     assert len({row["id"] for row in all_rows}) == 104
@@ -328,7 +328,7 @@ def check_pdf(path, records, basemap, *, groups=None, expected_text=()):
 def six_modes(connection, records):
     by_id = {row["id"]: row for row in records}
     return [by_id[connection.executeSql(
-        f"SELECT id::text FROM milieux.prestations WHERE {field} IS NOT NULL ORDER BY id LIMIT 1"
+        f"SELECT id::text FROM gemapi.prestations WHERE {field} IS NOT NULL ORDER BY id LIMIT 1"
     )[0][0]] for field in ATTACHMENTS]
 
 
@@ -401,8 +401,8 @@ def run_suite(suite):
         load_demo_rows(container)
 
         sql(container, "CREATE ROLE report_read LOGIN; "
-                       "GRANT USAGE ON SCHEMA milieux TO report_read; "
-                       "GRANT SELECT ON ALL TABLES IN SCHEMA milieux,public TO report_read;")
+                       "GRANT USAGE ON SCHEMA gemapi TO report_read; "
+                       "GRANT SELECT ON ALL TABLES IN SCHEMA gemapi TO report_read;")
         mapping = command("docker", "port", container, "5432").stdout.strip()
         port = mapping.rsplit(":", 1)[-1]
         print("Port PostGIS temporaire :", mapping, flush=True)
@@ -410,7 +410,7 @@ def run_suite(suite):
         app.initQgis()
         uri = QgsDataSourceUri()
         uri.setConnection("127.0.0.1", port, "postgres", "report_read", "")
-        uri.setDataSource("milieux", "prestations_fiches", "", "", "id")
+        uri.setDataSource("gemapi", "prestations_fiches", "", "", "id")
         metadata = QgsProviderRegistry.instance().providerMetadata("postgres")
         connection = metadata.createConnection(uri.connectionInfo(False), {})
         assert connection.executeSql("SELECT 1") == [[1]]

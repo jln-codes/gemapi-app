@@ -48,10 +48,10 @@ class SectionStore:
         return self.connection.executeSql(query)
 
     def permissions(self):
-        return self.rows("SELECT has_table_privilege('milieux.ah_sections','INSERT'),"
-                         "has_table_privilege('milieux.ah_sections','UPDATE'),"
-                         "has_table_privilege('milieux.ah_sections','DELETE'),"
-                         "has_any_column_privilege('milieux.cours_eau','UPDATE')")[0]
+        return self.rows("SELECT has_table_privilege('gemapi.ah_sections','INSERT'),"
+                         "has_table_privilege('gemapi.ah_sections','UPDATE'),"
+                         "has_table_privilege('gemapi.ah_sections','DELETE'),"
+                         "has_any_column_privilege('gemapi.cours_eau','UPDATE')")[0]
 
     def courses(self):
         return self.rows(labels_query_sql(qualifications=True))
@@ -60,12 +60,12 @@ class SectionStore:
         return self.rows(f"SELECT c.cours_eau_id::text,{label_sql('r')},"
                          "c.debut_fraction,c.fin_fraction,ST_Length(c.geom_reference),"
                          "c.geom_cours_eau_signature,ST_AsText(c.geom_reference) "
-                         f"FROM milieux.ah_sections_candidates('{uid(parent)}') c "
-                         "JOIN milieux.cours_eau r ON r.id=c.cours_eau_id "
+                         f"FROM gemapi.ah_sections_candidates('{uid(parent)}') c "
+                         "JOIN gemapi.cours_eau r ON r.id=c.cours_eau_id "
                          "ORDER BY c.cours_eau_id,c.debut_fraction,c.fin_fraction")
 
     def parent_name(self,parent):
-        rows=self.rows(f"SELECT nom FROM milieux.ah WHERE id='{uid(parent)}'")
+        rows=self.rows(f"SELECT nom FROM gemapi.ah WHERE id='{uid(parent)}'")
         if not rows:
             raise ValueError('Le parent AH n’existe plus.')
         return str(rows[0][0])
@@ -73,8 +73,8 @@ class SectionStore:
     def reference(self, reference):
         rows = self.rows(f"SELECT s.ah_id::text,s.cours_eau_id::text,{label_sql('r')},"
                          "s.debut_fraction,s.fin_fraction,s.revision_validation,v.etat_reference "
-                         "FROM milieux.ah_sections s JOIN milieux.ah_sections_carte v ON v.id=s.id "
-                         "JOIN milieux.cours_eau r ON r.id=s.cours_eau_id "
+                         "FROM gemapi.ah_sections s JOIN gemapi.ah_sections_carte v ON v.id=s.id "
+                         "JOIN gemapi.cours_eau r ON r.id=s.cours_eau_id "
                          f"WHERE s.id='{uid(reference)}'")
         if not rows:
             raise ValueError('Cette section n’existe plus. Actualisez la fiche AH.')
@@ -84,8 +84,8 @@ class SectionStore:
         start, end = fractions(start, end)
         rows = self.rows("SELECT ST_AsText(ST_LineSubstring(ST_GeometryN(geom,1),"
                          f"{start},{end})),md5(encode(ST_AsEWKB(geom),'hex')) "
-                         f"FROM milieux.cours_eau WHERE id='{uid(course)}' "
-                         "AND milieux.cours_eau_reference_admissible(geom,direction,valide)")
+                         f"FROM gemapi.cours_eau WHERE id='{uid(course)}' "
+                         "AND gemapi.cours_eau_reference_admissible(geom,direction,valide)")
         if not rows:
             raise ValueError('Cours d’eau non qualifié ou inexploitable. Aucune validation possible.')
         return rows[0]
@@ -96,14 +96,14 @@ class SectionStore:
         # candidate cannot silently turn into a different accepted geometry.
         if len(str(signature))!=32 or any(c not in '0123456789abcdef' for c in str(signature)):
             raise ValueError('Signature de référence incorrecte.')
-        return ("WITH support AS MATERIALIZED (SELECT r.id FROM milieux.cours_eau r "
+        return ("WITH support AS MATERIALIZED (SELECT r.id FROM gemapi.cours_eau r "
                 f"WHERE r.id='{uid(course)}' AND md5(encode(ST_AsEWKB(r.geom),'hex'))='{signature}' "
-                "AND milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide) FOR SHARE OF r) ")
+                "AND gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide) FOR SHARE OF r) ")
 
     def accept(self, parent, course, start, end, signature):
         start, end = fractions(start, end)
         rows = self.rows(self.support(parent, course, signature) +
-                         "INSERT INTO milieux.ah_sections(ah_id,cours_eau_id,debut_fraction,fin_fraction) "
+                         "INSERT INTO gemapi.ah_sections(ah_id,cours_eau_id,debut_fraction,fin_fraction) "
                          f"SELECT '{uid(parent)}',id,{start},{end} FROM support RETURNING id::text")
         if not rows:
             raise ValueError('Le cours d’eau a changé ou n’est plus qualifié. Prévisualisez à nouveau la section.')
@@ -113,7 +113,7 @@ class SectionStore:
         start, end = fractions(start, end)
         parent=self.reference(reference)[0]
         rows = self.rows(self.support(parent, course, signature) +
-                         "UPDATE milieux.ah_sections s SET "
+                         "UPDATE gemapi.ah_sections s SET "
                          f"cours_eau_id=r.id,debut_fraction={start},fin_fraction={end},revision_validation=s.revision_validation+1 "
                          f"FROM support r WHERE s.id='{uid(reference)}' AND s.ah_id='{uid(parent)}' "
                          f"AND s.revision_validation={int(revision)} RETURNING s.id::text")
@@ -123,7 +123,7 @@ class SectionStore:
 
     def delete(self, reference, revision):
         try:
-            rows = self.rows("DELETE FROM milieux.ah_sections "
+            rows = self.rows("DELETE FROM gemapi.ah_sections "
                              f"WHERE id='{uid(reference)}' AND revision_validation={int(revision)} RETURNING id::text")
         except Exception as error:
             if 'prestations_ah_section_id_fkey' in str(error):
@@ -138,8 +138,8 @@ def store_for(layer):
     if layer is None or layer.providerType() != 'postgres':
         raise ValueError('La couche PostgreSQL AH est indisponible.')
     uri = QgsDataSourceUri(layer.source())
-    if uri.schema() != 'milieux' or uri.table() not in ('ah','ah_sections','ah_sections_carte'):
-        raise ValueError('Cette action nécessite une couche AH du schéma milieux.')
+    if uri.schema() != 'gemapi' or uri.table() not in ('ah','ah_sections','ah_sections_carte'):
+        raise ValueError('Cette action nécessite une couche AH du schéma gemapi.')
     return SectionStore(QgsProviderRegistry.instance().providerMetadata('postgres').createConnection(
         uri.connectionInfo(False), {}))
 

@@ -49,7 +49,7 @@ def demo_catalog(family):
         finally:
             connection.close()
     statuses = (ROOT / 'model/schema.sql').read_text().partition(
-        'INSERT INTO milieux.statuts_prestations')[2].partition(';')[0]
+        'INSERT INTO gemapi.statuts_prestations')[2].partition(';')[0]
     catalog = {
         'technicien': rows('techniciens', "SELECT id,prenom||' '||nom,'' FROM techniciens WHERE actif"),
         'prestataire': rows('referentiels', "SELECT id,nom,'' FROM prestataires WHERE actif"),

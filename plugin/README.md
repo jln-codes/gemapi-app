@@ -243,10 +243,9 @@ s’il pointe vers un worktree retiré, choisir à nouveau le fichier privé con
 L’ancienne variable d’environnement de chemin reste reconnue pour la transition ;
 la variable standard et le choix explicite du profil sont prioritaires.
 
-Ouvrir le projet Démo ou CABBALR avec une seule connexion métier. Les couches
-`milieux.prestations_carte` ou `milieux.prestations_fiches` servent d'ancrage à
-la connexion ; la couche physique `prestations` n'est pas nécessaire. Les
-référentiels sont lus dans PostgreSQL. Les sections AH sont interrogées par
+Ouvrir le projet Démo avec le service libpq `gemapi_demo`. Les couches `gemapi.prestations_carte` et `gemapi.prestations_fiches` permettent de retrouver la connexion active. Le plugin adresse le schéma fixe `gemapi`. [Configuration QGIS](../demo/README.md)
+
+Les référentiels sont lus dans PostgreSQL. Les sections AH sont interrogées par
 un fournisseur temporaire, sans nouvelle couche permanente. Les couches
 patrimoniales du projet restent utilisées pour la cartographie, la localisation
 et l'accrochage. Les connexions et l'authentification sont gérées par QGIS ; aucun
@@ -262,7 +261,7 @@ type est enregistré. Le menu suit la largeur du champ aux deux niveaux ; les
 libellés longs sont tronqués et restent lisibles en infobulle.
 Les catégories, leur ordre et les rattachements des types
 sont lus dans PostgreSQL (droit SELECT requis sur
-`milieux.prestations_categorie`). Une catégorie vide reste consultable.
+`gemapi.prestations_categorie`). Une catégorie vide reste consultable.
 Un type inactif déjà enregistré reste affiché à l’ouverture de sa fiche. L'édition charge les champs, la géométrie, les photographies
 et les rattachements réellement enregistrés pour l'UUID choisi.
 
@@ -330,7 +329,7 @@ La prestation et ses associations sont écrites par une seule instruction SQL
 PostgreSQL atomique. Les UUID, valeurs par défaut et champs techniques sont
 gérés par la base. Après succès, seules les couches concernées sont actualisées ;
 le formulaire est masqué, la carte est centrée sur la géométrie effective de
-`milieux.prestations_carte` et l’accueil compact réapparaît. Le plugin conserve
+`gemapi.prestations_carte` et l’accueil compact réapparaît. Le plugin conserve
 sa connexion et ses caches. Un clic sur Créer prépare immédiatement une nouvelle saisie. Les objets patrimoniaux
 restent gérés dans les formulaires natifs QGIS. Dans la section
 **Rattachements patrimoniaux**, choisir une famille, rechercher et sélectionner
@@ -359,7 +358,7 @@ déjà chargée dans QGIS, selon sa symbologie propre. Le plugin rafraîchit les
 couches concernées de la même connexion, même si leur nom affiché a été
 personnalisé ; il ne crée pas de couche pour cet affichage.
 
-Les couches cartographiques de la démonstration lisent `milieux.prestations_carte`
+Les couches cartographiques de la démonstration lisent `gemapi.prestations_carte`
 (vue de consultation). La géométrie de la prestation est prioritaire. En son absence, la carte affiche celle de l'enfant du site. Les rapports détaillés et synthétiques affichent
 les références ponctuelles, linéaires et surfaciques sans recopier leur géométrie.
 
@@ -371,7 +370,7 @@ relire l'état de la base après confirmation de l'abandon de la saisie locale.
 **Annuler et revenir à la gestion** abandonne seulement les changements locaux.
 Après enregistrement, le retour à la carte conserve les filtres de gestion.
 Gérer les prestations permet de retrouver la liste ; sa mise à jour reste ciblée. L'édition requiert les droits SELECT et
-UPDATE sur `milieux.prestations`, ainsi que les droits INSERT/DELETE nécessaires
+UPDATE sur `gemapi.prestations`, ainsi que les droits INSERT/DELETE nécessaires
 sur les tables de rattachement modifiées. Aucune connexion Supabase distincte
 n'est créée : le plugin utilise la connexion PostgreSQL chargée dans QGIS.
 
@@ -411,7 +410,7 @@ préfixe OSGeo4W ; sous Ubuntu, il utilise le Python PyQGIS courant. Aucun
 réglage Python n'est demandé à l'utilisateur. `SIG_PRESTATIONS_PYTHON` reste
 disponible pour un diagnostic ponctuel, sans être requis pour l'export.
 
-Le statut est choisi dans le référentiel `milieux.statuts_prestations` :
+Le statut est choisi dans le référentiel `gemapi.statuts_prestations` :
 `Planifié`, `En cours`, `Terminé`, `Annulé`. Seul `Terminé` signifie
 « complétée » ; les trois autres statuts sont « non complétées ».
 `date_fin` ne détermine jamais l'achèvement. Pour une prestation non complétée,
@@ -439,7 +438,7 @@ photographies. Le bouton d'enregistrement reste désactivé tant que la
 géométrie est absente, invalide ou en construction, ou si aucun objet patrimonial
 n'a été retenu.
 
-Le plugin 0.7.14 s'utilise avec le schéma canonique actuel de `model/schema.sql`.
+Le plugin 0.8.6 s'utilise avec le schéma canonique actuel de `model/schema.sql`.
 
 Les communes sont déduites par intersection de la géométrie propre ; elles ne sont pas une
 clé étrangère de la prestation. Le technicien responsable est la clé obligatoire

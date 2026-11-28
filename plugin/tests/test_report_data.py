@@ -19,10 +19,10 @@ ID2 = "22222222-2222-2222-2222-222222222222"
 class ReportDataTests(unittest.TestCase):
     def test_zone_localisation_and_commune_use_effective_geometry(self):
         query = build_report_query({"communes":[ID1]}, include_geometry=True)
-        self.assertIn("milieux.prestations_carte carto WHERE carto.id=p.id", query)
+        self.assertIn("gemapi.prestations_carte carto WHERE carto.id=p.id", query)
         self.assertIn("ST_AsText(p.geom)",query)
         self.assertIn("p.geom IS NOT NULL",query)
-        self.assertIn("milieux.prestations_carte",build_management_query({"communes":[ID1]}))
+        self.assertIn("gemapi.prestations_carte",build_management_query({"communes":[ID1]}))
         point={"has_geometry":False,"reference_measures":None,"reference_geometries":[{
             "famille":"vegetation","direct":True,"wkt":"POINT(0 0)"}],"quantite":7,"unite":"arbres"}
         self.assertIn("Géométrie ponctuelle du patrimoine",measure_lines(point))
@@ -34,10 +34,10 @@ class ReportDataTests(unittest.TestCase):
         query = build_report_query(filters)
         self.assertTrue(query.startswith("WITH relations AS"))
         self.assertNotIn("INSERT INTO", query)
-        self.assertNotIn("UPDATE milieux", query)
+        self.assertNotIn("UPDATE ", query.upper())
         self.assertIn("s.code IN ('PLANIFIE','EN_COURS','ANNULE')", query)
         self.assertNotIn("p.statut,", query)
-        self.assertIn("JOIN milieux.statuts_prestations s", query)
+        self.assertIn("JOIN gemapi.statuts_prestations s", query)
         self.assertIn("EXTRACT(YEAR FROM p.date_debut)", query)
         self.assertIn("AND chosen_r.famille=E'ah_stockage'", query)
         self.assertIn("AND chosen_r.famille='cours_eau'", query)
@@ -115,7 +115,7 @@ class ReportDataTests(unittest.TestCase):
         self.assertIn("p.statut_id IN", query)
         self.assertIn("E'L''étang'", query)
         self.assertIn("s.code = 'TERMINE'", query)
-        self.assertNotIn("UPDATE milieux", query)
+        self.assertNotIn("UPDATE ", query.upper())
         with self.assertRaises(ValueError):
             build_management_query({}, "x" * 201)
 
@@ -149,8 +149,8 @@ class ReportDataTests(unittest.TestCase):
         options = filter_option_queries(include_statuses=True, include_providers=True)
         for family in ("ah_stockage", "ah_ouvrage", "cours_eau", "digues", "vegetation"):
             self.assertIn(family, options)
-            self.assertIn(f"{'public' if family == 'vegetation' else 'milieux'}.{family}", options[family])
-            self.assertIn("milieux.prestations l",
+            self.assertIn(f"gemapi.{family}", options[family])
+            self.assertIn("gemapi.prestations l",
                           build_report_query({family: [ID1]}))
         for parent, parent_kind in (("ah", "ah"), ("site_terrestre", "site_terrestre")):
             query = build_report_query({parent: [ID1]}, count_only=True)
@@ -158,11 +158,11 @@ class ReportDataTests(unittest.TestCase):
             self.assertIn("count(DISTINCT p.id)", query)
         digue = build_report_query({"digues": [ID1]}, count_only=True)
         self.assertIn("chosen_r.famille=E'digues'", digue)
-        self.assertIn("JOIN milieux.digues_reperes dr", digue)
+        self.assertIn("JOIN gemapi.digues_reperes dr", digue)
         self.assertNotIn("ST_DWithin", digue)
         self.assertNotIn("type_ecoulement", options["cours_eau"])
         self.assertNotIn("IS NOT NULL", options["cours_eau"])
-        self.assertEqual(options["cours_eau"], "SELECT c.id::text,c.nom FROM milieux.cours_eau c ORDER BY 2,1")
+        self.assertEqual(options["cours_eau"], "SELECT c.id::text,c.nom FROM gemapi.cours_eau c ORDER BY 2,1")
         self.assertNotIn("fosses", options)
         record = {"id": ID1, "date_debut": "2027-01-01", "type": "Travaux",
                   "own_length": 12.0, "own_area": None,
@@ -225,7 +225,7 @@ class ReportDataTests(unittest.TestCase):
         query = build_report_query({})
         self.assertIn("p.origine_mesures='Patrimoine de rattachement' THEN p.longueur_m", query)
         self.assertIn("p.origine_mesures='Patrimoine de rattachement' THEN p.surface_m2", query)
-        self.assertIn("JOIN public.vegetation o ON o.id = l.vegetation_id", query)
+        self.assertIn("JOIN gemapi.vegetation o ON o.id = l.vegetation_id", query)
 
     def test_hierarchies_count_distinct_uuids_and_keep_start_year(self):
         first = dict(id=ID1, date_debut="2025-12-15", date_fin="2027-02-01",

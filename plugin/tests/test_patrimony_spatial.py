@@ -90,9 +90,9 @@ class LongitudinalTests(unittest.TestCase):
     def test_indexed_prefilter_covers_all_families(self):
         query = candidate_query("POINT(300 80)", 500)
         self.assertEqual(query.count("ST_DWithin("), 9)
-        self.assertIn("milieux.digues_reperes", query)
-        self.assertIn("milieux.ah_stockage", query)
-        self.assertIn("public.vegetation", query)
+        self.assertIn("gemapi.digues_reperes", query)
+        self.assertIn("gemapi.ah_stockage", query)
+        self.assertIn("gemapi.vegetation", query)
         self.assertIn("ST_GeomFromText(E'POINT(300 80)',3950)", query)
         with self.assertRaises(ValueError):
             candidate_query("POINT(0 0)", -1)

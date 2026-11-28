@@ -22,16 +22,16 @@ import psycopg2
 
 MODEL = Path(__file__).resolve().parents[2] / "model"
 FAMILIES = {
-    "mobilier_id": ("public.mobilier", "type_id", "PAN"),
-    "cheminement_id": ("public.cheminements", "type_cheminement_id", "PAS"),
-    "vegetation_id": ("public.vegetation", "famille_vegetation", "ARBRES"),
+    "mobilier_id": ("gemapi.mobilier", "type_id", "PAN"),
+    "cheminement_id": ("gemapi.cheminements", "type_cheminement_id", "PAS"),
+    "vegetation_id": ("gemapi.vegetation", "famille_vegetation", "ARBRES"),
 }
 PARENTS = {
-    "site_terrestre_id": "milieux.sites_terrestres",
-    "troncon_id": "public.troncons",
-    "ah_ouvrage_id": "milieux.ah_ouvrage",
-    "ah_stockage_id": "milieux.ah_stockage",
-    "ah_section_id": "milieux.ah_sections",
+    "site_terrestre_id": "gemapi.sites_terrestres",
+    "troncon_id": "gemapi.troncons",
+    "ah_ouvrage_id": "gemapi.ah_ouvrage",
+    "ah_stockage_id": "gemapi.ah_stockage",
+    "ah_section_id": "gemapi.ah_sections",
 }
 PHYSICAL = {"INDETERMINE", "BERGE", "CRETE", "TALUS", "TALUS_RISBERME", "RISBERME", "FRANC_BORD"}
 LINE = "SRID=3950;LINESTRING(0 0,3 4)"
@@ -39,8 +39,10 @@ AREA = "SRID=3950;POLYGON((0 0,2 0,2 3,0 3,0 0))"
 MULTI = "SRID=3950;MULTIPOINT((1 1),(2 2))"
 
 
-def projection():
-    text = (MODEL / "schema_development_v0.6.1.mmd").read_text()
+def projection(filename="schema_development_v0.6.1.mmd"):
+    text = (MODEL / filename).read_text()
+    if filename == "schema_development_v0.6.1.mmd":
+        text = re.sub(r"\b(?:milieux|referentiel|public)\.", "gemapi.", text)
     aliases = dict(re.findall(r'(\w+)\["([\w.]+)"\]', text))
     columns = {}
     for alias, body in re.findall(r'(\w+)\["[\w.]+"\] \{(.*?)\n    }', text, re.S):
@@ -79,31 +81,31 @@ def family(cursor, spec, parents, **values):
 
 def fixtures(c):
     ids = {}
-    ids["prestataire_id"] = insert(c, "milieux.prestataires", nom="Entreprise")
-    ids["technicien_id"] = insert(c, "milieux.techniciens", nom="Responsable")
+    ids["prestataire_id"] = insert(c, "gemapi.prestataires", nom="Entreprise")
+    ids["technicien_id"] = insert(c, "gemapi.techniciens", nom="Responsable")
     for col, table in [("statut_id", "statuts_prestations"), ("type_prestation_id", "types_prestations")]:
-        c.execute(f"SELECT id FROM milieux.{table} ORDER BY id LIMIT 1")
+        c.execute(f"SELECT id FROM gemapi.{table} ORDER BY id LIMIT 1")
         ids[col] = c.fetchone()[0]
-    ids["cours_eau_id"] = insert(c, "milieux.cours_eau", nom="Axe", source="Essai", direction=True,
+    ids["cours_eau_id"] = insert(c, "gemapi.cours_eau", nom="Axe", source="Essai", direction=True,
                                  geom="SRID=3950;MULTILINESTRING((0 0,10 0))")
-    ids["digue_id"] = insert(c, "milieux.digues", nom="Digue")
-    insert(c, "milieux.digues_reperes", digue_id=ids["digue_id"], riviere_id=ids["cours_eau_id"],
+    ids["digue_id"] = insert(c, "gemapi.digues", nom="Digue")
+    insert(c, "gemapi.digues_reperes", digue_id=ids["digue_id"], riviere_id=ids["cours_eau_id"],
            rive="G", debut_fraction=0.1, fin_fraction=0.9)
-    ah = insert(c, "milieux.ah", nom="AH")
-    ids["ah_stockage_id"] = insert(c, "milieux.ah_stockage", ah_id=ah, nom="Stockage", geom=AREA)
-    ids["ah_ouvrage_id"] = insert(c, "milieux.ah_ouvrage", ah_id=ah, geom=LINE)
-    ids["ah_section_id"] = insert(c, "milieux.ah_sections", ah_id=ah, cours_eau_id=ids["cours_eau_id"],
+    ah = insert(c, "gemapi.ah", nom="AH")
+    ids["ah_stockage_id"] = insert(c, "gemapi.ah_stockage", ah_id=ah, nom="Stockage", geom=AREA)
+    ids["ah_ouvrage_id"] = insert(c, "gemapi.ah_ouvrage", ah_id=ah, geom=LINE)
+    ids["ah_section_id"] = insert(c, "gemapi.ah_sections", ah_id=ah, cours_eau_id=ids["cours_eau_id"],
                                   debut_fraction=0.2, fin_fraction=0.8)
-    ids["site_terrestre_id"] = insert(c, "milieux.sites_terrestres", nom="Site",
+    ids["site_terrestre_id"] = insert(c, "gemapi.sites_terrestres", nom="Site",
                                       geom="SRID=3950;MULTIPOLYGON(((0 0,2 0,2 2,0 0)))")
-    ids["troncon_id"] = insert(c, "public.troncons", digue_id=ids["digue_id"], type_troncon_id="BERGE")
+    ids["troncon_id"] = insert(c, "gemapi.troncons", digue_id=ids["digue_id"], type_troncon_id="BERGE")
     for key, spec in FAMILIES.items():
         ids[key] = family(c, spec, {"site_terrestre_id": ids["site_terrestre_id"]})
-    ids["ouvrage_hydraulique_id"] = insert(c, "public.ouvrages_hydrauliques", troncon_id=ids["troncon_id"])
-    ids["ouvrage_particulier_id"] = insert(c, "public.ouvrages_particuliers", troncon_id=ids["troncon_id"])
-    c.execute("SELECT id FROM referentiel.types_equipement_mesure ORDER BY id LIMIT 1")
-    ids["equipement_mesure_id"] = insert(c, "public.equipements_mesure", type_id=c.fetchone()[0])
-    ids["desordre_id"] = insert(c, "public.desordres", designation="Fissure")
+    ids["ouvrage_hydraulique_id"] = insert(c, "gemapi.ouvrages_hydrauliques", troncon_id=ids["troncon_id"])
+    ids["ouvrage_particulier_id"] = insert(c, "gemapi.ouvrages_particuliers", troncon_id=ids["troncon_id"])
+    c.execute("SELECT id FROM gemapi.types_equipement_mesure ORDER BY id LIMIT 1")
+    ids["equipement_mesure_id"] = insert(c, "gemapi.equipements_mesure", type_id=c.fetchone()[0])
+    ids["desordre_id"] = insert(c, "gemapi.desordres", designation="Fissure")
     return ids
 
 
@@ -111,7 +113,7 @@ class Qualification:
     @classmethod
     def connect(cls, login="postgres", database="qualification"):
         db = psycopg2.connect(host=str(cls.directory), port=5432, dbname=database, user=login,
-                              options=f"-c search_path=pg_catalog,{cls.extension},milieux -c statement_timeout=15000")
+                              options=f"-c search_path=pg_catalog,{cls.extension},gemapi -c statement_timeout=15000")
         with db.cursor() as c:
             c.execute("SELECT inet_server_addr() IS NULL, current_database()")
             destination = c.fetchone()
@@ -186,23 +188,26 @@ class Qualification:
 
     def prestation(self, c, **values):
         fields = {k: self.ids[k] for k in ("technicien_id", "prestataire_id", "statut_id", "type_prestation_id")}
-        return insert(c, "milieux.prestations", **fields, date_debut="2026-01-01", date_fin="2026-01-01",
+        return insert(c, "gemapi.prestations", **fields, date_debut="2026-01-01", date_fin="2026-01-01",
                       quantite=7, unite="unités déclarées", **values)
 
     def test_catalogue(self):
-        self.assertEqual((MODEL / "schema.mmd").read_bytes(), (MODEL / "schema_development_v0.6.1.mmd").read_bytes())
+        self.assertEqual(projection("schema.mmd"), projection())
         tables, cols, fks, seeds = projection()
         self.assertEqual((len(tables), len(cols), len(fks), len(seeds), sum(map(len, seeds.values()))),
                          (48, 431, 109, 22, 298))
         associations = {t for t in tables if "__" in t}
         self.assertEqual((len(associations), len(tables - seeds.keys() - associations)), (4, 22))
+        self.assertEqual(self.one("""SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+              WHERE n.nspname IN ('public','milieux','referentiel') AND c.relname=ANY(%s)""",
+              ([t.split(".")[1] for t in tables],)), 0)
         actual = self.rows("""
             SELECT n.nspname||'.'||c.relname, a.attname, format_type(a.atttypid,a.atttypmod),
                    a.attnotnull, pg_get_expr(d.adbin,d.adrelid), a.attgenerated
             FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
             JOIN pg_attribute a ON a.attrelid=c.oid LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
             WHERE c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped
-              AND n.nspname IN ('public','milieux','referentiel')
+              AND n.nspname='gemapi'
               AND NOT EXISTS (SELECT FROM pg_depend dep WHERE dep.classid='pg_class'::regclass
                               AND dep.objid=c.oid AND dep.deptype='e')""")
         self.assertEqual({(t, c) for t, c, *_ in actual}, set(cols))
@@ -225,7 +230,7 @@ class Qualification:
                 self.assertEqual(default, "clock_timestamp()")
             if c == "version":
                 self.assertEqual(default, "1")
-            if c in {"section", "valide", "berge_id_type"} or (t,c)==("milieux.prestations","surface_ha"):
+            if c in {"section", "valide", "berge_id_type"} or (t,c)==("gemapi.prestations","surface_ha"):
                 self.assertEqual(generated, "s")
         constraints = self.rows("""
             SELECT n.nspname||'.'||t.relname, co.contype,
@@ -244,8 +249,8 @@ class Qualification:
         self.assertEqual(sum(row[1]=="f" for row in constraints),109)
         self.assertEqual({(t,tuple(cs)) for t,k,cs,*_ in constraints if k=="p"},
                          {(t,tuple(cs)) for t,cs in pk.items()})
-        uk.update({("public.troncons", ("id","type_troncon_id")),
-                   ("milieux.ah_sections", ("ah_id","cours_eau_id","debut_fraction","fin_fraction"))})
+        uk.update({("gemapi.troncons", ("id","type_troncon_id")),
+                   ("gemapi.ah_sections", ("ah_id","cours_eau_id","debut_fraction","fin_fraction"))})
         self.assertEqual({(t,tuple(cs)) for t,k,cs,*_ in constraints if k=="u"},uk)
         for t,k,cs,p,ps,defer,initial,action in constraints:
             if k=="f":
@@ -255,9 +260,9 @@ class Qualification:
         self.assertEqual(set(self.rows("""
             SELECT n.nspname||'.'||c.relname FROM pg_trigger tr JOIN pg_class c ON c.oid=tr.tgrelid
             JOIN pg_namespace n ON n.oid=c.relnamespace
-            WHERE tr.tgfoid='milieux.stamp_modification()'::regprocedure AND tr.tgnargs=1""")), {(t,) for t in metier})
+            WHERE tr.tgfoid='gemapi.stamp_modification()'::regprocedure AND tr.tgnargs=1""")), {(t,) for t in metier})
         self.assertEqual(self.rows("""SELECT condeferrable,condeferred FROM pg_constraint
-            WHERE conrelid='milieux.prestations'::regclass AND conname='prestation_relations_parent'"""), [(True,True)])
+            WHERE conrelid='gemapi.prestations'::regclass AND conname='prestation_relations_parent'"""), [(True,True)])
         indexed = self.rows("""SELECT n.nspname||'.'||t.relname,a.attname FROM pg_index i
             JOIN pg_class t ON t.oid=i.indrelid JOIN pg_namespace n ON n.oid=t.relnamespace
             JOIN pg_class ix ON ix.oid=i.indexrelid JOIN pg_am am ON am.oid=ix.relam
@@ -267,8 +272,8 @@ class Qualification:
             keys = list(rows[0])
             self.assertCountEqual(self.rows(f"SELECT {', '.join(keys)} FROM {t}"),
                                   [tuple(r[k] for k in keys) for r in rows], t)
-        self.assertEqual(set(self.rows("SELECT id FROM referentiel.types_troncon")), {(x,) for x in PHYSICAL})
-        self.assertEqual(set(self.rows("SELECT abrege FROM referentiel.typologies_troncon")),
+        self.assertEqual(set(self.rows("SELECT id FROM gemapi.types_troncon")), {(x,) for x in PHYSICAL})
+        self.assertEqual(set(self.rows("SELECT abrege FROM gemapi.typologies_troncon")),
                          {(x,) for x in ("TER","TEN","PAL","GCI","AUT")})
 
     def test_installation_sur_base_occupee(self):
@@ -276,7 +281,7 @@ class Qualification:
         with self.assertRaisesRegex(psycopg2.Error, "Installation neuve requise"):
             self.c.execute((MODEL / "schema.sql").read_text())
         self.db.rollback()
-        self.assertEqual(self.one("SELECT count(*) FROM referentiel.types_troncon"), 7)
+        self.assertEqual(self.one("SELECT count(*) FROM gemapi.types_troncon"), 7)
 
     def test_cinq_parents(self):
         for logical, spec in FAMILIES.items():
@@ -317,15 +322,15 @@ class Qualification:
         for mask in itertools.product((False,True),repeat=3):
             fields = {c:self.ids[c] if flag else None for c,flag in zip(parents,mask)}
             if sum(mask)==1:
-                insert(self.c,"public.ouvrages_hydrauliques",**fields)
+                insert(self.c,"gemapi.ouvrages_hydrauliques",**fields)
             else:
                 with self.rejected("23514","ck_ouvrage_parent_unique"):
-                    insert(self.c,"public.ouvrages_hydrauliques",**fields)
+                    insert(self.c,"gemapi.ouvrages_hydrauliques",**fields)
         for kind in sorted(PHYSICAL):
-            uid=insert(self.c,"public.troncons",digue_id=self.ids["digue_id"],type_troncon_id=kind,valid=True,geometry=LINE)
-            insert(self.c,"public.observations",troncon_id=uid,date_observation="2026-01-01")
+            uid=insert(self.c,"gemapi.troncons",digue_id=self.ids["digue_id"],type_troncon_id=kind,valid=True,geometry=LINE)
+            insert(self.c,"gemapi.observations",troncon_id=uid,date_observation="2026-01-01")
             def link():
-                insert(self.c,"public.ouvrages_hydrauliques__objets_lies",
+                insert(self.c,"gemapi.ouvrages_hydrauliques__objets_lies",
                        ouvrage_hydraulique_id=self.ids["ouvrage_hydraulique_id"],berge_id=uid)
                 self.c.execute("SET CONSTRAINTS ALL IMMEDIATE")
             if kind=="BERGE":
@@ -336,12 +341,12 @@ class Qualification:
             self.c.execute("SET CONSTRAINTS ALL DEFERRED")
         for kind in ("RISBERME","FRANC_BORD"):
             with self.rejected("23514","ck_troncons_geometry_b4"):
-                insert(self.c,"public.troncons",digue_id=self.ids["digue_id"],type_troncon_id=kind,valid=True)
+                insert(self.c,"gemapi.troncons",digue_id=self.ids["digue_id"],type_troncon_id=kind,valid=True)
         with self.rejected("23514","ck_troncons_crete_fields"):
-            insert(self.c,"public.troncons",digue_id=self.ids["digue_id"],type_troncon_id="CRETE",
-                   cote_id=self.one("SELECT id FROM referentiel.cotes LIMIT 1"))
+            insert(self.c,"gemapi.troncons",digue_id=self.ids["digue_id"],type_troncon_id="CRETE",
+                   cote_id=self.one("SELECT id FROM gemapi.cotes LIMIT 1"))
         with self.rejected("23514","ck_troncons_axe_reperage"):
-            insert(self.c,"public.troncons",digue_id=self.ids["digue_id"],type_troncon_id="BERGE",
+            insert(self.c,"gemapi.troncons",digue_id=self.ids["digue_id"],type_troncon_id="BERGE",
                    geometry_reperage="SRID=3950;LINESTRING EMPTY")
 
     def test_desordres_observations_photos(self):
@@ -350,36 +355,36 @@ class Qualification:
                *PARENTS, *FAMILIES]
         self.assertEqual((len(direct), len(obs)), (9, 12))
         for target in direct:
-            insert(self.c, "public.desordres", **{target:self.ids[target]})
+            insert(self.c, "gemapi.desordres", **{target:self.ids[target]})
         for a,b in itertools.combinations(direct, 2):
             with self.rejected("23514", "ck_desordre_cible_directe"):
-                insert(self.c, "public.desordres", **{k:self.ids[k] for k in (a,b)})
+                insert(self.c, "gemapi.desordres", **{k:self.ids[k] for k in (a,b)})
         for target in obs:
-            insert(self.c,"public.observations",date_observation="2026-02-01",**{target:self.ids[target]})
+            insert(self.c,"gemapi.observations",date_observation="2026-02-01",**{target:self.ids[target]})
         for pair in [(), *itertools.combinations(obs, 2)]:
             with self.rejected("23514","ck_cible_unique"):
-                insert(self.c,"public.observations",date_observation="2026-02-01",**{k:self.ids[k] for k in pair})
+                insert(self.c,"gemapi.observations",date_observation="2026-02-01",**{k:self.ids[k] for k in pair})
         disorder = self.ids["desordre_id"]
         with self.rejected("23502"):
-            insert(self.c, "public.observations", desordre_id=disorder)
-        uid = insert(self.c,"public.observations",date_observation="2026-02-01",desordre_id=disorder)
-        photo = insert(self.c,"public.photos",observation_id=uid,storage_key="constats/essai.jpg")
+            insert(self.c, "gemapi.observations", desordre_id=disorder)
+        uid = insert(self.c,"gemapi.observations",date_observation="2026-02-01",desordre_id=disorder)
+        photo = insert(self.c,"gemapi.photos",observation_id=uid,storage_key="constats/essai.jpg")
         with self.rejected("23505"):
-            insert(self.c,"public.photos",observation_id=uid,storage_key="constats/essai.jpg")
-        self.c.execute("UPDATE public.desordres SET date_fin='2026-03-01' WHERE id=%s",(disorder,))
-        self.assertEqual(self.one("""SELECT p.id FROM public.photos p JOIN public.observations o ON o.id=p.observation_id
-              JOIN public.desordres d ON d.id=o.desordre_id WHERE d.id=%s AND d.date_fin IS NOT NULL""",(disorder,)),photo)
-        other = insert(self.c,"public.desordres",designation="Actif")
-        self.assertTrue(self.one("SELECT date_fin IS NULL FROM public.desordres WHERE id=%s",(other,)))
-        self.c.execute("INSERT INTO public.equipements_mesure__desordres VALUES (%s,%s)",
+            insert(self.c,"gemapi.photos",observation_id=uid,storage_key="constats/essai.jpg")
+        self.c.execute("UPDATE gemapi.desordres SET date_fin='2026-03-01' WHERE id=%s",(disorder,))
+        self.assertEqual(self.one("""SELECT p.id FROM gemapi.photos p JOIN gemapi.observations o ON o.id=p.observation_id
+              JOIN gemapi.desordres d ON d.id=o.desordre_id WHERE d.id=%s AND d.date_fin IS NOT NULL""",(disorder,)),photo)
+        other = insert(self.c,"gemapi.desordres",designation="Actif")
+        self.assertTrue(self.one("SELECT date_fin IS NULL FROM gemapi.desordres WHERE id=%s",(other,)))
+        self.c.execute("INSERT INTO gemapi.equipements_mesure__desordres VALUES (%s,%s)",
                        (self.ids["equipement_mesure_id"],disorder))
-        self.c.execute("UPDATE public.equipements_mesure__desordres SET desordre_id=%s WHERE desordre_id=%s",(other,disorder))
-        self.assertEqual(self.one("SELECT version FROM public.desordres WHERE id=%s",(disorder,)),4)
-        self.assertEqual(self.one("SELECT version FROM public.desordres WHERE id=%s",(other,)),2)
+        self.c.execute("UPDATE gemapi.equipements_mesure__desordres SET desordre_id=%s WHERE desordre_id=%s",(other,disorder))
+        self.assertEqual(self.one("SELECT version FROM gemapi.desordres WHERE id=%s",(disorder,)),4)
+        self.assertEqual(self.one("SELECT version FROM gemapi.desordres WHERE id=%s",(other,)),2)
         with self.rejected("23514"):
-            insert(self.c,"public.desordres",version=9007199254740992)
+            insert(self.c,"gemapi.desordres",version=9007199254740992)
         with self.rejected("23514"):
-            self.c.execute("UPDATE public.observations SET cree_le=now() WHERE id=%s",(uid,))
+            self.c.execute("UPDATE gemapi.observations SET cree_le=now() WHERE id=%s",(uid,))
 
     def test_prestations(self):
         own = ["cours_eau_id","digue_id","troncon_id","ah_section_id","site_terrestre_id"]
@@ -388,25 +393,25 @@ class Qualification:
             with self.subTest(target=target):
                 uid = self.prestation(self.c, **{target:self.ids[target]}, geom=MULTI)
                 self.c.execute("SET CONSTRAINTS ALL IMMEDIATE")
-                self.assertEqual(self.rows("SELECT nombre_points,origine_mesures,quantite FROM milieux.prestations_fiches WHERE id=%s",
+                self.assertEqual(self.rows("SELECT nombre_points,origine_mesures,quantite FROM gemapi.prestations_fiches WHERE id=%s",
                                            (uid,)), [(2,"Prestation",7)])
                 if target in own:
                     with self.rejected("23514"):
                         self.prestation(self.c, **{target:self.ids[target]})
                 else:
                     uid = self.prestation(self.c, **{target:self.ids[target]})
-                    self.assertEqual(self.one("SELECT origine_mesures FROM milieux.prestations WHERE id=%s",(uid,)),
+                    self.assertEqual(self.one("SELECT origine_mesures FROM gemapi.prestations WHERE id=%s",(uid,)),
                                      "Patrimoine de rattachement")
         self.c.execute("SET CONSTRAINTS ALL DEFERRED")
         empty = self.prestation(self.c)
         with self.rejected("23514"):
             self.c.execute("SET CONSTRAINTS ALL IMMEDIATE")
-        self.c.execute("UPDATE milieux.prestations SET mobilier_id=%s WHERE id=%s",(self.ids["mobilier_id"],empty))
+        self.c.execute("UPDATE gemapi.prestations SET mobilier_id=%s WHERE id=%s",(self.ids["mobilier_id"],empty))
         self.c.execute("SET CONSTRAINTS ALL IMMEDIATE")
         with self.rejected("23514","prestations_direct_modes"):
-            self.c.execute("UPDATE milieux.prestations SET vegetation_id=%s WHERE id=%s",(self.ids["vegetation_id"],empty))
+            self.c.execute("UPDATE gemapi.prestations SET vegetation_id=%s WHERE id=%s",(self.ids["vegetation_id"],empty))
         with self.rejected("23514"):
-            self.c.execute("UPDATE milieux.prestations SET position='Berge' WHERE id=%s",(empty,))
+            self.c.execute("UPDATE gemapi.prestations SET position='Berge' WHERE id=%s",(empty,))
         with self.rejected("23514","prestations_site_multi_geometry"):
             self.prestation(self.c,site_terrestre_id=self.ids["site_terrestre_id"],geom=LINE)
 
@@ -415,38 +420,40 @@ class Qualification:
             child = self.ids[key]
             inherited = self.prestation(self.c, **{key:child})
             own = self.prestation(self.c, **{key:child},geom=MULTI)
-            trace = self.one("SELECT date_modification FROM milieux.prestations WHERE id=%s",(inherited,))
+            trace = self.one("SELECT date_modification FROM gemapi.prestations WHERE id=%s",(inherited,))
             for shape, expected in [(LINE,(None,5,None)),(AREA,(None,None,6)),(MULTI,(2,None,None))]:
                 self.c.execute(f"UPDATE {table} SET geometry=%s WHERE id=%s",(shape,child))
                 self.assertEqual(self.rows("""SELECT p.nombre_points,p.longueur_m,p.surface_m2,p.quantite,
                     p.origine_mesures,p.date_modification,p.geom IS NULL,ST_Equals(v.geom,%s::geometry)
-                    FROM milieux.prestations p JOIN milieux.prestations_carte v USING(id) WHERE p.id=%s""",(shape,inherited)),
+                    FROM gemapi.prestations p JOIN gemapi.prestations_carte v USING(id) WHERE p.id=%s""",(shape,inherited)),
                     [(*expected,7,"Patrimoine de rattachement",trace,True,True)])
-                self.assertEqual(self.rows("SELECT nombre_points,origine_mesures FROM milieux.prestations WHERE id=%s",(own,)),
+                self.assertEqual(self.rows("SELECT nombre_points,origine_mesures FROM gemapi.prestations WHERE id=%s",(own,)),
                                  [(2,"Prestation")])
-            self.assertEqual(self.one("SELECT count(*) FROM milieux.prestations__sites_terrestres WHERE prestation_id=%s",
+            self.assertEqual(self.one("SELECT count(*) FROM gemapi.prestations__sites_terrestres WHERE prestation_id=%s",
                                       (inherited,)),1)
             for parent in ("ah_stockage_id","ah_section_id"):
                 previous = "site_terrestre_id" if parent=="ah_stockage_id" else "ah_stockage_id"
                 self.c.execute(f"UPDATE {table} SET {previous}=NULL,{parent}=%s WHERE id=%s",(self.ids[parent],child))
                 for view in ("prestations__sites_terrestres","prestations__ah"):
-                    self.assertEqual(self.one(f"SELECT count(*) FROM milieux.{view} WHERE prestation_id=%s",(inherited,)),0)
+                    self.assertEqual(self.one(f"SELECT count(*) FROM gemapi.{view} WHERE prestation_id=%s",(inherited,)),0)
         for col in ("ah_ouvrage_id","ah_stockage_id","ah_section_id"):
             uid=self.prestation(self.c,**{col:self.ids[col]},geom=LINE)
-            self.assertEqual(self.one("SELECT count(*) FROM milieux.prestations__ah WHERE prestation_id=%s",(uid,)),1)
+            self.assertEqual(self.one("SELECT count(*) FROM gemapi.prestations__ah WHERE prestation_id=%s",(uid,)),1)
 
     def test_profils_et_tracabilite(self):
         tables,_,_,_ = projection()
-        baseline={"milieux."+t for t in ("cours_eau","digues","digues_reperes","ah","ah_stockage","ah_ouvrage",
+        baseline={"gemapi."+t for t in ("cours_eau","digues","digues_reperes","ah","ah_stockage","ah_ouvrage",
                                          "ah_sections","sites_terrestres")}
-        writable = baseline | {t for t in tables if t.startswith("public.")}
-        views = [row[0] for row in self.rows("SELECT 'milieux.'||viewname FROM pg_views WHERE schemaname='milieux'")]
+        writable = baseline | {"gemapi." + t for t in (
+            "troncons", "mobilier", "cheminements", "vegetation", "desordres", "observations", "photos",
+            "ouvrages_particuliers", "equipements_mesure", "ouvrages_hydrauliques")} | {t for t in tables if "__" in t}
+        views = [row[0] for row in self.rows("SELECT 'gemapi.'||viewname FROM pg_views WHERE schemaname='gemapi'")]
         self.assertEqual(len(views),6)
         for role in ("consultation","prestations","patrimoine"):
             with closing(self.connect("test_"+role)) as db, db.cursor() as c:
                 for t in sorted(tables | set(views)):
                     c.execute(f"SELECT count(*) FROM {t}")
-                    expected = ((t=="milieux.prestations" and role!="consultation") or
+                    expected = ((t=="gemapi.prestations" and role!="consultation") or
                                 (t in writable and role=="patrimoine"))
                     for priv in ("INSERT","UPDATE","DELETE","TRUNCATE"):
                         c.execute("SELECT has_table_privilege(%s,%s)",(t,priv))
@@ -457,36 +464,36 @@ class Qualification:
                 else:
                     uid=self.prestation(c,mobilier_id=self.ids["mobilier_id"])
                     c.execute("SET CONSTRAINTS ALL IMMEDIATE")
-                    c.execute("SELECT modifie_par,cree_le<=date_modification FROM milieux.prestations WHERE id=%s",(uid,))
+                    c.execute("SELECT modifie_par,cree_le<=date_modification FROM gemapi.prestations WHERE id=%s",(uid,))
                     self.assertEqual(c.fetchone(),("test_"+role,True))
                     if role=="patrimoine":
-                        c.execute("UPDATE public.mobilier SET geometry=%s WHERE id=%s",(AREA,self.ids["mobilier_id"]))
-                        c.execute("SELECT surface_m2,quantite FROM milieux.prestations_fiches WHERE id=%s",(uid,))
+                        c.execute("UPDATE gemapi.mobilier SET geometry=%s WHERE id=%s",(AREA,self.ids["mobilier_id"]))
+                        c.execute("SELECT surface_m2,quantite FROM gemapi.prestations_fiches WHERE id=%s",(uid,))
                         self.assertEqual(c.fetchone(),(6,7))
                     else:
                         with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
-                            c.execute("UPDATE public.mobilier SET geometry=%s WHERE id=%s",(AREA,self.ids["mobilier_id"]))
+                            c.execute("UPDATE gemapi.mobilier SET geometry=%s WHERE id=%s",(AREA,self.ids["mobilier_id"]))
 
     def test_reperage_et_digue_supprimer(self):
         with closing(self.connect()) as admin, admin.cursor() as c:
-            ah = insert(c, "milieux.ah", nom="Qualification des révisions")
+            ah = insert(c, "gemapi.ah", nom="Qualification des révisions")
             admin.commit()
         check_hydrography(self.connect, "test_patrimoine", {"ah":ah, "river":self.ids["cours_eau_id"]})
-        digue = insert(self.c, "milieux.digues", nom="Qualification de suppression")
-        repere = insert(self.c, "milieux.digues_reperes", digue_id=digue, riviere_id=self.ids["cours_eau_id"],
+        digue = insert(self.c, "gemapi.digues", nom="Qualification de suppression")
+        repere = insert(self.c, "gemapi.digues_reperes", digue_id=digue, riviere_id=self.ids["cours_eau_id"],
                         rive="D", debut_fraction=0.12, fin_fraction=0.67)
-        stamp = self.one("SELECT date_modification FROM milieux.digues WHERE id=%s", (digue,))
+        stamp = self.one("SELECT date_modification FROM gemapi.digues WHERE id=%s", (digue,))
         for table, fields, diagnostic in [
-            ("public.troncons", {"type_troncon_id": "BERGE"}, "tronçon"),
-            ("public.desordres", {}, "désordre"),
+            ("gemapi.troncons", {"type_troncon_id": "BERGE"}, "tronçon"),
+            ("gemapi.desordres", {}, "désordre"),
         ]:
             child = insert(self.c, table, digue_id=digue, **fields)
             with self.rejected("23503", message=diagnostic):
-                self.c.execute("SELECT milieux.digue_supprimer(%s,1,%s)", (repere, stamp))
+                self.c.execute("SELECT gemapi.digue_supprimer(%s,1,%s)", (repere, stamp))
             self.c.execute(f"DELETE FROM {table} WHERE id=%s", (child,))
-        self.c.execute("SELECT milieux.digue_supprimer(%s,1,%s)", (repere, stamp))
+        self.c.execute("SELECT gemapi.digue_supprimer(%s,1,%s)", (repere, stamp))
         self.c.execute("SET CONSTRAINTS ALL IMMEDIATE")
-        self.assertEqual(self.one("SELECT count(*) FROM milieux.digues WHERE id=%s", (digue,)), 0)
+        self.assertEqual(self.one("SELECT count(*) FROM gemapi.digues WHERE id=%s", (digue,)), 0)
 
     def test_suppression_apres_reaffectation(self):
         # Chaque ancien parent n’a qu’un seul enfant. Le diagnostic doit identifier cet enfant.
@@ -497,7 +504,7 @@ class Qualification:
                 elif key == "troncon_id":
                     fields = {"type_troncon_id":"CRETE", "digue_id":self.ids["digue_id"]}
                 else:
-                    ah = insert(self.c, "milieux.ah", nom="Parent indépendant")
+                    ah = insert(self.c, "gemapi.ah", nom="Parent indépendant")
                     fields = {"ah_ouvrage_id":{"ah_id":ah, "geom":LINE},
                               "ah_stockage_id":{"ah_id":ah, "geom":AREA, "nom":"Stockage"},
                               "ah_section_id":{"ah_id":ah, "cours_eau_id":self.ids["cours_eau_id"],
@@ -551,7 +558,7 @@ class Qualification:
 
                 def change_geometry():
                     with parent.cursor() as c:
-                        c.execute("UPDATE public.cheminements SET geometry=%s WHERE id=%s", (AREA, child))
+                        c.execute("UPDATE gemapi.cheminements SET geometry=%s WHERE id=%s", (AREA, child))
 
                 def create_prestation():
                     with writer.cursor() as c:
@@ -564,7 +571,7 @@ class Qualification:
                     create_prestation()
                     self.wait_for_writer(writer, parent, change_geometry)
                 self.assertEqual(self.rows("""SELECT surface_m2, quantite, origine_mesures
-                    FROM milieux.prestations WHERE cheminement_id=%s""", (child,)),
+                    FROM gemapi.prestations WHERE cheminement_id=%s""", (child,)),
                     [(6, 7, "Patrimoine de rattachement")])
 
 

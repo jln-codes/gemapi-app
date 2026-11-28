@@ -69,11 +69,11 @@ def main():
         load_demo_rows(container)
 
         river_id, digue_id = str(uuid4()), str(uuid4())
-        sql(container, f"BEGIN; INSERT INTO milieux.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
+        sql(container, f"BEGIN; INSERT INTO gemapi.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
                        f"VALUES ('{river_id}','Rivière des Bancs','rivière','TEST',TRUE,"
                        "ST_GeomFromText('MULTILINESTRING((1700000 9300000,1701000 9300000))',3950)); "
-                       f"INSERT INTO milieux.digues(id,nom) VALUES ('{digue_id}','Digue des Bancs'); "
-                       "INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
+                       f"INSERT INTO gemapi.digues(id,nom) VALUES ('{digue_id}','Digue des Bancs'); "
+                       "INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
                        f"VALUES ('{digue_id}','{river_id}','G',0.2,0.4); COMMIT;")
         port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[-1]
         app = QgsApplication([], True)
@@ -257,7 +257,7 @@ def main():
             for family, table in (("ah_stockage", "ah_stockage"),
                                   ("vegetation", "vegetation")):
                 uid, wkt = sql(container,
-                    f"SELECT id::text,ST_AsText(ST_PointOnSurface({'geometry' if family=='vegetation' else 'geom'})) FROM {'public' if family=='vegetation' else 'milieux'}.{table} "
+                    f"SELECT id::text,ST_AsText(ST_PointOnSurface({'geometry' if family=='vegetation' else 'geom'})) FROM gemapi.{table} "
                     "ORDER BY id LIMIT 1").stdout.strip().split("|", 1)
                 form.geometry = QgsGeometry.fromWkt(wkt)
                 form._spatial_cache = None

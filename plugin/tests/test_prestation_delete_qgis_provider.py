@@ -44,7 +44,7 @@ def main():
                      QgsWkbTypes.MultiPolygon):
             uri = QgsDataSourceUri()
             uri.setConnection('127.0.0.1', port, 'postgres', 'postgres', '')
-            uri.setDataSource('milieux', 'prestations_carte', 'geom', '', 'id')
+            uri.setDataSource('gemapi', 'prestations_carte', 'geom', '', 'id')
             uri.setWkbType(kind)
             uri.setSrid('3950')
             layer = QgsVectorLayer(uri.uri(False), 'carte temporaire', 'postgres')
@@ -75,7 +75,7 @@ def main():
                    layers[QgsWkbTypes.MultiLineString].getFeatures())
         second = insert(container, data, 'ah_stockage', storage)
         old = version(container, second)
-        sql(container, f"UPDATE milieux.prestations SET description='Autre version' WHERE id='{second}'")
+        sql(container, f"UPDATE gemapi.prestations SET description='Autre version' WHERE id='{second}'")
         try:
             connection.executeSql(build_delete(second, old))
         except Exception as error:

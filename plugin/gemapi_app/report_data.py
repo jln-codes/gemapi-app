@@ -117,7 +117,7 @@ def resolve_report_editor(connection, configured_login=None):
     if not login:
         return "", None
     rows = connection.executeSql(
-        "SELECT concat_ws(' ',prenom,nom) FROM milieux.techniciens "
+        "SELECT concat_ws(' ',prenom,nom) FROM gemapi.techniciens "
         f"WHERE lower(login)=lower({literal(login)}) AND actif=true ORDER BY id LIMIT 1")
     return login, (str(rows[0][0]).strip() if rows and rows[0][0] else None)
 
@@ -131,33 +131,33 @@ def _relations_sql(include_indirect=False):
                 "SELECT l.id AS prestation_id,'ah_sections'::text AS famille,o.id AS objet_id,"
                 f"{section_label_sql()} AS nom,o.geom_reference AS geom,true AS direct,"
                 "'ah'::text AS parent_kind,a.id AS parent_id,a.nom AS parent_nom,"
-                "ARRAY[o.id] AS section_ids FROM milieux.prestations l "
-                "JOIN milieux.ah_sections o ON o.id=l.ah_section_id "
-                "JOIN milieux.cours_eau r ON r.id=o.cours_eau_id JOIN milieux.ah a ON a.id=o.ah_id")
+                "ARRAY[o.id] AS section_ids FROM gemapi.prestations l "
+                "JOIN gemapi.ah_sections o ON o.id=l.ah_section_id "
+                "JOIN gemapi.cours_eau r ON r.id=o.cours_eau_id JOIN gemapi.ah a ON a.id=o.ah_id")
             # A second, non-direct metadata row represents the recorded section's
             # course. It does not create a second direct attachment or quantity.
             parts.append(
                 "SELECT l.id,'ah_sections'::text,o.id,"
                 f"{section_label_sql()},NULL::geometry,false,"
                 f"'cours_eau'::text,r.id,{label_sql('r')},ARRAY[o.id] "
-                "FROM milieux.prestations l JOIN milieux.ah_sections o ON o.id=l.ah_section_id "
-                "JOIN milieux.cours_eau r ON r.id=o.cours_eau_id JOIN milieux.ah a ON a.id=o.ah_id")
+                "FROM gemapi.prestations l JOIN gemapi.ah_sections o ON o.id=l.ah_section_id "
+                "JOIN gemapi.cours_eau r ON r.id=o.cours_eau_id JOIN gemapi.ah a ON a.id=o.ah_id")
             continue
         if key == "digues":
             parts.append(
                 "SELECT l.id AS prestation_id, 'digues'::text AS famille, d.id AS objet_id, "
                 "d.nom, dr.geom_reference AS geom, true AS direct, "
                 "'digues'::text AS parent_kind, d.id AS parent_id, "
-                "d.nom AS parent_nom, ARRAY[]::uuid[] AS section_ids FROM milieux.prestations l "
-                "JOIN milieux.digues d ON d.id=l.digue_id "
-                "JOIN milieux.digues_reperes dr ON dr.digue_id=d.id"
+                "d.nom AS parent_nom, ARRAY[]::uuid[] AS section_ids FROM gemapi.prestations l "
+                "JOIN gemapi.digues d ON d.id=l.digue_id "
+                "JOIN gemapi.digues_reperes dr ON dr.digue_id=d.id"
             )
             continue
         if key in ("ah_stockage", "ah_ouvrage"):
-            parent = "JOIN milieux.ah parent ON parent.id=o.ah_id"
+            parent = "JOIN gemapi.ah parent ON parent.id=o.ah_id"
             parent_cols = "'ah'::text AS parent_kind, parent.id AS parent_id, parent.nom AS parent_nom"
         elif key in SITE_CHILDREN:
-            parent = "LEFT JOIN milieux.sites_terrestres parent ON parent.id=o.site_terrestre_id"
+            parent = "LEFT JOIN gemapi.sites_terrestres parent ON parent.id=o.site_terrestre_id"
             parent_cols = "'site_terrestre'::text AS parent_kind, parent.id AS parent_id, parent.nom AS parent_nom"
         elif key == "sites_terrestres":
             parent = ""
@@ -173,8 +173,8 @@ def _relations_sql(include_indirect=False):
             parent_cols = f"'cours_eau'::text AS parent_kind, o.id AS parent_id, {name} AS parent_nom"
         parts.append(
             f"SELECT l.id AS prestation_id, {literal(key)} AS famille, o.id AS objet_id, "
-            f"{name} AS nom, o.{TARGETS[key].geometry} AS geom, true AS direct, {parent_cols}, ARRAY[]::uuid[] AS section_ids FROM milieux.{link_table} l "
-            f"JOIN {TARGETS[key].schema}.{object_table} o ON o.id = l.{link_id} {parent}"
+            f"{name} AS nom, o.{TARGETS[key].geometry} AS geom, true AS direct, {parent_cols}, ARRAY[]::uuid[] AS section_ids FROM gemapi.{link_table} l "
+            f"JOIN gemapi.{object_table} o ON o.id = l.{link_id} {parent}"
         )
     if include_indirect:
         parts.append(
@@ -182,10 +182,10 @@ def _relations_sql(include_indirect=False):
             f"p.cours_eau_id AS objet_id, {label_sql('c')} AS nom, NULL::geometry AS geom, false AS direct, "
             "'ah'::text AS parent_kind, a.id AS parent_id, a.nom AS parent_nom, "
             "array_agg(DISTINCT s.id ORDER BY s.id) AS section_ids "
-            "FROM milieux.prestations p "
-            "JOIN milieux.ah_sections_carte s ON s.cours_eau_id=p.cours_eau_id "
-            "JOIN milieux.ah a ON a.id=s.ah_id "
-            "JOIN milieux.cours_eau c ON c.id=p.cours_eau_id "
+            "FROM gemapi.prestations p "
+            "JOIN gemapi.ah_sections_carte s ON s.cours_eau_id=p.cours_eau_id "
+            "JOIN gemapi.ah a ON a.id=s.ah_id "
+            "JOIN gemapi.cours_eau c ON c.id=p.cours_eau_id "
             "WHERE p.cours_eau_id IS NOT NULL AND s.etat_reference='CONFORME' "
             "AND s.cours_eau_qualifie IS TRUE "
             "AND ST_Intersects(p.geom,s.geom_reference) "
@@ -209,41 +209,41 @@ def _object_names_sql():
 def filter_option_queries(include_statuses=False, include_providers=False):
     queries = {
         "years": "SELECT DISTINCT annee FROM (SELECT EXTRACT(YEAR FROM date_debut)::int AS annee "
-                 "FROM milieux.prestations UNION ALL SELECT generate_series("
+                 "FROM gemapi.prestations UNION ALL SELECT generate_series("
                  "EXTRACT(YEAR FROM p.date_debut)::int,EXTRACT(YEAR FROM p.date_fin)::int) "
-                 "FROM milieux.prestations p JOIN milieux.statuts_prestations s "
+                 "FROM gemapi.prestations p JOIN gemapi.statuts_prestations s "
                  "ON s.id=p.statut_id WHERE p.date_fin>=p.date_debut AND s.code='TERMINE') a "
                  "ORDER BY annee DESC",
-        "technicians": "SELECT id::text,concat_ws(' ',prenom,nom) FROM milieux.techniciens ORDER BY nom,prenom",
-        "communes": "SELECT id::text,nom FROM milieux.communes ORDER BY nom",
-        "types": "SELECT id::text,libelle FROM milieux.types_prestations ORDER BY libelle,id",
-        "ah": "SELECT id::text,nom FROM milieux.ah ORDER BY nom,id",
-        "site_terrestre": "SELECT id::text,nom FROM milieux.sites_terrestres ORDER BY nom,id",
+        "technicians": "SELECT id::text,concat_ws(' ',prenom,nom) FROM gemapi.techniciens ORDER BY nom,prenom",
+        "communes": "SELECT id::text,nom FROM gemapi.communes ORDER BY nom",
+        "types": "SELECT id::text,libelle FROM gemapi.types_prestations ORDER BY libelle,id",
+        "ah": "SELECT id::text,nom FROM gemapi.ah ORDER BY nom,id",
+        "site_terrestre": "SELECT id::text,nom FROM gemapi.sites_terrestres ORDER BY nom,id",
     }
     if include_providers:
-        queries["providers"] = "SELECT id::text,nom FROM milieux.prestataires ORDER BY nom,id"
+        queries["providers"] = "SELECT id::text,nom FROM gemapi.prestataires ORDER BY nom,id"
     if include_statuses:
         queries["statuses"] = (
-            "SELECT id::text,libelle FROM milieux.statuts_prestations "
+            "SELECT id::text,libelle FROM gemapi.statuts_prestations "
             "ORDER BY CASE code WHEN 'PLANIFIE' THEN 1 WHEN 'EN_COURS' THEN 2 "
             "WHEN 'TERMINE' THEN 3 WHEN 'ANNULE' THEN 4 END"
         )
     for key, (_, _, _, table) in PATRIMONY.items():
         if key in ("ah_stockage", "ah_ouvrage"):
             queries[key] = (f"SELECT o.id::text,a.nom || ' — ' || COALESCE(o.nom,'Sans nom') "
-                            f"FROM milieux.{table} o JOIN milieux.ah a ON a.id=o.ah_id ORDER BY 2,1")
+                            f"FROM gemapi.{table} o JOIN gemapi.ah a ON a.id=o.ah_id ORDER BY 2,1")
         elif key == "ah_sections":
-            queries[key] = (f"SELECT o.id::text,{section_label_sql()} FROM milieux.ah_sections o "
-                            "JOIN milieux.cours_eau r ON r.id=o.cours_eau_id "
-                            "JOIN milieux.ah a ON a.id=o.ah_id ORDER BY 2,1")
+            queries[key] = (f"SELECT o.id::text,{section_label_sql()} FROM gemapi.ah_sections o "
+                            "JOIN gemapi.cours_eau r ON r.id=o.cours_eau_id "
+                            "JOIN gemapi.ah a ON a.id=o.ah_id ORDER BY 2,1")
         elif key == "cours_eau":
             queries[key] = labels_query_sql()
         elif key in SITE_CHILDREN:
-            queries[key] = (f"SELECT o.id::text,s.nom || ' — ' || o.{TARGETS[key].name} FROM {TARGETS[key].schema}.{table} o "
-                            "JOIN milieux.sites_terrestres s ON s.id=o.site_terrestre_id ORDER BY 2,1")
+            queries[key] = (f"SELECT o.id::text,s.nom || ' — ' || o.{TARGETS[key].name} FROM gemapi.{table} o "
+                            "JOIN gemapi.sites_terrestres s ON s.id=o.site_terrestre_id ORDER BY 2,1")
         else:
             queries[key] = (f"SELECT id::text,COALESCE({TARGETS[key].name},'Sans nom') "
-                            f"FROM {TARGETS[key].schema}.{table} ORDER BY 2,1")
+                            f"FROM gemapi.{table} ORDER BY 2,1")
     return queries
 
 
@@ -269,7 +269,7 @@ def _selection_conditions(filters, management=False):
     if filters["communes"]:
         ids = ", ".join(literal(value, "::uuid") for value in filters["communes"])
         conditions.append(
-            "EXISTS (SELECT 1 FROM milieux.communes selected_c WHERE selected_c.id IN ("
+            "EXISTS (SELECT 1 FROM gemapi.communes selected_c WHERE selected_c.id IN ("
             + ids + ") AND ST_Intersects(selected_c.geom," + _effective_geometry_sql() + "))")
     for key, parent_kind in (("ah", "ah"), ("site_terrestre", "site_terrestre")):
         if filters[key]:
@@ -324,17 +324,17 @@ def build_management_query(filters, search_text=""):
         relations + "SELECT id,titre,version FROM (SELECT DISTINCT ON (p.id) p.id::text AS id, "
         "COALESCE(NULLIF(btrim(p.intitule),''),tp.libelle || ' — ' || "
         "to_char(p.date_debut,'DD/MM/YYYY')) AS titre,p.date_debut,p.xmin::text AS version "
-        "FROM milieux.prestations p "
-        "JOIN milieux.statuts_prestations s ON s.id=p.statut_id "
-        "JOIN milieux.types_prestations tp ON tp.id=p.type_prestation_id "
-        "JOIN milieux.prestataires pr ON pr.id=p.prestataire_id "
-        "LEFT JOIN milieux.techniciens t ON t.id=p.technicien_id "
+        "FROM gemapi.prestations p "
+        "JOIN gemapi.statuts_prestations s ON s.id=p.statut_id "
+        "JOIN gemapi.types_prestations tp ON tp.id=p.type_prestation_id "
+        "JOIN gemapi.prestataires pr ON pr.id=p.prestataire_id "
+        "LEFT JOIN gemapi.techniciens t ON t.id=p.technicien_id "
         + "WHERE " + (" AND ".join(conditions) if conditions else "true") +
         " ORDER BY p.id) matched ORDER BY date_debut DESC,id")
 
 
 def _effective_geometry_sql():
-    return "(SELECT carto.geom FROM milieux.prestations_carte carto WHERE carto.id=p.id)"
+    return "(SELECT carto.geom FROM gemapi.prestations_carte carto WHERE carto.id=p.id)"
 
 
 def build_report_query(filters, include_geometry=False, count_only=False):
@@ -342,8 +342,8 @@ def build_report_query(filters, include_geometry=False, count_only=False):
     where = " AND ".join(_selection_conditions(filters)) or "true"
     relations = "WITH relations AS (" + _relations_sql(include_indirect=True) + ") "
     if count_only:
-        return (relations + "SELECT count(DISTINCT p.id) FROM milieux.prestations p "
-                "JOIN milieux.statuts_prestations s ON s.id=p.statut_id WHERE " + where)
+        return (relations + "SELECT count(DISTINCT p.id) FROM gemapi.prestations p "
+                "JOIN gemapi.statuts_prestations s ON s.id=p.statut_id WHERE " + where)
     # Keep every recognized parent in metadata, but scope AH groups to selected
     # parents. Selecting A must not produce an unrelated B group for shared work.
     ah_scope = ("x.parent_kind<>'ah' OR x.parent_id IN (" +
@@ -376,7 +376,7 @@ def build_report_query(filters, include_geometry=False, count_only=False):
         "'; ' ORDER BY r.famille,r.nom,r.objet_id) FROM relations r "
         f"WHERE r.prestation_id=p.id AND r.direct AND NOT ({child_target})), "
         "(SELECT count(*) FROM relations r WHERE r.prestation_id=p.id AND r.direct),"
-        "(SELECT string_agg(c.nom,'; ' ORDER BY c.nom) FROM milieux.communes c "
+        "(SELECT string_agg(c.nom,'; ' ORDER BY c.nom) FROM gemapi.communes c "
         "WHERE ST_Intersects(c.geom," + _effective_geometry_sql() + ")),"
         "(SELECT COALESCE(json_agg(json_build_object('kind',x.parent_kind,'id',"
         "x.parent_id::text,'nom',x.parent_nom,'direct',x.direct,"
@@ -387,10 +387,10 @@ def build_report_query(filters, include_geometry=False, count_only=False):
         "p.photo_1,p.photo_1_commentaire,p.photo_2,p.photo_2_commentaire,"
         f"{own_wkt},{reference_wkt},p.position,p.rive,"
         "CASE WHEN p.geom IS NOT NULL AND ST_Dimension(p.geom)=0 THEN p.nombre_points END "
-        "FROM milieux.prestations p JOIN milieux.statuts_prestations s ON s.id=p.statut_id "
-        "LEFT JOIN milieux.types_prestations tp ON tp.id=p.type_prestation_id "
-        "LEFT JOIN milieux.techniciens t ON t.id=p.technicien_id "
-        "LEFT JOIN milieux.prestataires pr ON pr.id=p.prestataire_id "
+        "FROM gemapi.prestations p JOIN gemapi.statuts_prestations s ON s.id=p.statut_id "
+        "LEFT JOIN gemapi.types_prestations tp ON tp.id=p.type_prestation_id "
+        "LEFT JOIN gemapi.techniciens t ON t.id=p.technicien_id "
+        "LEFT JOIN gemapi.prestataires pr ON pr.id=p.prestataire_id "
         "WHERE " + where + " ORDER BY p.date_debut,p.intitule,p.id")
 
 

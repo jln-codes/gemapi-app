@@ -8,30 +8,17 @@ from qgis.PyQt import uic
 from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtWidgets import (QDialog, QLayout, QListWidgetItem, QSizePolicy,
                                 QComboBox, QLabel, QMessageBox)
-from qgis.core import QgsDataSourceUri, QgsMessageLog, QgsProject, QgsProviderRegistry, Qgis
+from qgis.core import QgsDataSourceUri, QgsMessageLog, QgsProject, Qgis
 
 from .record import TARGETS, CATEGORIES, LINKS, build_delete
 from .permissions import prestation_permissions
 from .watercourse_labels import label_sql, section_label_sql
 from .hydro_groups import build_options
 from .filter_picker import FilterPicker
-from .perf import connect, measure, profiled
-from .session_data import CACHE_ENABLED
+from .perf import measure, profiled
+from .session_data import CACHE_ENABLED, connection_from_project
 from .window_geometry import initialize_window
 from .report_data import build_management_query, filter_option_queries
-
-
-@profiled("manager.connection")
-def connection_from_project():
-    for layer in QgsProject.instance().mapLayers().values():
-        if not layer.isValid() or layer.providerType() != "postgres":
-            continue
-        uri = QgsDataSourceUri(layer.source())
-        if uri.schema() == "milieux" and uri.table() in ("prestations", "prestations_fiches", "prestations_carte"):
-            metadata = QgsProviderRegistry.instance().providerMetadata("postgres")
-            if metadata is not None:
-                return connect(metadata, uri.connectionInfo(False))
-    raise ValueError("Chargez milieux.prestations ou milieux.prestations_fiches depuis PostgreSQL.")
 
 
 @profiled("manager.sql.list")
@@ -49,13 +36,13 @@ def load_prestation(connection, prestation_id):
         "statut_id::text, date_debut::text, date_fin::text, quantite::text, unite, "
         "description, photo_1, photo_1_commentaire, photo_2, "
         "photo_2_commentaire, ST_AsText(geom), "
-        "(SELECT libelle FROM milieux.types_prestations WHERE id = p.type_prestation_id), "
-        "(SELECT nom FROM milieux.prestataires WHERE id = p.prestataire_id), "
-        "(SELECT libelle FROM milieux.statuts_prestations WHERE id = p.statut_id), "
+        "(SELECT libelle FROM gemapi.types_prestations WHERE id = p.type_prestation_id), "
+        "(SELECT nom FROM gemapi.prestataires WHERE id = p.prestataire_id), "
+        "(SELECT libelle FROM gemapi.statuts_prestations WHERE id = p.statut_id), "
         "p.xmin::text, p.technicien_id::text, "
-        "(SELECT concat_ws(' ', prenom, nom) FROM milieux.techniciens "
+        "(SELECT concat_ws(' ', prenom, nom) FROM gemapi.techniciens "
         "WHERE id = p.technicien_id), p.position, p.rive "
-        f"FROM milieux.prestations p WHERE p.id = '{uid}'::uuid")
+        f"FROM gemapi.prestations p WHERE p.id = '{uid}'::uuid")
     if len(rows) != 1 or len(rows[0]) != 23 or str(rows[0][0]) != uid:
         raise ValueError("Prestation introuvable ou réponse PostgreSQL inattendue.")
     parts = []
@@ -66,16 +53,16 @@ def load_prestation(connection, prestation_id):
             parts.append(
                 f"SELECT 'ah_sections' AS famille, o.id::text AS objet_id, {section_label_sql()} || "
                 "CASE WHEN v.etat_reference<>'CONFORME' THEN ' — référence à revalider' ELSE '' END AS nom "
-                "FROM milieux.prestations l JOIN milieux.ah_sections o ON o.id=l.ah_section_id "
-                "JOIN milieux.ah_sections_carte v ON v.id=o.id "
-                "JOIN milieux.cours_eau r ON r.id=o.cours_eau_id JOIN milieux.ah a ON a.id=o.ah_id "
+                "FROM gemapi.prestations l JOIN gemapi.ah_sections o ON o.id=l.ah_section_id "
+                "JOIN gemapi.ah_sections_carte v ON v.id=o.id "
+                "JOIN gemapi.cours_eau r ON r.id=o.cours_eau_id JOIN gemapi.ah a ON a.id=o.ah_id "
                 f"WHERE {predicate}")
             continue
         name = label_sql("o") if table == "cours_eau" else f"COALESCE(NULLIF(btrim(o.{TARGETS[table].name}), ''), 'Objet sans nom')"
         parts.append(
             f"SELECT '{table}' AS famille, l.{foreign_key}::text AS objet_id, "
             f"{name} AS nom "
-            f"FROM milieux.{link_table} l JOIN {TARGETS[table].schema}.{table} o "
+            f"FROM gemapi.{link_table} l JOIN gemapi.{table} o "
             f"ON o.id = l.{foreign_key} WHERE {predicate}")
     links = connection.executeSql(" UNION ALL ".join(parts) + " ORDER BY famille, nom, objet_id")
     # QGIS may expose SQL NULL as a null QVariant rather than Python None.
@@ -167,7 +154,7 @@ class ManageDialog(QDialog):
     def _hydro_layer(self):
         return next((layer for layer in QgsProject.instance().mapLayers().values()
                       if layer.isValid() and layer.providerType() == "postgres" and
-                      QgsDataSourceUri(layer.source()).schema() == "milieux" and
+                      QgsDataSourceUri(layer.source()).schema() == "gemapi" and
                       QgsDataSourceUri(layer.source()).table() == "cours_eau"), None)
 
     def _family_options(self, family, query):
@@ -266,7 +253,7 @@ class ManageDialog(QDialog):
                             rows = self.session.get(
                                 "reference.providers",
                                 lambda: tuple(self.connection.executeSql(
-                                    "SELECT id::text,nom,actif FROM milieux.prestataires ORDER BY nom,id")))
+                                    "SELECT id::text,nom,actif FROM gemapi.prestataires ORDER BY nom,id")))
                         else:
                             cache_key = ("reference.statuses" if key == "statuses"
                                          else f"filters.{key}")
@@ -402,7 +389,7 @@ class ManageDialog(QDialog):
                                        self._loaded_scope != self.session.scope_generation)):
                 raise ValueError("La connexion PostgreSQL a changé. Actualisez la gestion.")
             if not prestation_permissions(connection)["delete"]:
-                raise ValueError("Droit DELETE absent sur milieux.prestations.")
+                raise ValueError("Droit DELETE absent sur gemapi.prestations.")
             query = build_delete(prestation_id, version)
         except Exception as error:
             self.statusLabel.setText(str(error) if isinstance(error, ValueError)
@@ -421,7 +408,7 @@ class ManageDialog(QDialog):
                                              self._loaded_scope != self.session.scope_generation):
                 raise ValueError("La connexion PostgreSQL a changé. Actualisez la gestion.")
             if not prestation_permissions(connection)["delete"]:
-                raise ValueError("Droit DELETE absent sur milieux.prestations.")
+                raise ValueError("Droit DELETE absent sur gemapi.prestations.")
             connection.executeSql(query)
         except Exception as error:
             message = str(error)
@@ -430,7 +417,7 @@ class ManageDialog(QDialog):
             elif "SIG_PRESTATIONS_NOT_FOUND" in message:
                 message = "Cette prestation a déjà été supprimée. Actualisez la liste."
             elif "SIG_PRESTATIONS_FORBIDDEN" in message or "permission denied" in message.lower():
-                message = "Droit DELETE absent sur milieux.prestations."
+                message = "Droit DELETE absent sur gemapi.prestations."
             elif ("foreign key" in message.lower() or "clé étrangère" in message.lower()
                   or "23503" in message):
                 message = ("Suppression refusée : une autre donnée référence cette prestation. "
@@ -462,7 +449,7 @@ class ManageDialog(QDialog):
             if not layer.isValid() or layer.providerType() != "postgres":
                 continue
             uri = QgsDataSourceUri(layer.source())
-            if (uri.schema() == "milieux" and uri.table() == "prestations_carte" and
+            if (uri.schema() == "gemapi" and uri.table() == "prestations_carte" and
                     uri.connectionInfo(False) == source):
                 try:
                     layer.reload()

@@ -40,30 +40,30 @@ def candidate_query(wkt, radius_m, watercourse_id=None):
         raise ValueError("Rayon de recherche invalide.")
     target = f"ST_GeomFromText({literal(str(wkt))},3950)"
     branches = [
-        ("cours_eau", "milieux.cours_eau o", "o.geom",
+        ("cours_eau", "gemapi.cours_eau o", "o.geom",
          "",
          "ST_AsText(o.geom)", "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
-        ("digues", "milieux.digues_reperes o JOIN milieux.cours_eau r ON r.id=o.riviere_id",
-         "r.geom", "AND milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide) "
+        ("digues", "gemapi.digues_reperes o JOIN gemapi.cours_eau r ON r.id=o.riviere_id",
+         "r.geom", "AND gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide) "
          "AND md5(encode(ST_AsEWKB(r.geom),'hex'))=o.geom_riviere_signature "
          "AND ST_Equals(o.geom_reference,ST_LineSubstring(ST_GeometryN(r.geom,1),o.debut_fraction,o.fin_fraction))",
          "ST_AsText(o.geom_reference)", "o.riviere_id::text",
          "o.debut_fraction", "o.fin_fraction",
          "md5(encode(ST_AsEWKB(r.geom),'hex'))=o.geom_riviere_signature"),
-        ("ah_sections", "milieux.ah_sections_carte o JOIN milieux.cours_eau r ON r.id=o.cours_eau_id",
+        ("ah_sections", "gemapi.ah_sections_carte o JOIN gemapi.cours_eau r ON r.id=o.cours_eau_id",
          "r.geom", "AND o.etat_reference='CONFORME' AND o.cours_eau_qualifie IS TRUE "
          "AND o.signature_conforme IS TRUE "
          "AND ST_Equals(o.geom_reference,ST_LineSubstring(ST_GeometryN(r.geom,1),o.debut_fraction,o.fin_fraction))",
          "ST_AsText(o.geom_reference)", "o.cours_eau_id::text", "o.debut_fraction", "o.fin_fraction",
          "o.signature_conforme"),
-        ("ah_stockage", "milieux.ah_stockage o", "o.geom", "", "NULL::text",
+        ("ah_stockage", "gemapi.ah_stockage o", "o.geom", "", "NULL::text",
          "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
-        ("ah_ouvrage", "milieux.ah_ouvrage o", "o.geom", "", "NULL::text",
+        ("ah_ouvrage", "gemapi.ah_ouvrage o", "o.geom", "", "NULL::text",
          "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
-        *((key, f"{TARGETS[key].schema}.{key} o", f"o.{TARGETS[key].geometry}",
+        *((key, f"gemapi.{key} o", f"o.{TARGETS[key].geometry}",
            "AND o.site_terrestre_id IS NOT NULL", "NULL::text", "NULL::text", "NULL::float8",
            "NULL::float8", "NULL::boolean") for key in SITE_CHILDREN),
-        ("sites_terrestres", "milieux.sites_terrestres o", "o.geom", "", "NULL::text",
+        ("sites_terrestres", "gemapi.sites_terrestres o", "o.geom", "", "NULL::text",
          "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
     ]
     sql = []

@@ -33,18 +33,18 @@ def main():
         db=connect()
         def one(query):
             with db.cursor() as c:c.execute(query);return c.fetchone()[0]
-        values={k:one(f'SELECT id::text FROM milieux.{t} ORDER BY id LIMIT 1') for k,t in
+        values={k:one(f'SELECT id::text FROM gemapi.{t} ORDER BY id LIMIT 1') for k,t in
                 (('type_prestation_id','types_prestations'),('prestataire_id','prestataires'),('statut_id','statuts_prestations'),('technicien_id','techniciens'))}
         values.update(date_debut='2026-01-01',date_fin='2026-01-02')
-        ids={f:one(f'SELECT id::text FROM {TARGETS[f].schema}.{f} ORDER BY id LIMIT 1') for f in LINKS}
-        ids['vegetation']=one('SELECT id::text FROM public.vegetation WHERE site_terrestre_id IN (SELECT site_terrestre_id FROM public.vegetation GROUP BY site_terrestre_id HAVING count(*)>1) ORDER BY id LIMIT 1')
+        ids={f:one(f'SELECT id::text FROM gemapi.{f} ORDER BY id LIMIT 1') for f in LINKS}
+        ids['vegetation']=one('SELECT id::text FROM gemapi.vegetation WHERE site_terrestre_id IN (SELECT site_terrestre_id FROM gemapi.vegetation GROUP BY site_terrestre_id HAVING count(*)>1) ORDER BY id LIMIT 1')
         db.rollback()
         passed=[]
         def attempt(label,family,geom,accepted,extra=''):
             # Use raw SQL for DB rejection tests so Python validation cannot mask a missing SQL rule.
             cols=['id',*values,'geom'];uid=str(uuid4());params=[f"'{uid}'",*(f"'{v}'" for v in values.values()),'NULL' if geom is None else f"ST_GeomFromText('{geom}',3950)"]
             if family:cols.append(LINKS[family][1]);params.append(f"'{ids[family]}'")
-            query=f"INSERT INTO milieux.prestations({','.join(cols)}) VALUES ({','.join(params)});"
+            query=f"INSERT INTO gemapi.prestations({','.join(cols)}) VALUES ({','.join(params)});"
             query+=extra.replace('@id',uid)
             try:
                 with db.cursor() as c:c.execute(query);c.execute('SET CONSTRAINTS ALL IMMEDIATE')
@@ -60,51 +60,51 @@ def main():
                     accepted = True
                 attempt(f'{f}/{g}', f, g, accepted)
         attempt('no attachment',None,'POINT(0 0)',False)
-        attempt('parent+zone','sites_terrestres','MULTIPOINT((0 0))',False,"UPDATE milieux.prestations SET vegetation_id='"+ids['vegetation']+"' WHERE id='@id';")
-        attempt('two direct modes','cours_eau','POINT(0 0)',False,f"UPDATE milieux.prestations SET digue_id='{ids['digues']}' WHERE id='@id';")
-        attempt('last zone removed','vegetation',None,False,"UPDATE milieux.prestations SET vegetation_id=NULL WHERE id='@id';")
-        attempt('position incompatible','sites_terrestres','MULTIPOINT((0 0))',False,"UPDATE milieux.prestations SET position='Crête' WHERE id='@id';")
-        attempt('rive incompatible','ah_stockage',None,False,"UPDATE milieux.prestations SET rive='Gauche' WHERE id='@id';")
+        attempt('parent+zone','sites_terrestres','MULTIPOINT((0 0))',False,"UPDATE gemapi.prestations SET vegetation_id='"+ids['vegetation']+"' WHERE id='@id';")
+        attempt('two direct modes','cours_eau','POINT(0 0)',False,f"UPDATE gemapi.prestations SET digue_id='{ids['digues']}' WHERE id='@id';")
+        attempt('last zone removed','vegetation',None,False,"UPDATE gemapi.prestations SET vegetation_id=NULL WHERE id='@id';")
+        attempt('position incompatible','sites_terrestres','MULTIPOINT((0 0))',False,"UPDATE gemapi.prestations SET position='Crête' WHERE id='@id';")
+        attempt('rive incompatible','ah_stockage',None,False,"UPDATE gemapi.prestations SET rive='Gauche' WHERE id='@id';")
         # Real plugin insert, read-only reports, atomic replacement, and null own measures.
         with db.cursor() as c:c.execute(build_insert(values,[('ah_stockage',ids['ah_stockage'])]));uid=c.fetchone()[0]
         db.commit()
         with db.cursor() as c:
-            c.execute('SELECT xmin::text FROM milieux.prestations WHERE id=%s',(uid,));version=c.fetchone()[0]
+            c.execute('SELECT xmin::text FROM gemapi.prestations WHERE id=%s',(uid,));version=c.fetchone()[0]
             c.execute(build_update(uid,version,values,values,[('ah_stockage',ids['ah_stockage'])],[('ah_ouvrage',ids['ah_ouvrage'])],None,None))
         db.commit();passed.append('atomic replacement via plugin')
-        site_id=one(f"SELECT site_terrestre_id::text FROM public.vegetation WHERE id='{ids['vegetation']}'")
+        site_id=one(f"SELECT site_terrestre_id::text FROM gemapi.vegetation WHERE id='{ids['vegetation']}'")
         with db.cursor() as c:
             c.execute(build_insert(values,[('vegetation',ids['vegetation'])]));zone_uid=c.fetchone()[0]
         db.commit()
         with db.cursor() as c:
-            c.execute('SELECT xmin::text FROM milieux.prestations WHERE id=%s',(zone_uid,));zone_version=c.fetchone()[0]
+            c.execute('SELECT xmin::text FROM gemapi.prestations WHERE id=%s',(zone_uid,));zone_version=c.fetchone()[0]
             c.execute(build_update(zone_uid,zone_version,values,values,
                                    [('vegetation',ids['vegetation'])],
                                    [('sites_terrestres',site_id)],None,'MULTIPOINT((0 0))'))
         db.commit()
         with db.cursor() as c:
-            c.execute('SELECT xmin::text FROM milieux.prestations WHERE id=%s',(zone_uid,));zone_version=c.fetchone()[0]
+            c.execute('SELECT xmin::text FROM gemapi.prestations WHERE id=%s',(zone_uid,));zone_version=c.fetchone()[0]
             c.execute(build_update(zone_uid,zone_version,values,values,
                                    [('sites_terrestres',site_id)],
                                    [('vegetation',ids['vegetation'])],'MULTIPOINT((0 0))',None))
-            c.execute('SELECT vegetation_id::text,site_terrestre_id FROM milieux.prestations WHERE id=%s',(zone_uid,))
+            c.execute('SELECT vegetation_id::text,site_terrestre_id FROM gemapi.prestations WHERE id=%s',(zone_uid,))
             assert c.fetchone()==(ids['vegetation'],None)
         db.commit()
-        with db.cursor() as c:c.execute('DELETE FROM milieux.prestations WHERE id=%s',(zone_uid,))
+        with db.cursor() as c:c.execute('DELETE FROM gemapi.prestations WHERE id=%s',(zone_uid,))
         db.commit();passed.append('zone → site parent → zone via plugin')
         with db.cursor() as c:
             c.execute(build_report_query({},include_geometry=True));rows=prepare_rows(c.fetchall())
             assert len(rows)==1 and not rows[0]['has_geometry'] and rows[0]['own_length'] is None and rows[0]['reference_geometries']
-            c.execute('SELECT count(*) FROM milieux.prestations_fiches');assert c.fetchone()[0]==1
-            c.execute('SELECT count(*) FROM milieux.prestations__ah');assert c.fetchone()[0]==1
+            c.execute('SELECT count(*) FROM gemapi.prestations_fiches');assert c.fetchone()[0]==1
+            c.execute('SELECT count(*) FROM gemapi.prestations__ah');assert c.fetchone()[0]==1
         db.rollback();passed.append('reports, own NULL measures, parent views')
         # Zone localisation is effective geometry, never an own geometry copy.
         for kind,table in [('ST_MultiPoint','mobilier'),('ST_MultiLineString','vegetation'),('ST_MultiPolygon','cheminements')]:
-            zone=one(f"SELECT id::text FROM public.{table} WHERE ST_GeometryType(geometry)='{kind}' ORDER BY id LIMIT 1")
+            zone=one(f"SELECT id::text FROM gemapi.{table} WHERE ST_GeometryType(geometry)='{kind}' ORDER BY id LIMIT 1")
             with db.cursor() as c:
                 c.execute(build_insert({**values,'quantite':'7','unite':'arbres'},[(table,zone)]))
                 test_id=c.fetchone()[0]
-                c.execute(f'SELECT p.geom IS NULL,ST_Equals(v.geom,z.geometry),f.possede_geometrie,f.type_geometrie_postgis,p.quantite,p.unite FROM milieux.prestations p JOIN public.{table} z ON z.id=p.{TARGETS[table].fk} JOIN milieux.prestations_carte v ON v.id=p.id JOIN milieux.prestations_fiches f ON f.id=p.id WHERE p.id=%s',(test_id,))
+                c.execute(f'SELECT p.geom IS NULL,ST_Equals(v.geom,z.geometry),f.possede_geometrie,f.type_geometrie_postgis,p.quantite,p.unite FROM gemapi.prestations p JOIN gemapi.{table} z ON z.id=p.{TARGETS[table].fk} JOIN gemapi.prestations_carte v ON v.id=p.id JOIN gemapi.prestations_fiches f ON f.id=p.id WHERE p.id=%s',(test_id,))
                 assert c.fetchone()==(True,True,True,kind,7,'arbres')
                 c.execute(build_report_query({table:[zone]},include_geometry=True))
                 item=next(r for r in prepare_rows(c.fetchall()) if r['id']==str(test_id))
@@ -116,24 +116,24 @@ def main():
                     assert measure_lines(item,include_quantity=False)==['Géométrie ponctuelle du patrimoine']
                 else:
                     field,function=('site_child_length','ST_Length') if kind=='ST_MultiLineString' else ('site_child_area','ST_Area')
-                    c.execute(f'SELECT {function}(geometry) FROM public.{table} WHERE id=%s',(zone,))
+                    c.execute(f'SELECT {function}(geometry) FROM gemapi.{table} WHERE id=%s',(zone,))
                     assert isclose(item[field],c.fetchone()[0],rel_tol=1e-12)
                     assert 'géométrie parente' in measure_lines(item,include_quantity=False)[0]
-                c.execute(f'SELECT id::text FROM milieux.communes WHERE ST_Intersects(geom,(SELECT geometry FROM public.{table} WHERE id=%s)) LIMIT 1',(zone,))
+                c.execute(f'SELECT id::text FROM gemapi.communes WHERE ST_Intersects(geom,(SELECT geometry FROM gemapi.{table} WHERE id=%s)) LIMIT 1',(zone,))
                 commune=c.fetchone()
                 if commune:
                     c.execute(build_report_query({table:[zone],'communes':[commune[0]]},include_geometry=True))
                     assert any(r['id']==str(test_id) for r in prepare_rows(c.fetchall()))
-                c.execute('DELETE FROM milieux.prestations WHERE id=%s',(test_id,))
+                c.execute('DELETE FROM gemapi.prestations WHERE id=%s',(test_id,))
             db.commit();passed.append('zone effective geometry, view, report, quantity '+kind)
         # Racing zone-vs-direct writes must fail rather than commit an invalid state.
         for isolation in ('READ COMMITTED','REPEATABLE READ'):
             a,b=connect(),connect();a.set_session(isolation_level=isolation);b.set_session(isolation_level=isolation)
-            with b.cursor() as c:c.execute('SELECT count(*) FROM milieux.prestations')
-            with a.cursor() as c:c.execute('UPDATE milieux.prestations SET intitule=%s WHERE id=%s',(isolation,uid))
+            with b.cursor() as c:c.execute('SELECT count(*) FROM gemapi.prestations')
+            with a.cursor() as c:c.execute('UPDATE gemapi.prestations SET intitule=%s WHERE id=%s',(isolation,uid))
             def race():
                 try:
-                    with b.cursor() as c:c.execute('SET statement_timeout=5000');c.execute('UPDATE milieux.prestations SET vegetation_id=%s WHERE id=%s',(ids['vegetation'],uid))
+                    with b.cursor() as c:c.execute('SET statement_timeout=5000');c.execute('UPDATE gemapi.prestations SET vegetation_id=%s WHERE id=%s',(ids['vegetation'],uid))
                     b.commit();return False
                 except psycopg2.Error:b.rollback();return True
             with ThreadPoolExecutor() as pool:
@@ -149,7 +149,7 @@ def main():
         from gemapi_app.creation import CreationDialog
         app=QgsApplication([],True);app.initQgis();iface=Interface()
         for table,kind in [('prestations',QgsWkbTypes.Point),]:
-            uri=QgsDataSourceUri();uri.setConnection('127.0.0.1',port,'postgres','postgres','');uri.setDataSource('milieux',table,'geom','','id');uri.setWkbType(kind);uri.setSrid('3950')
+            uri=QgsDataSourceUri();uri.setConnection('127.0.0.1',port,'postgres','postgres','');uri.setDataSource('gemapi',table,'geom','','id');uri.setWkbType(kind);uri.setSrid('3950')
             layer=QgsVectorLayer(uri.uri(False),table,'postgres');assert layer.isValid();QgsProject.instance().addMapLayer(layer)
         dialog=CreationDialog(iface);dialog.show();app.processEvents()
         assert not dialog._object_load_failures

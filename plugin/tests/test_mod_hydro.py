@@ -94,7 +94,7 @@ class ModHydroTests(unittest.TestCase):
         self.assertEqual(qualified,{'90368380-5d42-4a28-9889-6ae657f84a75'})
         self.assertGreaterEqual(multipart, 3)
         self.assertGreaterEqual(disjoint, 2)
-        self.assertGreaterEqual(unnamed, 2)
+        self.assertEqual(unnamed, 0)
         self.assertTrue({"rivière", "ruisseau", "fossé", "canal", "indéterminé"} <= kinds)
         homonyms = names["Ruisseau des Trois Saules"]
         self.assertEqual(len(homonyms), 3)
@@ -123,14 +123,14 @@ class ModHydroTests(unittest.TestCase):
                                                if name.endswith(".qgs")))
         layers = root.findall("./projectlayers/maplayer")
         hydro = [layer for layer in layers if layer.findtext("layername") == "Cours d'eau"]
-        self.assertEqual(len(layers), 25)
+        self.assertEqual(len(layers), 33)
         for table in ('ah_sections','ah_sections_carte'):
-            section_layers=[layer for layer in layers if f'"milieux"."{table}"' in layer.findtext('datasource','')]
+            section_layers=[layer for layer in layers if f'"gemapi"."{table}"' in layer.findtext('datasource','')]
             self.assertEqual(len(section_layers),1)
             self.assertEqual(section_layers[0].get('readOnly'),'1')
         self.assertEqual(len({layer.findtext('id') for layer in layers}),len(layers))
         self.assertEqual(len(hydro), 1)
-        self.assertIn('"milieux"."cours_eau"', hydro[0].findtext("datasource"))
+        self.assertIn('"gemapi"."cours_eau"', hydro[0].findtext("datasource"))
         self.assertIn("type=MultiLineString", hydro[0].findtext("datasource"))
         fields = hydro[0].find("fieldConfiguration")
         self.assertIsNotNone(fields.find("./field[@name='valide']/editWidget[@type='CheckBox']"))

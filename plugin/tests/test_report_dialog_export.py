@@ -29,7 +29,7 @@ class Connection:
             return [[self.count]]
         if "current_user::text" in query:
             return [["test_report"]]
-        if "FROM milieux.techniciens " in query:
+        if "FROM gemapi.techniciens " in query:
             return []
         record = dict.fromkeys(ROW_FIELDS)
         record.update(id=str(uuid4()), intitule="Prestation de test",

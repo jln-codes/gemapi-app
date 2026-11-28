@@ -44,7 +44,7 @@ def main():
     source = (ROOT / "demo/data/15_prestations.sql").read_text(encoding="utf-8")
     row_pattern = re.compile(
         r"VALUES \('([0-9a-f-]{36})','([^']*)','([0-9a-f-]{36})',"
-        r"'([0-9a-f-]{36})',\(SELECT id FROM milieux.statuts_prestations "
+        r"'([0-9a-f-]{36})',\(SELECT id FROM gemapi\.statuts_prestations "
         r"WHERE code='([^']+)'\),'([0-9a-f-]{36})','(2026-[^']+)',"
         r"'([^']+)',([0-9.]+),'([^']*)','([^']*)',"
         r"ST_GeomFromWKB\(decode\('([0-9a-f]+)','hex'\),3950\)\)"

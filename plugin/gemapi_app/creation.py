@@ -11,7 +11,7 @@ from qgis.PyQt.QtGui import QDesktopServices, QImageReader, QPixmap
 from qgis.PyQt.QtWidgets import (QDialog, QFileDialog, QGroupBox, QHBoxLayout, QToolButton,
                                 QLabel, QLayout, QListWidgetItem, QMessageBox,
                                 QSizePolicy, QVBoxLayout)
-from qgis.core import (QgsApplication, QgsDataSourceUri, QgsGeometry, QgsMessageLog, QgsProviderRegistry,
+from qgis.core import (QgsApplication, QgsDataSourceUri, QgsGeometry, QgsMessageLog,
                        QgsProject, QgsVectorLayer, QgsWkbTypes, Qgis)
 from qgis.gui import QgsMapTool
 
@@ -47,8 +47,8 @@ from .patrimony_spatial import candidate_query, resolve_candidates
 from .record import SITE_CHILDREN, TARGETS, CATEGORIES, LINKS, POSITIONS, RIVES, build_insert, build_update, validate
 from .photo_paths import reference_for, resolve_photo
 from .management import load_prestation
-from .perf import connect, measure, profiled
-from .session_data import CACHE_ENABLED
+from .perf import measure, profiled
+from .session_data import CACHE_ENABLED, connection_from_project
 from .window_geometry import initialize_window
 from .prestation_focus import focus_prestation
 
@@ -616,7 +616,7 @@ class CreationDialog(QDialog):
             if not layer.isValid() or layer.providerType() != "postgres":
                 continue
             source = QgsDataSourceUri(layer.source())
-            if source.schema() == "milieux" and source.table() == table:
+            if source.schema() == "gemapi" and source.table() == table:
                 return layer
         return None
 
@@ -646,7 +646,7 @@ class CreationDialog(QDialog):
             if not layer.isValid() or layer.providerType() != "postgres":
                 continue
             uri = QgsDataSourceUri(layer.source())
-            if (uri.schema() == target.schema and uri.table() == table and
+            if (uri.schema() == "gemapi" and uri.table() == table and
                     uri.geometryColumn() == target.geometry and uri.connectionInfo(False) == connection):
                 available[layer.subsetString(), layer.wkbType()] = layer
         layers = []
@@ -657,12 +657,12 @@ class CreationDialog(QDialog):
                 layers.append(available[subset, kind])
                 continue
             uri = QgsDataSourceUri(anchor.source())
-            uri.setDataSource(target.schema, table, target.geometry, subset, "id")
+            uri.setDataSource("gemapi", table, target.geometry, subset, "id")
             uri.setSrid("3950")
             uri.setWkbType(kind)
             layer = QgsVectorLayer(uri.uri(False), target.label, "postgres")
             if not layer.isValid():
-                raise ValueError(f"Couche {target.schema}.{table} inaccessible.")
+                raise ValueError(f"Couche gemapi.{table} inaccessible.")
             layer.setReadOnly(True)
             layers.append(layer)
         return layers
@@ -679,7 +679,7 @@ class CreationDialog(QDialog):
         if not anchor:
             return None
         uri = QgsDataSourceUri(anchor.source())
-        uri.setDataSource("milieux", source_table, "geom",
+        uri.setDataSource("gemapi", source_table, "geom",
                           "etat_reference='CONFORME' AND cours_eau_qualifie IS TRUE AND signature_conforme IS TRUE"
                           if table == "ah_sections" else "", "id")
         uri.setSrid("3950")
@@ -695,7 +695,7 @@ class CreationDialog(QDialog):
             uri.setWkbType(kind)
         layer = QgsVectorLayer(uri.uri(False), table, "postgres")
         if not layer.isValid():
-            raise ValueError(f"La table PostgreSQL milieux.{table} est inaccessible.")
+            raise ValueError(f"La table PostgreSQL gemapi.{table} est inaccessible.")
         return layer
 
     def _load_types(self):
@@ -704,11 +704,11 @@ class CreationDialog(QDialog):
                 connection = self._connection()
                 return (
                     tuple(connection.executeSql(
-                        "SELECT id::text,libelle FROM milieux.prestations_categorie "
+                        "SELECT id::text,libelle FROM gemapi.prestations_categorie "
                         "ORDER BY ordre,libelle,id")),
                     tuple(connection.executeSql(
                         "SELECT id::text,libelle,categorie_id::text,actif "
-                        "FROM milieux.types_prestations ORDER BY libelle,id")),
+                        "FROM gemapi.types_prestations ORDER BY libelle,id")),
                 )
             categories, types = (self.session.get("reference.type_hierarchy", fetch)
                                  if self.session is not None else fetch())
@@ -725,10 +725,10 @@ class CreationDialog(QDialog):
                 rows = self.session.get(
                     "reference.providers",
                     lambda: tuple(self._connection().executeSql(
-                        "SELECT id::text,nom,actif FROM milieux.prestataires ORDER BY nom,id")))
+                        "SELECT id::text,nom,actif FROM gemapi.prestataires ORDER BY nom,id")))
                 rows = (row[:2] for row in rows if row[2] in (True, 1, "t", "true"))
             else:
-                query = (f"SELECT id::text,{label_field} FROM milieux.{table} "
+                query = (f"SELECT id::text,{label_field} FROM gemapi.{table} "
                          f"WHERE actif ORDER BY {label_field},id")
                 rows = (self.session.get(
                     f"reference.{table}", lambda: tuple(self._connection().executeSql(query)))
@@ -739,13 +739,13 @@ class CreationDialog(QDialog):
             QgsMessageLog.logMessage(
                 f"Référentiel {table} :\n{traceback.format_exc()}",
                 "GEMAPI-App", Qgis.Critical)
-            self.statusLabel.setText(f"Référentiel milieux.{table} indisponible.")
+            self.statusLabel.setText(f"Référentiel gemapi.{table} indisponible.")
 
     @profiled("form.statuses")
     def _load_statuses(self):
         """Read the status reference through the prestation's database connection."""
         try:
-            query = ("SELECT id::text, libelle FROM milieux.statuts_prestations "
+            query = ("SELECT id::text, libelle FROM gemapi.statuts_prestations "
                      "ORDER BY CASE code WHEN 'PLANIFIE' THEN 1 WHEN 'EN_COURS' THEN 2 "
                      "WHEN 'TERMINE' THEN 3 WHEN 'ANNULE' THEN 4 END")
             rows = (self.session.get(
@@ -763,7 +763,7 @@ class CreationDialog(QDialog):
     def _load_technicians(self):
         try:
             query = ("SELECT id::text,concat_ws(' ',prenom,nom),actif "
-                     "FROM milieux.techniciens ORDER BY nom,prenom,id")
+                     "FROM gemapi.techniciens ORDER BY nom,prenom,id")
             rows = (self.session.get("reference.technicians",
                                      lambda: tuple(self._connection().executeSql(query)))
                     if self.session is not None else self._connection().executeSql(query))
@@ -788,7 +788,7 @@ class CreationDialog(QDialog):
                 return {str(feature["id"]): str(feature["nom"])
                         for feature in layer.getFeatures()}
             rows = self._connection().executeSql(
-                f"SELECT id::text,nom FROM milieux.{table}")
+                f"SELECT id::text,nom FROM gemapi.{table}")
             return {str(uid): str(name) for uid, name in rows}
 
         parents = {}
@@ -807,8 +807,8 @@ class CreationDialog(QDialog):
         self._section_labels = {}
         try:
             rows = self._connection().executeSql(
-                f"SELECT o.id::text,{section_label_sql()} AS label FROM milieux.ah_sections o "
-                "JOIN milieux.cours_eau r ON r.id=o.cours_eau_id JOIN milieux.ah a ON a.id=o.ah_id")
+                f"SELECT o.id::text,{section_label_sql()} AS label FROM gemapi.ah_sections o "
+                "JOIN gemapi.cours_eau r ON r.id=o.cours_eau_id JOIN gemapi.ah a ON a.id=o.ah_id")
             self._section_labels = {str(uid): str(label) for uid, label in rows}
         except Exception:
             QgsMessageLog.logMessage("Libellés des sections AH indisponibles.", "GEMAPI-App", Qgis.Warning)
@@ -820,7 +820,7 @@ class CreationDialog(QDialog):
                 if table == "cours_eau":
                     layer = self._object_layer(table)
                     if layer is None:
-                        raise ValueError("Chargez milieux.prestations depuis PostgreSQL dans QGIS.")
+                        raise ValueError("Chargez gemapi.prestations depuis PostgreSQL dans QGIS.")
                     for option in self._hydro_options():
                         for number, (uid, fid) in enumerate(zip(option.ids, option.fids), 1):
                             label = (f"{option.label} — tronçon {number}/{len(option.ids)}"
@@ -833,7 +833,7 @@ class CreationDialog(QDialog):
                 layers = (self._site_child_layers(table) if table in SITE_CHILDREN
                           else [self._object_layer(table)])
                 if not layers or any(layer is None for layer in layers):
-                    raise ValueError(f"Couche {TARGETS[table].schema}.{table} indisponible.")
+                    raise ValueError(f"Couche gemapi.{table} indisponible.")
                 for layer in layers:
                     for feature in layer.getFeatures():
                         if table == "ah_sections":
@@ -1310,16 +1310,7 @@ class CreationDialog(QDialog):
     def _connection(self):
         if self.session is not None:
             return self.session.connection()
-        anchor = (self._canonical_layer("prestations") or self._canonical_layer("prestations_fiches")
-                  or self._canonical_layer("prestations_carte"))
-        if not anchor:
-            raise ValueError("Chargez milieux.prestations, milieux.prestations_fiches ou milieux.prestations_carte depuis PostgreSQL.")
-        anchor_uri = QgsDataSourceUri(anchor.source())
-        connection_info = anchor_uri.connectionInfo(False)
-        metadata = QgsProviderRegistry.instance().providerMetadata("postgres")
-        if metadata is None:
-            raise ValueError("Le fournisseur PostgreSQL de QGIS est indisponible.")
-        return connect(metadata, connection_info)
+        return connection_from_project()
 
     def _check_spatial_attachment(self, associations, geometry_wkt):
         if len(associations) != 1:
@@ -1335,9 +1326,9 @@ class CreationDialog(QDialog):
         if family == "cours_eau":
             course_id = uid
         else:
-            query = (f"SELECT cours_eau_id::text FROM milieux.ah_sections WHERE id='{uid}'::uuid"
+            query = (f"SELECT cours_eau_id::text FROM gemapi.ah_sections WHERE id='{uid}'::uuid"
                      if family == "ah_sections" else
-                     f"SELECT riviere_id::text FROM milieux.digues_reperes WHERE digue_id='{uid}'::uuid")
+                     f"SELECT riviere_id::text FROM gemapi.digues_reperes WHERE digue_id='{uid}'::uuid")
             rows = connection.executeSql(query)
             if len(rows) != 1:
                 raise ValueError("Support hydrographique introuvable ; actualisez les données.")
@@ -1502,7 +1493,7 @@ class CreationDialog(QDialog):
             if not layer.isValid() or layer.providerType() != "postgres":
                 continue
             uri = QgsDataSourceUri(layer.source())
-            if (uri.schema() != "milieux" or uri.table() not in names or
+            if (uri.schema() != "gemapi" or uri.table() not in names or
                     uri.connectionInfo(False) != connection_info):
                 continue
             try:

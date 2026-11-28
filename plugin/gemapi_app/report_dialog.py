@@ -14,17 +14,17 @@ from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout,
 )
-from qgis.core import QgsApplication, QgsDataSourceUri, QgsMessageLog, QgsProject, QgsProviderRegistry, Qgis
+from qgis.core import QgsApplication, QgsMessageLog, QgsProject, Qgis
 
 from .report_data import (
     GROUPS, PATRIMONY_GROUPS, REPORT_FILTERS, PATRIMONY, build_report_query,
     filter_option_queries, normalized_filters, prepare_rows, report_warnings,
     resolve_report_editor,
 )
-from .perf import ENABLED, connect, measure, profiled
+from .perf import ENABLED, measure, profiled
 from .filter_picker import FilterPicker
 from .pdf_runtime import select_python, worker_environment
-from .session_data import connection_login
+from .session_data import connection_from_project, connection_login
 from .window_geometry import initialize_window
 
 
@@ -242,17 +242,7 @@ class ReportDialog(QDialog):
     def _connection(self):
         if self.session is not None:
             return self.session.connection()
-        for layer in QgsProject.instance().mapLayers().values():
-            if not layer.isValid() or layer.providerType() != "postgres":
-                continue
-            uri = QgsDataSourceUri(layer.source())
-            if uri.schema() != "milieux" or uri.table() not in ("prestations", "prestations_fiches", "prestations_carte"):
-                continue
-            metadata = QgsProviderRegistry.instance().providerMetadata("postgres")
-            if metadata is None:
-                break
-            return connect(metadata, uri.connectionInfo(False))
-        raise ValueError("Chargez milieux.prestations ou milieux.prestations_fiches depuis PostgreSQL.")
+        return connection_from_project()
 
     @profiled("report.filters")
     def _load_options(self):
@@ -261,12 +251,12 @@ class ReportDialog(QDialog):
             def preflight():
                 available = self.connection.executeSql(
                     "SELECT count(*) FROM information_schema.columns "
-                    "WHERE table_schema='milieux' AND table_name='prestations' "
+                    "WHERE table_schema='gemapi' AND table_name='prestations' "
                     "AND column_name='statut_id'")
                 if int(available[0][0]) != 1:
                     raise ValueError("La colonne statut_id est absente du schéma courant.")
                 pending = self.connection.executeSql(
-                    "SELECT count(*) FROM milieux.prestations WHERE statut_id IS NULL "
+                    "SELECT count(*) FROM gemapi.prestations WHERE statut_id IS NULL "
                     "OR type_prestation_id IS NULL OR prestataire_id IS NULL "
                     "OR date_debut IS NULL OR date_fin IS NULL OR date_fin < date_debut")
                 if int(pending[0][0]):

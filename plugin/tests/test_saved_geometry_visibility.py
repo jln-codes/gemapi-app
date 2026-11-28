@@ -32,14 +32,14 @@ def main():
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text())
         provider_id, type_id, technician_id, ah_id, storage_id, ouvrage_id = (str(uuid4()) for _ in range(6))
-        sql(container, f"INSERT INTO milieux.prestataires (id,nom) "
+        sql(container, f"INSERT INTO gemapi.prestataires (id,nom) "
                        f"VALUES ('{provider_id}','Prestataire test'); "
-                       "INSERT INTO milieux.types_prestations (id,code,libelle, categorie_id) "
+                       "INSERT INTO gemapi.types_prestations (id,code,libelle, categorie_id) "
                        f"VALUES ('{type_id}','VISIBILITE','Test visibilité', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa'); "
-                       f"INSERT INTO milieux.techniciens(id,nom,prenom) VALUES ('{technician_id}','Test','Alice'); "
-                       f"INSERT INTO milieux.ah(id,nom) VALUES ('{ah_id}','AH de test'); "
-                       f"INSERT INTO milieux.ah_stockage(id,ah_id,nom,geom) VALUES ('{storage_id}','{ah_id}','Stockage',ST_GeomFromText('POLYGON((-100 -100,100 -100,100 100,-100 100,-100 -100))',3950)); "
-                       f"INSERT INTO milieux.ah_ouvrage(id,ah_id,nom,geom) VALUES ('{ouvrage_id}','{ah_id}','Ouvrage',ST_GeomFromText('LINESTRING(0 0,20 0)',3950));")
+                       f"INSERT INTO gemapi.techniciens(id,nom,prenom) VALUES ('{technician_id}','Test','Alice'); "
+                       f"INSERT INTO gemapi.ah(id,nom) VALUES ('{ah_id}','AH de test'); "
+                       f"INSERT INTO gemapi.ah_stockage(id,ah_id,nom,geom) VALUES ('{storage_id}','{ah_id}','Stockage',ST_GeomFromText('POLYGON((-100 -100,100 -100,100 100,-100 100,-100 -100))',3950)); "
+                       f"INSERT INTO gemapi.ah_ouvrage(id,ah_id,nom,geom) VALUES ('{ouvrage_id}','{ah_id}','Ouvrage',ST_GeomFromText('LINESTRING(0 0,20 0)',3950));")
         port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[-1]
         app = QgsApplication([], True)
         app.initQgis()
@@ -51,7 +51,7 @@ def main():
         def make_layer(table, geometry_column, display_name, kind=QgsWkbTypes.Point):
             uri = QgsDataSourceUri()
             uri.setConnection("127.0.0.1", port, "postgres", "postgres", "")
-            uri.setDataSource("milieux", table, geometry_column, "", "id")
+            uri.setDataSource("gemapi", table, geometry_column, "", "id")
             if geometry_column:
                 uri.setWkbType(kind)
                 uri.setSrid("3950")
@@ -98,7 +98,7 @@ def main():
         feature = next(prestations.getFeatures())
         assert feature.geometry().asWkt().upper().startswith("POINT")
         assert prestations.renderer().symbol().dump() == symbol_before
-        assert sql(container, "SELECT ST_AsText(geom) FROM milieux.prestations").stdout.strip() == "POINT(0 0)"
+        assert sql(container, "SELECT ST_AsText(geom) FROM gemapi.prestations").stdout.strip() == "POINT(0 0)"
         canvas.refresh()
         app.processEvents()
         assert canvas.layers() == [prestations]
@@ -128,7 +128,7 @@ def main():
             assert form.geometry is None
             form._save()
             assert 'enregistrées' in form.statusLabel.text(), form.statusLabel.text()
-            uid = sql(container, "SELECT id FROM milieux.prestations WHERE intitule='" + title + "'").stdout.strip()
+            uid = sql(container, "SELECT id FROM gemapi.prestations WHERE intitule='" + title + "'").stdout.strip()
             assert uid
             form.shutdown()
             return uid
@@ -163,7 +163,7 @@ def main():
             form._save()
             assert form._edit_saved
             assert [layer.featureCount() for layer in layers] == expected
-            assert sql(container, "SELECT quantite=3,geom IS NULL FROM milieux.prestations "
+            assert sql(container, "SELECT quantite=3,geom IS NULL FROM gemapi.prestations "
                        f"WHERE id='{storage_prestation}'").stdout.strip() == ('t|f' if own else 't|t')
             form.shutdown()
         assert [layer.renderer().symbol().dump() for layer in layers] == symbols

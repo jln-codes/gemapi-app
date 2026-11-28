@@ -16,9 +16,9 @@ from .watercourse_labels import labels_query_sql
 
 
 _dialogs = set()
-SAVE_FUNCTION = ('milieux.digue_enregistrer(uuid,uuid,integer,timestamptz,'
+SAVE_FUNCTION = ('gemapi.digue_enregistrer(uuid,uuid,integer,timestamptz,'
                  'text,text,text,uuid,text,double precision,double precision,text)')
-DELETE_FUNCTION = 'milieux.digue_supprimer(uuid,integer,timestamptz)'
+DELETE_FUNCTION = 'gemapi.digue_supprimer(uuid,integer,timestamptz)'
 
 
 def uid(value):
@@ -58,16 +58,16 @@ class DigueStore:
     def permissions(self):
         return self.rows(
             f"SELECT has_function_privilege('{SAVE_FUNCTION}','EXECUTE') AND "
-            "has_table_privilege('milieux.digues','INSERT') AND "
-            "has_table_privilege('milieux.digues','UPDATE') AND "
-            "has_table_privilege('milieux.digues_reperes','INSERT') AND "
-            "has_table_privilege('milieux.digues_reperes','UPDATE') AND "
-            "has_table_privilege('milieux.cours_eau','UPDATE'),"
+            "has_table_privilege('gemapi.digues','INSERT') AND "
+            "has_table_privilege('gemapi.digues','UPDATE') AND "
+            "has_table_privilege('gemapi.digues_reperes','INSERT') AND "
+            "has_table_privilege('gemapi.digues_reperes','UPDATE') AND "
+            "has_table_privilege('gemapi.cours_eau','UPDATE'),"
             f"has_function_privilege('{DELETE_FUNCTION}','EXECUTE') AND "
-            "has_table_privilege('milieux.digues','DELETE') AND "
-            "has_table_privilege('milieux.digues','UPDATE') AND "
-            "has_table_privilege('milieux.digues_reperes','DELETE') AND "
-            "has_table_privilege('milieux.digues_reperes','UPDATE')")[0]
+            "has_table_privilege('gemapi.digues','DELETE') AND "
+            "has_table_privilege('gemapi.digues','UPDATE') AND "
+            "has_table_privilege('gemapi.digues_reperes','DELETE') AND "
+            "has_table_privilege('gemapi.digues_reperes','UPDATE')")[0]
 
     def courses(self):
         return self.rows(labels_query_sql(qualifications=True))
@@ -77,8 +77,8 @@ class DigueStore:
             'SELECT d.id::text,d.nom,d.identifiant_externe,d.commentaire,'
             'd.date_modification::text,s.riviere_id::text,s.rive,'
             's.debut_fraction,s.fin_fraction,s.revision_validation,v.etat_referentiel '
-            'FROM milieux.digues_reperes s JOIN milieux.digues d ON d.id=s.digue_id '
-            'JOIN milieux.digues_carte v ON v.id=s.id '
+            'FROM gemapi.digues_reperes s JOIN gemapi.digues d ON d.id=s.digue_id '
+            'JOIN gemapi.digues_carte v ON v.id=s.id '
             f"WHERE s.id='{uid(reference)}'")
         if not rows:
             raise ValueError('Cette digue ou son repère n’existe plus. Actualisez la table.')
@@ -90,8 +90,8 @@ class DigueStore:
             f'SELECT {self.postgis}.ST_AsText({self.postgis}.ST_LineSubstring('
             f'{self.postgis}.ST_GeometryN(geom,1),'
             f"{start},{end})),md5(encode({self.postgis}.ST_AsEWKB(geom),'hex')) "
-            f"FROM milieux.cours_eau WHERE id='{uid(course)}' "
-            'AND milieux.cours_eau_reference_admissible(geom,direction,valide)')
+            f"FROM gemapi.cours_eau WHERE id='{uid(course)}' "
+            'AND gemapi.cours_eau_reference_admissible(geom,direction,valide)')
         if not rows:
             raise ValueError('Cours d’eau non qualifié ou inexploitable. Choisissez un support qualifié.')
         return rows[0]
@@ -107,15 +107,15 @@ class DigueStore:
         revision = int(original[9]) if reference else 0
         stamp = literal(original[4], '::timestamptz') if reference else 'NULL::timestamptz'
         return self.rows(
-            f'SELECT milieux.digue_enregistrer({parent},{repere},{revision},{stamp},'
+            f'SELECT gemapi.digue_enregistrer({parent},{repere},{revision},{stamp},'
             f'{text_literal(name)},{text_literal(external)},{text_literal(comment)},'
             f"'{uid(course)}','{bank}',{start},{end},{literal(signature)})::text")[0][0]
 
     def dependencies(self, parent):
-        return int(self.rows(f"SELECT count(*) FROM milieux.prestations WHERE digue_id='{uid(parent)}'")[0][0])
+        return int(self.rows(f"SELECT count(*) FROM gemapi.prestations WHERE digue_id='{uid(parent)}'")[0][0])
 
     def delete(self, reference, original):
-        self.rows(f"SELECT milieux.digue_supprimer('{uid(reference)}',{int(original[9])},"
+        self.rows(f"SELECT gemapi.digue_supprimer('{uid(reference)}',{int(original[9])},"
                   f"{literal(original[4], '::timestamptz')})")
 
 
@@ -123,8 +123,8 @@ def store_for(layer):
     if layer is None or layer.providerType() != 'postgres':
         raise ValueError('La couche PostgreSQL des digues est indisponible.')
     uri = QgsDataSourceUri(layer.source())
-    if uri.schema() != 'milieux' or uri.table() not in ('digues', 'digues_carte'):
-        raise ValueError('Choisissez une couche de digues du schéma milieux.')
+    if uri.schema() != 'gemapi' or uri.table() not in ('digues', 'digues_carte'):
+        raise ValueError('Choisissez une couche de digues du schéma gemapi.')
     return DigueStore(QgsProviderRegistry.instance().providerMetadata('postgres').createConnection(
         uri.connectionInfo(False), {}))
 
@@ -304,7 +304,7 @@ def create(iface):
         active = iface.activeLayer()
         layers = [layer for layer in QgsProject.instance().mapLayers().values()
                   if layer.providerType() == 'postgres' and
-                  QgsDataSourceUri(layer.source()).schema() == 'milieux' and
+                  QgsDataSourceUri(layer.source()).schema() == 'gemapi' and
                   QgsDataSourceUri(layer.source()).table() == 'digues_carte']
         if active in layers:
             anchor = active

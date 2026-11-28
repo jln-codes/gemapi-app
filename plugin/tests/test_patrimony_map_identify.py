@@ -89,7 +89,7 @@ class SpatialFormTests(unittest.TestCase):
             if cls.database.get_dsn_parameters()["host"] not in ("127.0.0.1", "localhost", "::1"):
                 raise ValueError("Only a disposable local test database is allowed")
             with cls.database.cursor() as c:
-                c.execute("INSERT INTO milieux.ah(id,nom) VALUES (%s,'LOC03') ON CONFLICT DO NOTHING", (uid("ah"),))
+                c.execute("INSERT INTO gemapi.ah(id,nom) VALUES (%s,'LOC03') ON CONFLICT DO NOTHING", (uid("ah"),))
                 for name, family, _, wkt in FIGURES:
                     if family == "digues": continue
                     columns, values = ["id", "nom", "geom"], [uid(name), name, wkt]
@@ -103,12 +103,12 @@ class SpatialFormTests(unittest.TestCase):
                     # Parent site must precede its zones, all in one transaction.
                     if family == "vegetation": continue
                     params = ["%s", "%s", "ST_GeomFromText(%s,3950)"] + ["%s"]*(len(values)-3)
-                    c.execute(f"INSERT INTO milieux.{family}({','.join(columns)}) VALUES ({','.join(params)}) ON CONFLICT DO NOTHING", values)
+                    c.execute(f"INSERT INTO gemapi.{family}({','.join(columns)}) VALUES ({','.join(params)}) ON CONFLICT DO NOTHING", values)
                 for name, family, _, wkt in FIGURES:
                     if family == "vegetation":
-                        c.execute("INSERT INTO public.vegetation(famille_vegetation,id,designation,geometry,site_terrestre_id) VALUES ('ARBRES',%s,%s,ST_GeomFromText(%s,3950),%s) ON CONFLICT DO NOTHING", (uid(name), name, wkt, uid("site")))
-                c.execute("INSERT INTO milieux.digues(id,nom) VALUES (%s,'LOC03') ON CONFLICT DO NOTHING", (uid("digue"),))
-                c.execute("INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) SELECT %s,%s,'G',0,1 WHERE NOT EXISTS (SELECT 1 FROM milieux.digues_reperes WHERE digue_id=%s)", (uid("digue"),uid("riviere"),uid("digue")))
+                        c.execute("INSERT INTO gemapi.vegetation(famille_vegetation,id,designation,geometry,site_terrestre_id) VALUES ('ARBRES',%s,%s,ST_GeomFromText(%s,3950),%s) ON CONFLICT DO NOTHING", (uid(name), name, wkt, uid("site")))
+                c.execute("INSERT INTO gemapi.digues(id,nom) VALUES (%s,'LOC03') ON CONFLICT DO NOTHING", (uid("digue"),))
+                c.execute("INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) SELECT %s,%s,'G',0,1 WHERE NOT EXISTS (SELECT 1 FROM gemapi.digues_reperes WHERE digue_id=%s)", (uid("digue"),uid("riviere"),uid("digue")))
             cls.database.commit()
 
     @classmethod

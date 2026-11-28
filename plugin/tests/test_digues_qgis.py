@@ -35,12 +35,12 @@ def project_copy(target, port):
     layers = root.findall("./projectlayers/maplayer")
     assert len(layers) == 33
     sections = next(layer for layer in layers if layer.findtext("id") == LAYER_ID)
-    river = next(layer for layer in layers if '"milieux"."cours_eau"'
+    river = next(layer for layer in layers if '"gemapi"."cours_eau"'
                  in layer.findtext("datasource", ""))
     assert sections.get("readOnly") == "1"
     assert sections.findtext("provider") == "postgres"
     assert sections.findtext("layername") == "digues_carte"
-    assert '"milieux"."digues_carte"' in sections.findtext("datasource")
+    assert '"gemapi"."digues_carte"' in sections.findtext("datasource")
     assert sections.find("renderer-v2").get("type") == "RuleRenderer"
     assert sections.get("hasScaleBasedVisibilityFlag") == "1"
     assert sections.get("minScale") == "75000"
@@ -134,30 +134,30 @@ def main():
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model" / "schema.sql").read_text(encoding="utf-8"))
         digue, digue_droite, river = str(uuid4()), str(uuid4()), str(uuid4())
-        sql(container, f"BEGIN; INSERT INTO milieux.digues(id,nom) VALUES ('{digue}',"
+        sql(container, f"BEGIN; INSERT INTO gemapi.digues(id,nom) VALUES ('{digue}',"
                        "'Digue de démonstration'); "
-                       f"INSERT INTO milieux.digues(id,nom) VALUES ('{digue_droite}',"
+                       f"INSERT INTO gemapi.digues(id,nom) VALUES ('{digue_droite}',"
                        "'Digue de démonstration — rive droite'); "
-                       f"INSERT INTO milieux.cours_eau(id,nom,source,direction,geom) VALUES ('{river}',"
+                       f"INSERT INTO gemapi.cours_eau(id,nom,source,direction,geom) VALUES ('{river}',"
                        "'Rivière de démonstration','TEST',TRUE,"
                        "ST_Multi(ST_GeomFromText('LINESTRING(1674500 9259000,1675500 9259000)',3950))); "
-                       "INSERT INTO milieux.digues_reperes "
+                       "INSERT INTO gemapi.digues_reperes "
                        "(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
                        f"VALUES ('{digue}','{river}','G',0.2,0.8),"
                        f"('{digue_droite}','{river}','D',0.2,0.8); COMMIT; "
                        "CREATE ROLE dig02_read LOGIN; "
-                       "GRANT USAGE ON SCHEMA milieux TO dig02_read; "
-                       "GRANT SELECT ON milieux.digues_carte, "
-                       "milieux.digues_reperes, milieux.digues, milieux.cours_eau "
+                       "GRANT USAGE ON SCHEMA gemapi TO dig02_read; "
+                       "GRANT SELECT ON gemapi.digues_carte, "
+                       "gemapi.digues_reperes, gemapi.digues, gemapi.cours_eau "
                        "TO dig02_read;")
         count = sql(container, "SET ROLE dig02_read; SELECT count(*) FROM "
-                    "milieux.digues_carte;").stdout.strip()
+                    "gemapi.digues_carte;").stdout.strip()
         assert count.endswith("2")
-        forbidden = sql(container, "SET ROLE dig02_read; INSERT INTO milieux.digues(nom) "
+        forbidden = sql(container, "SET ROLE dig02_read; INSERT INTO gemapi.digues(nom) "
                         "VALUES ('interdit');", check=False)
         assert forbidden.returncode != 0 and "permission denied" in forbidden.stderr
         frozen = sql(container, "SELECT string_agg(encode(ST_AsEWKB(geom_reference),"
-                     "'hex'),',' ORDER BY rive) FROM milieux.digues_reperes;").stdout
+                     "'hex'),',' ORDER BY rive) FROM gemapi.digues_reperes;").stdout
 
         port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[-1]
         app = QgsApplication([], True)
@@ -216,10 +216,10 @@ def main():
                 g, d = colored_pixels(rendered, "G"), colored_pixels(rendered, "D")
                 assert (len(g) > 0 and len(d) > 0) if scale == 50000 else not (g or d)
             assert sql(container, "SELECT string_agg(encode(ST_AsEWKB(geom_reference),"
-                       "'hex'),',' ORDER BY rive) FROM milieux.digues_reperes;"
+                       "'hex'),',' ORDER BY rive) FROM gemapi.digues_reperes;"
                        ).stdout == frozen
 
-            sql(container, f"UPDATE milieux.cours_eau SET direction=NULL WHERE id='{river}';")
+            sql(container, f"UPDATE gemapi.cours_eau SET direction=NULL WHERE id='{river}';")
             sections.reload()
             assert {f['etat_referentiel'] for f in sections.getFeatures()} == {'COURS_EAU_NON_QUALIFIE'}
             unqualified_image = map_image([sections, river_layer], 5000)
@@ -228,7 +228,7 @@ def main():
                                   if (lambda c: c.red() > 150 and c.green() < 90 and c.blue() < 110)
                                   (unqualified_image.pixelColor(x,y)))
             assert red_unqualified > 30, red_unqualified
-            sql(container, f"UPDATE milieux.cours_eau SET geom=ST_Translate(geom,0,20) "
+            sql(container, f"UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,0,20) "
                            f"WHERE id='{river}';")
             sections.reload()
             assert {f["etat_referentiel"] for f in sections.getFeatures()} == {
@@ -240,7 +240,7 @@ def main():
                           and c.blue() < 110)(changed_image.pixelColor(x, y)))
             assert red > 30, red
             assert sql(container, "SELECT string_agg(encode(ST_AsEWKB(geom_reference),"
-                       "'hex'),',' ORDER BY rive) FROM milieux.digues_reperes;"
+                       "'hex'),',' ORDER BY rive) FROM gemapi.digues_reperes;"
                        ).stdout == frozen
             project.clear()
         print("DIG-02 : projet rouvert, rives G/D séparées, échelles 1:5k/50k/100k, "

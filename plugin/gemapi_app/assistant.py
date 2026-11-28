@@ -426,17 +426,17 @@ def validate_proposal(proposal):
 
 # Fixed identifiers only. No part of model output enters a query.
 REFERENCE_QUERIES = {
-    "type_prestation": "SELECT t.id::text,t.libelle,c.libelle FROM milieux.types_prestations t "
-                       "JOIN milieux.prestations_categorie c ON c.id=t.categorie_id WHERE t.actif ORDER BY t.libelle,t.id",
-    "prestataire": "SELECT id::text,nom,'' FROM milieux.prestataires WHERE actif ORDER BY nom,id",
-    "technicien": "SELECT id::text,concat_ws(' ',prenom,nom),'' FROM milieux.techniciens WHERE actif ORDER BY nom,prenom,id",
-    "statut": "SELECT id::text,libelle,'' FROM milieux.statuts_prestations ORDER BY libelle,id",
+    "type_prestation": "SELECT t.id::text,t.libelle,c.libelle FROM gemapi.types_prestations t "
+                       "JOIN gemapi.prestations_categorie c ON c.id=t.categorie_id WHERE t.actif ORDER BY t.libelle,t.id",
+    "prestataire": "SELECT id::text,nom,'' FROM gemapi.prestataires WHERE actif ORDER BY nom,id",
+    "technicien": "SELECT id::text,concat_ws(' ',prenom,nom),'' FROM gemapi.techniciens WHERE actif ORDER BY nom,prenom,id",
+    "statut": "SELECT id::text,libelle,'' FROM gemapi.statuts_prestations ORDER BY libelle,id",
 }
 OBJECT_QUERIES = {
-    "ah_ouvrage": "SELECT o.id::text,o.nom,a.nom FROM milieux.ah_ouvrage o JOIN milieux.ah a ON a.id=o.ah_id ORDER BY o.nom,o.id",
-    "ah_stockage": "SELECT o.id::text,o.nom,a.nom FROM milieux.ah_stockage o JOIN milieux.ah a ON a.id=o.ah_id ORDER BY o.nom,o.id",
-    **{key: (f"SELECT o.id::text,o.{TARGETS[key].name},s.nom FROM {TARGETS[key].schema}.{key} o "
-             "JOIN milieux.sites_terrestres s ON s.id=o.site_terrestre_id "
+    "ah_ouvrage": "SELECT o.id::text,o.nom,a.nom FROM gemapi.ah_ouvrage o JOIN gemapi.ah a ON a.id=o.ah_id ORDER BY o.nom,o.id",
+    "ah_stockage": "SELECT o.id::text,o.nom,a.nom FROM gemapi.ah_stockage o JOIN gemapi.ah a ON a.id=o.ah_id ORDER BY o.nom,o.id",
+    **{key: (f"SELECT o.id::text,o.{TARGETS[key].name},s.nom FROM gemapi.{key} o "
+             "JOIN gemapi.sites_terrestres s ON s.id=o.site_terrestre_id "
              f"ORDER BY o.{TARGETS[key].name},o.id") for key in SITE_CHILDREN},
 }
 

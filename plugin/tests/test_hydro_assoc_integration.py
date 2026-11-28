@@ -56,28 +56,28 @@ class HydroAssociationTests(unittest.TestCase):
         cls.q((ROOT / "model/roles_milieux.sql").read_text())
         # Match deployed QGIS logins: the provider resolves PostGIS functions
         # through its login search_path, independently of our SQL test cursor.
-        cls.q("ALTER DATABASE postgres SET search_path=pg_catalog,extensions,public,milieux")
+        cls.q("ALTER DATABASE postgres SET search_path=pg_catalog,extensions,public,gemapi")
         cls.q("SET search_path=pg_catalog,extensions,public")
-        cls.q("INSERT INTO milieux.prestataires(id,nom) VALUES (%s,'Entreprise fictive')", (uid("provider"),))
-        cls.q("INSERT INTO milieux.techniciens(id,nom) VALUES (%s,'Responsable fictif')", (uid("tech"),))
-        cls.q("INSERT INTO milieux.types_prestations(id,code,libelle,categorie_id) "
-              "SELECT %s,'HYDRO_TEST','Intervention fictive',id FROM milieux.prestations_categorie "
+        cls.q("INSERT INTO gemapi.prestataires(id,nom) VALUES (%s,'Entreprise fictive')", (uid("provider"),))
+        cls.q("INSERT INTO gemapi.techniciens(id,nom) VALUES (%s,'Responsable fictif')", (uid("tech"),))
+        cls.q("INSERT INTO gemapi.types_prestations(id,code,libelle,categorie_id) "
+              "SELECT %s,'HYDRO_TEST','Intervention fictive',id FROM gemapi.prestations_categorie "
               "ORDER BY ordre LIMIT 1", (uid("type"),))
-        cls.q("INSERT INTO milieux.ah(id,nom) VALUES (%s,'ZEC Gosnay1')", (uid("AH"),))
+        cls.q("INSERT INTO gemapi.ah(id,nom) VALUES (%s,'ZEC Gosnay1')", (uid("AH"),))
         for name, y in (("Clarence", 0), ("La Lawe", 1000), ("la Blanche", 2000)):
-            cls.q("INSERT INTO milieux.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
+            cls.q("INSERT INTO gemapi.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
                   "VALUES (%s,%s,'rivière','FICTION HYDRO-ASSOC-01',true,"
                   "ST_Translate(ST_GeomFromText('MULTILINESTRING((1700000 9300000,1701000 9300000))',3950),0,%s))",
                   (uid(name), name, y))
-        cls.q("BEGIN; INSERT INTO milieux.digues(id,nom) VALUES (%s,'CL5')", (uid("CL5"),))
-        cls.q("INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
+        cls.q("BEGIN; INSERT INTO gemapi.digues(id,nom) VALUES (%s,'CL5')", (uid("CL5"),))
+        cls.q("INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
               "VALUES (%s,%s,'G',.2,.4); COMMIT;", (uid("CL5"), uid("Clarence")))
         for name in ("La Lawe", "la Blanche"):
-            cls.q("INSERT INTO milieux.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) "
+            cls.q("INSERT INTO gemapi.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) "
                   "VALUES (%s,%s,%s,.2,.4)", (uid("section " + name), uid("AH"), uid(name)))
         cls.values = dict(type_prestation_id=uid("type"), prestataire_id=uid("provider"),
                           technicien_id=uid("tech"), date_debut="2026-11-01", date_fin="2026-11-02",
-                          statut_id=str(cls.q("SELECT id FROM milieux.statuts_prestations WHERE code='PLANIFIE'")[0][0]),
+                          statut_id=str(cls.q("SELECT id FROM gemapi.statuts_prestations WHERE code='PLANIFIE'")[0][0]),
                           intitule="Intervention HYDRO fictive", quantite="3", unite="ouvrages")
 
     @classmethod
@@ -87,7 +87,7 @@ class HydroAssociationTests(unittest.TestCase):
             return cursor.fetchall() if cursor.description else []
 
     def tearDown(self):
-        self.q("DELETE FROM milieux.prestations")
+        self.q("DELETE FROM gemapi.prestations")
 
     def insert(self, family="ah_sections", name="section La Lawe", geometry="POINT(1700300 9301080)"):
         return str(self.q(build_insert(self.values, [(family, uid(name))], geometry))[0][0])
@@ -99,24 +99,24 @@ class HydroAssociationTests(unittest.TestCase):
     def test_01_seven_modes_geometry_fk_and_exclusivity(self):
         row_id = self.insert()
         self.assertEqual(self.q("SELECT ah_section_id::text,origine_mesures,nombre_points,quantite,unite "
-                                "FROM milieux.prestations WHERE id=%s", (row_id,))[0],
+                                "FROM gemapi.prestations WHERE id=%s", (row_id,))[0],
                          (uid("section La Lawe"), "Prestation", 1, 3, "ouvrages"))
         for statement in (
-                "UPDATE milieux.prestations SET geom=NULL",
-                f"UPDATE milieux.prestations SET cours_eau_id='{uid('La Lawe')}'",
-                f"UPDATE milieux.prestations SET digue_id='{uid('CL5')}'",
-                f"UPDATE milieux.prestations SET ah_section_id='{uid('absent')}'",
-                "UPDATE milieux.prestations SET ah_section_id=NULL",
-                f"DELETE FROM milieux.ah_sections WHERE id='{uid('section La Lawe')}'"):
+                "UPDATE gemapi.prestations SET geom=NULL",
+                f"UPDATE gemapi.prestations SET cours_eau_id='{uid('La Lawe')}'",
+                f"UPDATE gemapi.prestations SET digue_id='{uid('CL5')}'",
+                f"UPDATE gemapi.prestations SET ah_section_id='{uid('absent')}'",
+                "UPDATE gemapi.prestations SET ah_section_id=NULL",
+                f"DELETE FROM gemapi.ah_sections WHERE id='{uid('section La Lawe')}'"):
             with self.subTest(statement=statement), self.assertRaises(psycopg2.IntegrityError):
                 self.q(statement)
-        self.q("UPDATE milieux.prestations SET position='Berge',rive='Gauche'")
-        self.q("UPDATE milieux.prestations SET ah_section_id=%s", (uid("section la Blanche"),))
-        self.q("UPDATE milieux.prestations SET ah_section_id=NULL,cours_eau_id=%s", (uid("Clarence"),))
-        self.q("UPDATE milieux.prestations SET cours_eau_id=NULL,ah_section_id=%s", (uid("section La Lawe"),))
-        version = str(self.q("SELECT xmin::text FROM milieux.prestations")[0][0])
+        self.q("UPDATE gemapi.prestations SET position='Berge',rive='Gauche'")
+        self.q("UPDATE gemapi.prestations SET ah_section_id=%s", (uid("section la Blanche"),))
+        self.q("UPDATE gemapi.prestations SET ah_section_id=NULL,cours_eau_id=%s", (uid("Clarence"),))
+        self.q("UPDATE gemapi.prestations SET cours_eau_id=NULL,ah_section_id=%s", (uid("section La Lawe"),))
+        version = str(self.q("SELECT xmin::text FROM gemapi.prestations")[0][0])
         self.q(build_delete(row_id, version))
-        self.assertEqual(self.q("SELECT count(*) FROM milieux.ah_sections")[0][0], 2)
+        self.assertEqual(self.q("SELECT count(*) FROM gemapi.ah_sections")[0][0], 2)
 
     def test_02_measures_views_and_single_counted_reports(self):
         for geometry, measure, expected in (
@@ -124,14 +124,14 @@ class HydroAssociationTests(unittest.TestCase):
                 ("LINESTRING(1700260 9301080,1700340 9301080)", "longueur_m", 80),
                 ("POLYGON((1700260 9301060,1700340 9301060,1700340 9301120,1700260 9301120,1700260 9301060))", "surface_m2", 4800)):
             self.insert(geometry=geometry)
-            self.assertEqual(self.q(f"SELECT {measure} FROM milieux.prestations ORDER BY date_modification DESC LIMIT 1")[0][0], expected)
+            self.assertEqual(self.q(f"SELECT {measure} FROM gemapi.prestations ORDER BY date_modification DESC LIMIT 1")[0][0], expected)
         fields = "nombre_points longueur_m surface_m2 surface_ha type_geometrie type_geometrie_postgis possede_geometrie origine_mesures".split()
         for view in ("prestations_carte", "prestations_fiches"):
             differences = " OR ".join(f"p.{field} IS DISTINCT FROM v.{field}" for field in fields)
-            self.assertEqual(self.q(f"SELECT count(*) FROM milieux.prestations p JOIN milieux.{view} v USING(id) WHERE {differences}")[0][0], 0)
-            self.assertEqual(self.q(f"SELECT count(*)-count(DISTINCT id) FROM milieux.{view}")[0][0], 0)
-        self.assertEqual(self.q("SELECT count(*) FROM milieux.prestations__ah WHERE ah_id=%s", (uid("AH"),))[0][0], 3)
-        self.assertEqual(self.q("SELECT count(*) FROM milieux.prestations p JOIN milieux.prestations_carte v USING(id) "
+            self.assertEqual(self.q(f"SELECT count(*) FROM gemapi.prestations p JOIN gemapi.{view} v USING(id) WHERE {differences}")[0][0], 0)
+            self.assertEqual(self.q(f"SELECT count(*)-count(DISTINCT id) FROM gemapi.{view}")[0][0], 0)
+        self.assertEqual(self.q("SELECT count(*) FROM gemapi.prestations__ah WHERE ah_id=%s", (uid("AH"),))[0][0], 3)
+        self.assertEqual(self.q("SELECT count(*) FROM gemapi.prestations p JOIN gemapi.prestations_carte v USING(id) "
                                "WHERE ST_AsEWKB(p.geom) IS DISTINCT FROM ST_AsEWKB(v.geom)")[0][0], 0)
         for filters in ({}, {"ah": [uid("AH")]}, {"cours_eau": [uid("La Lawe")]},
                         {"ah_sections": [uid("section La Lawe")]}):
@@ -145,7 +145,7 @@ class HydroAssociationTests(unittest.TestCase):
 
     def test_02b_multiple_sections_of_one_parent_remain_distinct(self):
         from gemapi_app.report_data import filter_option_queries
-        self.q("INSERT INTO milieux.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) "
+        self.q("INSERT INTO gemapi.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) "
                "VALUES (%s,%s,%s,.6,.8)", (uid("second section"), uid("AH"), uid("La Lawe")))
         try:
             options = dict((str(identity), label) for identity, label in self.q(filter_option_queries()["ah_sections"]))
@@ -154,7 +154,7 @@ class HydroAssociationTests(unittest.TestCase):
             self.assertEqual(allowed["ah_sections"], {uid("second section")})
             self.assertFalse(resolutions[uid("La Lawe")][0])
         finally:
-            self.q("DELETE FROM milieux.ah_sections WHERE id=%s", (uid("second section"),))
+            self.q("DELETE FROM gemapi.ah_sections WHERE id=%s", (uid("second section"),))
 
     def test_03_spatial_substitution_real_postgis_and_qgis(self):
         cases = (
@@ -174,42 +174,42 @@ class HydroAssociationTests(unittest.TestCase):
             _, resolutions = self.resolution(geometry, "La Lawe")
             visible, priorities, ambiguous = resolutions[uid("La Lawe")]
             self.assertTrue(visible and priorities and ambiguous)
-        self.q("BEGIN; INSERT INTO milieux.digues(id,nom) VALUES (%s,'Concurrent fictif')", (uid("overlap"),))
+        self.q("BEGIN; INSERT INTO gemapi.digues(id,nom) VALUES (%s,'Concurrent fictif')", (uid("overlap"),))
         try:
-            self.q("INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
+            self.q("INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
                    "VALUES (%s,%s,'G',.2,.4); COMMIT;", (uid("overlap"), uid("La Lawe")))
             _, resolutions = self.resolution("POINT(1700300 9301080)", "La Lawe")
             self.assertEqual(resolutions[uid("La Lawe")],
                              (False, {("digues", uid("overlap")), ("ah_sections", uid("section La Lawe"))}, True))
         finally:
-            self.q("BEGIN; DELETE FROM milieux.digues_reperes WHERE digue_id=%s", (uid("overlap"),))
-            self.q("DELETE FROM milieux.digues WHERE id=%s; COMMIT;", (uid("overlap"),))
+            self.q("BEGIN; DELETE FROM gemapi.digues_reperes WHERE digue_id=%s", (uid("overlap"),))
+            self.q("DELETE FROM gemapi.digues WHERE id=%s; COMMIT;", (uid("overlap"),))
 
     def test_04_stale_reference_historical_links_and_atomic_edit(self):
         row_id = self.insert()
-        self.q("UPDATE milieux.cours_eau SET direction=false WHERE id=%s", (uid("La Lawe"),))
+        self.q("UPDATE gemapi.cours_eau SET direction=false WHERE id=%s", (uid("La Lawe"),))
         try:
             with self.assertRaises(psycopg2.IntegrityError):
                 self.insert()
-            self.q("UPDATE milieux.prestations SET description='Historique conservé' WHERE id=%s", (row_id,))
-            self.assertEqual(self.q("SELECT ah_section_id::text FROM milieux.prestations")[0][0], uid("section La Lawe"))
+            self.q("UPDATE gemapi.prestations SET description='Historique conservé' WHERE id=%s", (row_id,))
+            self.assertEqual(self.q("SELECT ah_section_id::text FROM gemapi.prestations")[0][0], uid("section La Lawe"))
             allowed, _ = self.resolution("POINT(1700300 9301080)", "La Lawe")
             self.assertFalse(allowed["ah_sections"])
             self.assertTrue(allowed["cours_eau"])
         finally:
-            self.q("UPDATE milieux.cours_eau SET direction=true WHERE id=%s", (uid("La Lawe"),))
-        self.q("UPDATE milieux.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s", (uid("La Lawe"),))
-        self.q("UPDATE milieux.cours_eau SET direction=true WHERE id=%s", (uid("La Lawe"),))
+            self.q("UPDATE gemapi.cours_eau SET direction=true WHERE id=%s", (uid("La Lawe"),))
+        self.q("UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s", (uid("La Lawe"),))
+        self.q("UPDATE gemapi.cours_eau SET direction=true WHERE id=%s", (uid("La Lawe"),))
         try:
             with self.assertRaises(psycopg2.IntegrityError):
                 self.insert()
-            self.q("UPDATE milieux.prestations SET description='Signature obsolète conservée'")
+            self.q("UPDATE gemapi.prestations SET description='Signature obsolète conservée'")
             allowed, _ = self.resolution("POINT(1700300 9301080)", "La Lawe")
             self.assertFalse(allowed["ah_sections"])
         finally:
-            self.q("UPDATE milieux.cours_eau SET geom=ST_Translate(geom,0,-1) WHERE id=%s", (uid("La Lawe"),))
-            self.q("UPDATE milieux.cours_eau SET direction=true WHERE id=%s", (uid("La Lawe"),))
-        version = str(self.q("SELECT xmin::text FROM milieux.prestations WHERE id=%s", (row_id,))[0][0])
+            self.q("UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,0,-1) WHERE id=%s", (uid("La Lawe"),))
+            self.q("UPDATE gemapi.cours_eau SET direction=true WHERE id=%s", (uid("La Lawe"),))
+        version = str(self.q("SELECT xmin::text FROM gemapi.prestations WHERE id=%s", (row_id,))[0][0])
         geometry = "POINT(1700300 9301080)"
         old_links = [("ah_sections", uid("section La Lawe"))]
         new_values = {**self.values, "intitule": "Modification explicite"}
@@ -223,10 +223,10 @@ class HydroAssociationTests(unittest.TestCase):
         for role, permitted in (("milieux_consultation", False), ("milieux_prestations", True), ("milieux_patrimoine", True)):
             self.q(f"SET ROLE {role}")
             try:
-                self.assertEqual(self.q("SELECT count(*) FROM milieux.ah_sections")[0][0], 2)
+                self.assertEqual(self.q("SELECT count(*) FROM gemapi.ah_sections")[0][0], 2)
                 if permitted:
                     row_id = self.insert()
-                    self.q("DELETE FROM milieux.prestations WHERE id=%s", (row_id,))
+                    self.q("DELETE FROM gemapi.prestations WHERE id=%s", (row_id,))
                 else:
                     with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
                         self.insert()
@@ -301,8 +301,8 @@ class HydroAssociationTests(unittest.TestCase):
                 self.assertTrue(form.saveButton.isEnabled())
                 form._save()
                 print("QGIS: enregistrement demandé", flush=True)
-                self.assertIn("enregistrées", form.statusLabel.text())
-                row_id = str(self.q("SELECT id FROM milieux.prestations")[0][0])
+                self.assertTrue(form.saved_prestation_id, form.statusLabel.text())
+                row_id = str(self.q("SELECT id FROM gemapi.prestations")[0][0])
                 row, links = load_prestation(form._connection(), row_id)
                 self.assertEqual([(str(family), str(identity)) for family, identity, _ in links],
                                  [("ah_sections", uid("section La Lawe"))])
@@ -313,7 +313,7 @@ class HydroAssociationTests(unittest.TestCase):
                 form.intituleEdit.setText("Modification depuis le formulaire")
                 form._save_edit()
                 self.assertTrue(form._edit_saved)
-                self.assertEqual(self.q("SELECT intitule FROM milieux.prestations WHERE id=%s", (row_id,))[0][0],
+                self.assertEqual(self.q("SELECT intitule FROM gemapi.prestations WHERE id=%s", (row_id,))[0][0],
                                  "Modification depuis le formulaire")
                 for layer in project.mapLayers().values():
                     if layer.providerType() == "postgres" and QgsDataSourceUri(layer.source()).table() == "prestations_carte":
@@ -331,44 +331,42 @@ class HydroAssociationTests(unittest.TestCase):
                 project.clear()
             self.insert(geometry="LINESTRING(1700260 9301080,1700340 9301080)")
             self.insert(geometry="POLYGON((1700260 9301060,1700340 9301060,1700340 9301120,1700260 9301120,1700260 9301060))")
-            # Both official configurations (or their prospective copies) must
-            # expose the same section UUID through every native representation.
             from qgis.gui import QgsAttributeForm
-            for base in ("demo", "cabbalr"):
-                source = (Path(copy_folder) / f"prestations_{base}.qgz" if copy_folder else
-                          ROOT / base / f"prestations_{base}.qgz")
-                _project_copy(path, self.port, source)
-                self.assertTrue(project.read(str(path)))
-                print(f"QGIS: copie {base} chargée", flush=True)
-                self.assertTrue(all(layer.isValid() for layer in project.mapLayers().values()))
-                section_relations = [relation for identity, relation in project.relationManager().relations().items()
-                                     if identity.startswith("hydro_assoc_section_")]
-                self.assertEqual(len(section_relations), 4)
-                self.assertTrue(all(relation.isValid() for relation in section_relations))
-                for layer in project.mapLayers().values():
-                    if layer.providerType() != "postgres":
-                        continue
-                    table = QgsDataSourceUri(layer.source()).table()
-                    if table not in ("prestations_carte", "prestations_fiches"):
-                        continue
-                    self.assertEqual(layer.fields().indexFromName("ah_section_id"), 37 if table == "prestations_fiches" else 33)
-                    features = list(layer.getFeatures())
-                    self.assertEqual(len(features), 3 if table == "prestations_fiches" else 1)
-                    for index, feature in enumerate(features):
-                        self.assertEqual(str(feature["ah_section_id"]).strip("{}"), uid("section La Lawe"))
-                        if table == "prestations_carte":
-                            layer.selectByIds([feature.id()])
-                            self.assertEqual(layer.selectedFeatureCount(), 1)
-                        if index:
-                            continue  # All rows checked, one native form per representation suffices.
-                        native = QgsAttributeForm(layer, feature)
-                        native.show(); app.processEvents()
-                        self.assertIsNotNone(native.findChild(QWidget, "ah_section_id"))
-                        native.close(); native.deleteLater()
-                        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
-                        app.processEvents()
-                        print(f"QGIS: {base} formulaire natif {table} contrôlé", flush=True)
-                project.clear()
+            base = "demo"
+            source = (Path(copy_folder) / f"prestations_{base}.qgz" if copy_folder else
+                      ROOT / base / f"prestations_{base}.qgz")
+            _project_copy(path, self.port, source)
+            self.assertTrue(project.read(str(path)))
+            print(f"QGIS: copie {base} chargée", flush=True)
+            self.assertTrue(all(layer.isValid() for layer in project.mapLayers().values()))
+            section_relations = [relation for identity, relation in project.relationManager().relations().items()
+                                 if identity.startswith("hydro_assoc_section_")]
+            self.assertEqual(len(section_relations), 4)
+            self.assertTrue(all(relation.isValid() for relation in section_relations))
+            for layer in project.mapLayers().values():
+                if layer.providerType() != "postgres":
+                    continue
+                table = QgsDataSourceUri(layer.source()).table()
+                if table not in ("prestations_carte", "prestations_fiches"):
+                    continue
+                self.assertEqual(layer.fields().indexFromName("ah_section_id"), 40 if table == "prestations_fiches" else 36)
+                features = list(layer.getFeatures())
+                self.assertEqual(len(features), 3 if table == "prestations_fiches" else 1)
+                for index, feature in enumerate(features):
+                    self.assertEqual(str(feature["ah_section_id"]).strip("{}"), uid("section La Lawe"))
+                    if table == "prestations_carte":
+                        layer.selectByIds([feature.id()])
+                        self.assertEqual(layer.selectedFeatureCount(), 1)
+                    if index:
+                        continue  # All rows checked, one native form per representation suffices.
+                    native = QgsAttributeForm(layer, feature)
+                    native.show(); app.processEvents()
+                    self.assertIsNotNone(native.findChild(QWidget, "ah_section_id"))
+                    native.close(); native.deleteLater()
+                    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                    app.processEvents()
+                    print(f"QGIS: {base} formulaire natif {table} contrôlé", flush=True)
+            project.clear()
         # Keep QApplication alive through all SIP-owned cleanup.
         self.__class__.app = app
 

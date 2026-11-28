@@ -38,16 +38,16 @@ def main(live=False):
         sql(container, (ROOT / 'model/schema.sql').read_text(encoding='utf-8'))
         print('Schéma canonique installé dans PostGIS jetable', flush=True)
         sql(container, f"""
-INSERT INTO milieux.prestataires(id,nom) VALUES ('{uid(2)}','Veolia');
-INSERT INTO milieux.techniciens(id,prenom,nom) VALUES ('{uid(3)}','Jean','Dubois'),('{uid(4)}','Pierre','Martin');
-INSERT INTO milieux.ah(id,nom) VALUES ('{uid(10)}','AH fictif Assistant');
-INSERT INTO milieux.ah_ouvrage(id,ah_id,nom,geom) VALUES
+INSERT INTO gemapi.prestataires(id,nom) VALUES ('{uid(2)}','Veolia');
+INSERT INTO gemapi.techniciens(id,prenom,nom) VALUES ('{uid(3)}','Jean','Dubois'),('{uid(4)}','Pierre','Martin');
+INSERT INTO gemapi.ah(id,nom) VALUES ('{uid(10)}','AH fictif Assistant');
+INSERT INTO gemapi.ah_ouvrage(id,ah_id,nom,geom) VALUES
 ('{uid(6)}','{uid(10)}','Rivière du Buissons',ST_GeomFromText('LINESTRING(1700000 9200000,1700010 9200010)',3950));
-INSERT INTO milieux.ah_stockage(id,ah_id,nom,geom) VALUES
+INSERT INTO gemapi.ah_stockage(id,ah_id,nom,geom) VALUES
 ('{uid(8)}','{uid(10)}','Stockage fictif Assistant',ST_GeomFromText('POLYGON((1700000 9200000,1700010 9200000,1700010 9200010,1700000 9200000))',3950));
-INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES
+INSERT INTO gemapi.sites_terrestres(id,nom,geom) VALUES
 ('{uid(11)}','Site fictif Assistant',ST_GeomFromText('MULTIPOLYGON(((1700000 9200000,1700010 9200000,1700010 9200010,1700000 9200000)))',3950));
-INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES
+INSERT INTO gemapi.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES
 ('ARBRES','{uid(9)}','{uid(11)}','Zone fictive Assistant',ST_GeomFromText('MULTIPOINT((1700001 9200001))',3950));
 """)
         port = command('docker', 'port', container, '5432').stdout.strip().rsplit(':', 1)[-1]
@@ -75,7 +75,7 @@ INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designatio
             uri = QgsDataSourceUri()
             uri.setConnection('127.0.0.1', port, 'postgres', 'postgres', '')
             for table in ('prestations', 'ah_ouvrage', 'ah_stockage'):
-                uri.setDataSource('milieux', table, 'geom', '', 'id')
+                uri.setDataSource('gemapi', table, 'geom', '', 'id')
                 uri.setSrid('3950')
                 uri.setWkbType({'prestations': QgsWkbTypes.Point, 'ah_ouvrage': QgsWkbTypes.LineString,
                                 'ah_stockage': QgsWkbTypes.Polygon, 'vegetation': QgsWkbTypes.MultiPoint}[table])
@@ -129,7 +129,7 @@ INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designatio
             send('Le même jour.', response(date_fin='MEME_JOUR', message='Je complète la date de fin.'))
             assert assistant.open_button.isEnabled(), assistant.history.toPlainText()
             assert ticks, 'Le thread Qt doit traiter les autres événements'
-            assert sql(container, 'SELECT count(*) FROM milieux.prestations').stdout.strip() == '0'
+            assert sql(container, 'SELECT count(*) FROM gemapi.prestations').stdout.strip() == '0'
             print('Ouverture du formulaire prérempli', flush=True)
             assistant.open_button.click()
             assert plugin.creation is not None, assistant.history.toPlainText()
@@ -137,7 +137,7 @@ INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designatio
             assert plugin.creation._values()['technicien_id'] == uid(3)
             assert plugin.creation._values()['date_fin'] == '2026-11-11'
             assert plugin.creation.geometry is None
-            assert sql(container, 'SELECT count(*) FROM milieux.prestations').stdout.strip() == '0'
+            assert sql(container, 'SELECT count(*) FROM gemapi.prestations').stdout.strip() == '0'
             transcript = assistant.history.toPlainText()
             # Close without saving, then return to exactly the same conversation instance.
             plugin.creation._saved_snapshot = plugin.creation._snapshot()
@@ -156,15 +156,15 @@ INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designatio
                             user_message=COMPLETE_PHRASE)
                 resolved = draft.resolve(engine.load_catalog(plugin.session.connection(), family))
                 assert resolved['values'], resolved['issues']
-                before = int(sql(container, 'SELECT count(*) FROM milieux.prestations').stdout.strip())
+                before = int(sql(container, 'SELECT count(*) FROM gemapi.prestations').stdout.strip())
                 form = plugin.open_creation_draft(resolved['values'], resolved['associations'])
-                assert int(sql(container, 'SELECT count(*) FROM milieux.prestations').stdout.strip()) == before
+                assert int(sql(container, 'SELECT count(*) FROM gemapi.prestations').stdout.strip()) == before
                 assert form.geometry is None
                 assert form._associations() == [(family, object_id)]
                 print('Validation explicite du formulaire : ' + family, flush=True)
                 form.saveButton.click()  # Explicit test stand-in for human validation, disposable DB only.
-                assert int(sql(container, 'SELECT count(*) FROM milieux.prestations').stdout.strip()) == before + 1, form.statusLabel.text()
-                assert sql(container, 'SELECT count(*) FROM milieux.prestations WHERE geom IS NOT NULL').stdout.strip() == '0'
+                assert int(sql(container, 'SELECT count(*) FROM gemapi.prestations').stdout.strip()) == before + 1, form.statusLabel.text()
+                assert sql(container, 'SELECT count(*) FROM gemapi.prestations WHERE geom IS NOT NULL').stdout.strip() == '0'
                 form.backButton.click()
                 app.processEvents()
             print('Installation neuve, 3 rattachements, UUID réels, enregistrement standard explicite et géométries NULL : OK')

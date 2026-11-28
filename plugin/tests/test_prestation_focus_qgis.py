@@ -149,7 +149,7 @@ class FocusTests(unittest.TestCase):
                 bounds = QgsGeometry.fromWkt(geometry).boundingBox()
                 self.assertTrue(self.iface.canvas.extent().contains(bounds))
                 self.assertGreater(self.iface.canvas.extent().width(), 0)
-                self.assertIn('FROM milieux.prestations_carte', self.db.queries[-1])
+                self.assertIn('FROM gemapi.prestations_carte', self.db.queries[-1])
                 self.assertIn(SAVED, self.db.queries[-1])
         self.assertFalse(self.db.writes)
 
@@ -316,7 +316,7 @@ class FocusTests(unittest.TestCase):
                 self.assertFalse(form.isVisible())
                 self.assertTrue(self.plugin.home.isVisible())
                 self.assertTrue(self.iface.canvas.extent().contains(QgsGeometry.fromWkt(LINE).boundingBox()))
-                self.assertIn('FROM milieux.prestations_carte', self.db.queries[-1])
+                self.assertIn('FROM gemapi.prestations_carte', self.db.queries[-1])
         self.assertEqual(len(self.db.writes), 9)
 
     def test_cancel_returns_to_correct_previous_window(self):
@@ -340,7 +340,7 @@ class FocusTests(unittest.TestCase):
 
 
     def test_only_current_connection_and_affected_layers_are_refreshed(self):
-        def layer(table, host='connection-a', schema='milieux'):
+        def layer(table, host='connection-a', schema='gemapi'):
             uri = QgsDataSourceUri()
             uri.setConnection(host, '5432', 'test', 'user_test', '')
             uri.setDataSource(schema, table, 'geom', '', 'id')

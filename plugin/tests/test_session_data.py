@@ -2,6 +2,8 @@
 
 import sys
 from pathlib import Path
+from unittest import TestCase
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gemapi_app import session_data  # noqa: E402
@@ -39,6 +41,24 @@ class Connection:
 
 
 def main():
+    def layer(schema, table, service="gemapi_demo"):
+        item = Mock()
+        item.isValid.return_value = True
+        item.providerType.return_value = "postgres"
+        item.source.return_value = f"""service='{service}' table="{schema}"."{table}" """
+        return item
+
+    project_layers = Mock()
+    anchor = layer("gemapi", "prestations_fiches")
+    project_layers.mapLayers.return_value = {"a": anchor, "b": layer("gemapi", "mobilier")}
+    assert "gemapi_demo" in session_data._connection_info(project_layers)
+    project_layers.mapLayers.return_value["b"] = layer("autre", "mobilier")
+    with TestCase().assertRaisesRegex(ValueError, "schéma gemapi"):
+        session_data._connection_info(project_layers)
+    project_layers.mapLayers.return_value["b"] = layer("gemapi", "mobilier", "autre")
+    with TestCase().assertRaisesRegex(ValueError, "Plusieurs connexions"):
+        session_data._connection_info(project_layers)
+
     source = ["host=one user=alice"]
     role = ["alice"]
     opened = []

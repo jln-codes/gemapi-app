@@ -29,18 +29,20 @@ def accept_local(port):
         raise RuntimeError('Section AH déjà présente : contrôler avant de la remplacer')
     existing=None;current=None
     with psycopg2.connect(host='127.0.0.1',port=port,dbname='postgres',user='postgres') as db,db.cursor() as c:
-        c.execute('SET search_path=pg_catalog,extensions,milieux')
+        c.execute("""SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,gemapi,pg_temp', n.nspname), true)
+                     FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace
+                     WHERE e.extname='postgis'""")
         c.execute('SELECT cours_eau_id::text,debut_fraction,fin_fraction,encode(ST_AsEWKB(geom_reference),\'hex\') '
-                  'FROM milieux.ah_sections_candidates(%s) WHERE cours_eau_id=%s',(PARENT,RIVER))
+                  'FROM gemapi.ah_sections_candidates(%s) WHERE cours_eau_id=%s',(PARENT,RIVER))
         candidates=c.fetchall()
         if len(candidates)!=1:raise RuntimeError('Une intersection admissible complète attendue')
         course,start,end,geometry=candidates[0]
         uid=str(uuid5(NAMESPACE_URL,'sig-prestations/DEMO-AH-01/'+PARENT+'/'+course+'/'+geometry))
-        c.execute('INSERT INTO milieux.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction,commentaire) '
+        c.execute('INSERT INTO gemapi.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction,commentaire) '
                   'VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT(id) DO NOTHING',(uid,PARENT,course,start,end,COMMENT))
         c.execute('SELECT id::text,ah_id::text,cours_eau_id::text,debut_fraction,fin_fraction,'
                   'geom_cours_eau_signature,revision_validation,commentaire,'
-                  'ST_AsBinary(geom_reference) FROM milieux.ah_sections WHERE id=%s',(uid,))
+                  'ST_AsBinary(geom_reference) FROM gemapi.ah_sections WHERE id=%s',(uid,))
         row=c.fetchone()
     ds=ogr.Open(str(PACKAGE),1);srs=osr.SpatialReference();srs.ImportFromEPSG(3950)
     layer=ds.GetLayerByName('ah_sections')
@@ -66,8 +68,8 @@ def main():
     if layer.GetSpatialRef().GetAuthorityCode(None)!='3950' or layer.GetFeatureCount()!=1:
         raise RuntimeError('Une référence de démonstration EPSG:3950 attendue')
     lines=['-- DEMO-AH-01 : fractions acceptées conservées, géométrie calculée côté serveur.',
-           'BEGIN;',"SELECT pg_catalog.set_config('search_path',pg_catalog.format('pg_catalog,%I,milieux',n.nspname),true) FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='postgis';",
-           'LOCK TABLE milieux.cours_eau IN SHARE MODE;']
+           'BEGIN;',"SELECT pg_catalog.set_config('search_path',pg_catalog.format('pg_catalog,%I,gemapi',n.nspname),true) FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='postgis';",
+           'LOCK TABLE gemapi.cours_eau IN SHARE MODE;']
     for f in layer:
         uid,ah,river=(str(UUID(f[x])) for x in ('id','ah_id','cours_eau_id'))
         if (ah,river)!=(PARENT,RIVER):raise RuntimeError('Référence hors scénario accepté')
@@ -78,15 +80,15 @@ DECLARE candidate record;
 BEGIN
  SELECT {f['debut_fraction']!r}::double precision AS debut_fraction,
         {f['fin_fraction']!r}::double precision AS fin_fraction INTO candidate
- FROM milieux.cours_eau r WHERE r.id='{river}'
- AND milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
+ FROM gemapi.cours_eau r WHERE r.id='{river}'
+ AND gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
  AND md5(encode(ST_AsEWKB(r.geom),'hex'))={quote(f['geom_cours_eau_signature'])}
  AND ST_AsBinary(ST_LineSubstring(ST_GeometryN(r.geom,1),{f['debut_fraction']!r},{f['fin_fraction']!r}))=decode('{geom}','hex');
  IF NOT FOUND THEN RAISE EXCEPTION 'Sources modifiées ou non qualifiées : référence DEMO-AH-01 refusée'; END IF;
- INSERT INTO milieux.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction,commentaire)
+ INSERT INTO gemapi.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction,commentaire)
  VALUES ('{uid}','{ah}','{river}',candidate.debut_fraction,candidate.fin_fraction,{quote(f['commentaire'])})
  ON CONFLICT(id) DO NOTHING;
- IF NOT EXISTS(SELECT FROM milieux.ah_sections_carte WHERE id='{uid}' AND ah_id='{ah}'
+ IF NOT EXISTS(SELECT FROM gemapi.ah_sections_carte WHERE id='{uid}' AND ah_id='{ah}'
  AND cours_eau_id='{river}' AND etat_reference='CONFORME'
  AND geom_cours_eau_signature={quote(f['geom_cours_eau_signature'])}
  AND debut_fraction=candidate.debut_fraction AND fin_fraction=candidate.fin_fraction

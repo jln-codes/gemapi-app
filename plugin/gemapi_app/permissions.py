@@ -3,10 +3,10 @@
 
 def prestation_permissions(connection):
     rows = connection.executeSql(
-        "SELECT has_table_privilege('milieux.prestations', 'SELECT'), "
-        "has_table_privilege('milieux.prestations', 'INSERT'), "
-        "has_table_privilege('milieux.prestations', 'UPDATE'), "
-        "has_table_privilege('milieux.prestations', 'DELETE')")
+        "SELECT has_table_privilege('gemapi.prestations', 'SELECT'), "
+        "has_table_privilege('gemapi.prestations', 'INSERT'), "
+        "has_table_privilege('gemapi.prestations', 'UPDATE'), "
+        "has_table_privilege('gemapi.prestations', 'DELETE')")
     if len(rows) != 1 or len(rows[0]) != 4:
         raise ValueError("Droits PostgreSQL indisponibles.")
     def granted(value):

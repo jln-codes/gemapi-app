@@ -14,7 +14,6 @@ from uuid import UUID
 class Target:
     label: str
     fk: str
-    schema: str = "milieux"
     name: str = "nom"
     geometry: str = "geom"
 
@@ -26,10 +25,10 @@ TARGETS = {
     "cours_eau": Target("Cours d'eau", "cours_eau_id"),
     "digues": Target("Digue", "digue_id"),
     "sites_terrestres": Target("Site terrestre", "site_terrestre_id"),
-    "troncons": Target("Tronçon", "troncon_id", "public", "designation", "geometry"),
-    "mobilier": Target("Mobilier", "mobilier_id", "public", "designation", "geometry"),
-    "cheminements": Target("Cheminement", "cheminement_id", "public", "designation", "geometry"),
-    "vegetation": Target("Végétation", "vegetation_id", "public", "designation", "geometry"),
+    "troncons": Target("Tronçon", "troncon_id", "designation", "geometry"),
+    "mobilier": Target("Mobilier", "mobilier_id", "designation", "geometry"),
+    "cheminements": Target("Cheminement", "cheminement_id", "designation", "geometry"),
+    "vegetation": Target("Végétation", "vegetation_id", "designation", "geometry"),
 }
 SITE_CHILDREN = ("mobilier", "cheminements", "vegetation")
 LINKS = {table: ("prestations", target.fk) for table, target in TARGETS.items()}
@@ -124,7 +123,7 @@ def build_insert(values, associations, geometry_wkt=None):
     geom_literal = literal("SRID=3950;" + geometry_wkt) if geometry_wkt else "NULL"
     parameters = ", ".join([*(literal(values[key], casts.get(key, "")) for key in FIELDS), geom_literal,
                             *(literal(direct_values.get(key), "::uuid") for key in direct_columns)])
-    return ("WITH new_prestation AS (INSERT INTO milieux.prestations "
+    return ("WITH new_prestation AS (INSERT INTO gemapi.prestations "
             f"({columns}) VALUES ({parameters}) RETURNING id) "
             "SELECT id::text, 0 FROM new_prestation")
 
@@ -158,7 +157,7 @@ def build_update(prestation_id, version, previous_values, values,
 
     header = [
         "DECLARE current_version text; BEGIN",
-        f"SELECT xmin::text INTO current_version FROM milieux.prestations "
+        f"SELECT xmin::text INTO current_version FROM gemapi.prestations "
         f"WHERE id = '{uid}'::uuid FOR UPDATE;",
         "IF NOT FOUND THEN RAISE EXCEPTION 'SIG_PRESTATIONS_NOT_FOUND'; END IF;",
         f"IF current_version <> '{version}' THEN "
@@ -166,10 +165,10 @@ def build_update(prestation_id, version, previous_values, values,
     ]
     for _, foreign_key in LINKS.values():
         expected = literal(old_direct.get(foreign_key), "::uuid")
-        header.append(f"IF (SELECT {foreign_key} FROM milieux.prestations WHERE id='{uid}'::uuid) "
+        header.append(f"IF (SELECT {foreign_key} FROM gemapi.prestations WHERE id='{uid}'::uuid) "
                       f"IS DISTINCT FROM {expected} THEN RAISE EXCEPTION 'SIG_PRESTATIONS_CONFLICT'; END IF;")
     if assignments:
-        header.append(f"UPDATE milieux.prestations SET {', '.join(assignments)} "
+        header.append(f"UPDATE gemapi.prestations SET {', '.join(assignments)} "
                       f"WHERE id = '{uid}'::uuid;")
     header.append("END")
     body = "\n".join(header)
@@ -189,14 +188,14 @@ def build_delete(prestation_id, version):
     return (
         "DO $sig_prestations_delete$\n"
         "DECLARE current_version text; deleted_count integer; BEGIN\n"
-        "IF NOT has_table_privilege('milieux.prestations', 'DELETE') THEN "
+        "IF NOT has_table_privilege('gemapi.prestations', 'DELETE') THEN "
         "RAISE EXCEPTION 'SIG_PRESTATIONS_FORBIDDEN'; END IF;\n"
-        "SELECT xmin::text INTO current_version FROM milieux.prestations "
+        "SELECT xmin::text INTO current_version FROM gemapi.prestations "
         f"WHERE id = '{uid}'::uuid FOR UPDATE;\n"
         "IF NOT FOUND THEN RAISE EXCEPTION 'SIG_PRESTATIONS_NOT_FOUND'; END IF;\n"
         f"IF current_version <> '{version}' THEN "
         "RAISE EXCEPTION 'SIG_PRESTATIONS_CONFLICT'; END IF;\n"
-        "DELETE FROM milieux.prestations "
+        "DELETE FROM gemapi.prestations "
         f"WHERE id = '{uid}'::uuid AND xmin::text = '{version}';\n"
         "GET DIAGNOSTICS deleted_count = ROW_COUNT;\n"
         "IF deleted_count <> 1 THEN RAISE EXCEPTION 'SIG_PRESTATIONS_CONFLICT'; END IF;\n"

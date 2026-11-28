@@ -47,41 +47,41 @@ def source_spatial_expectations():
 def check_patrimony(query):
     from test_sirs_postgis import projection
     tables, columns, _, catalogs = projection()
-    assert query("SELECT to_regclass('milieux.sites_zones') IS NULL") == "t"
+    assert query("SELECT to_regclass('gemapi.sites_zones') IS NULL") == "t"
     for table, expected in catalogs.items():
         keys = ", ".join(expected[0])
         rows = json.loads(query(f"SELECT json_agg(r ORDER BY id) FROM (SELECT {keys} FROM {table}) r"))
         assert rows == sorted(expected, key=lambda row: row["id"]), table
-    assert query("SELECT count(DISTINCT type_troncon_id) FROM public.troncons WHERE digue_id IS NOT NULL") == "7"
+    assert query("SELECT count(DISTINCT type_troncon_id) FROM gemapi.troncons WHERE digue_id IS NOT NULL") == "7"
     for table,num in (("troncons",7),("ouvrages_particuliers",1),("ouvrages_hydrauliques",1),
                       ("equipements_mesure",1),("desordres",2),("observations",4),("photos",3)):
-        assert int(query(f"SELECT count(*) FROM public.{table}")) == num
-    assert query("SELECT count(*) FROM public.desordres WHERE date_fin IS NULL") == "1"
-    assert query("SELECT max(n) FROM (SELECT count(DISTINCT date_observation) n FROM public.observations GROUP BY desordre_id) h") == "2"
-    assert query("SELECT count(*) FROM public.observations WHERE equipement_mesure_id IS NOT NULL AND desordre_id IS NULL") == "1"
-    assert query("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='photos' AND udt_name='geometry'") == "0"
-    assert query("SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='photos' AND column_name='observation_id'") == "NO"
-    assert query("SELECT max(n) FROM (SELECT count(*) n FROM public.photos GROUP BY observation_id) g") == "2"
-    assert query("SELECT count(*) FROM public.photos p JOIN public.observations o ON o.id=p.observation_id "
+        assert int(query(f"SELECT count(*) FROM gemapi.{table}")) == num
+    assert query("SELECT count(*) FROM gemapi.desordres WHERE date_fin IS NULL") == "1"
+    assert query("SELECT max(n) FROM (SELECT count(DISTINCT date_observation) n FROM gemapi.observations GROUP BY desordre_id) h") == "2"
+    assert query("SELECT count(*) FROM gemapi.observations WHERE equipement_mesure_id IS NOT NULL AND desordre_id IS NULL") == "1"
+    assert query("SELECT count(*) FROM information_schema.columns WHERE table_schema='gemapi' AND table_name='photos' AND udt_name='geometry'") == "0"
+    assert query("SELECT is_nullable FROM information_schema.columns WHERE table_schema='gemapi' AND table_name='photos' AND column_name='observation_id'") == "NO"
+    assert query("SELECT max(n) FROM (SELECT count(*) n FROM gemapi.photos GROUP BY observation_id) g") == "2"
+    assert query("SELECT count(*) FROM gemapi.photos p JOIN gemapi.observations o ON o.id=p.observation_id "
                  "WHERE p.date_photo=o.date_observation AND p.designation IS NOT NULL") == "3"
-    keys = query("SELECT storage_key FROM public.photos ORDER BY id").splitlines()
+    keys = query("SELECT storage_key FROM gemapi.photos ORDER BY id").splitlines()
     assert sorted((ROOT/'demo'/key).is_file() for key in keys) == [False, True, True]
-    assert query("BEGIN; UPDATE public.desordres SET date_fin='2026-06-30' WHERE date_fin IS NULL; "
-                 "SELECT count(*) FROM public.photos p JOIN public.observations o ON o.id=p.observation_id "
-                 "JOIN public.desordres d ON d.id=o.desordre_id WHERE d.date_fin IS NOT NULL; ROLLBACK;").splitlines()[-2] == "3"
+    assert query("BEGIN; UPDATE gemapi.desordres SET date_fin='2026-06-30' WHERE date_fin IS NULL; "
+                 "SELECT count(*) FROM gemapi.photos p JOIN gemapi.observations o ON o.id=p.observation_id "
+                 "JOIN gemapi.desordres d ON d.id=o.desordre_id WHERE d.date_fin IS NOT NULL; ROLLBACK;").splitlines()[-2] == "3"
     src = ogr.Open(str(ROOT/'demo/gpkg/sites_terrestres.gpkg'))
     for family, fk in (("mobilier","mobilier_id"),("cheminements","cheminement_id"),("vegetation","vegetation_id")):
         expected = {f["id"]:(f["site_terrestre_id"],f.GetGeometryRef().ExportToWkb().hex())
                     for f in src.GetLayerByName(family)}
-        data = query(f"SELECT id,site_terrestre_id,encode(ST_AsBinary(geometry),'hex') FROM public.{family} "
+        data = query(f"SELECT id,site_terrestre_id,encode(ST_AsBinary(geometry),'hex') FROM gemapi.{family} "
                      "WHERE num_nonnulls(ah_stockage_id,ah_section_id,ah_ouvrage_id,troncon_id)=0")
         assert {uid:(site,wkb) for uid,site,wkb in (line.split('|') for line in data.splitlines())} == expected
         # Exercise fallback for all three families without adding a historical prestation.
         clear = "vegetation_id=NULL, " if fk != "vegetation_id" else ""
-        result = query(f"BEGIN; UPDATE milieux.prestations SET {clear}{fk}=(SELECT id FROM public.{family} ORDER BY id LIMIT 1) "
+        result = query(f"BEGIN; UPDATE gemapi.prestations SET {clear}{fk}=(SELECT id FROM gemapi.{family} ORDER BY id LIMIT 1) "
                        "WHERE vegetation_id IS NOT NULL; "
-                       f"SELECT count(*) FROM milieux.prestations p JOIN public.{family} f ON p.{fk}=f.id "
-                       "JOIN milieux.prestations_carte c ON c.id=p.id WHERE p.geom IS NULL "
+                       f"SELECT count(*) FROM gemapi.prestations p JOIN gemapi.{family} f ON p.{fk}=f.id "
+                       "JOIN gemapi.prestations_carte c ON c.id=p.id WHERE p.geom IS NULL "
                        "AND p.origine_mesures='Patrimoine de rattachement' AND ST_OrderingEquals(c.geom,f.geometry); ROLLBACK;"
                        )
         assert "12" in result.splitlines()
@@ -89,7 +89,7 @@ def check_patrimony(query):
     rows = json.loads(query("""
         SELECT json_agg(to_jsonb(p) || jsonb_build_object('statut', s.code, 'quantite', p.quantite::text,
                                                           'wkb', encode(ST_AsBinary(p.geom),'hex')))
-        FROM milieux.prestations p JOIN milieux.statuts_prestations s ON s.id=p.statut_id
+        FROM gemapi.prestations p JOIN gemapi.statuts_prestations s ON s.id=p.statut_id
     """))
     imported = {row["id"]: row for row in rows}
     assert len(imported) == 100
@@ -219,7 +219,7 @@ def main():
 
             def query(statement):
                 return command("docker", "exec", "-i", "-e",
-                               "PGOPTIONS=-c search_path=pg_catalog,public,extensions,milieux",
+                               "PGOPTIONS=-c search_path=pg_catalog,public,extensions,gemapi",
                                container, "psql", "-XAt",
                                "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", database,
                                input_text=statement).stdout.strip()
@@ -231,134 +231,134 @@ def main():
                     "bash", "/repo/demo/data/importer_base_neuve.sh", database)
             from test_prestations_native_measures import check_database
             check_database(query)
-            assert query("SELECT count(*) FROM milieux.prestations;") == "100"
-            assert query("SELECT count(*) FROM milieux.ah_sections") == "1"
-            assert query("SELECT id FROM milieux.cours_eau WHERE direction IS NOT NULL") == "90368380-5d42-4a28-9889-6ae657f84a75"
-            assert query("SELECT count(*) FROM milieux.ah a CROSS JOIN LATERAL milieux.ah_sections_candidates(a.id)") == "1"
+            assert query("SELECT count(*) FROM gemapi.prestations;") == "100"
+            assert query("SELECT count(*) FROM gemapi.ah_sections") == "1"
+            assert query("SELECT id FROM gemapi.cours_eau WHERE direction IS NOT NULL") == "90368380-5d42-4a28-9889-6ae657f84a75"
+            assert query("SELECT count(*) FROM gemapi.ah a CROSS JOIN LATERAL gemapi.ah_sections_candidates(a.id)") == "1"
             sections=ogr.Open(str(ROOT/'demo/gpkg/ah.gpkg'))
             section=next(iter(sections.GetLayerByName('ah_sections')))
-            assert query("SELECT id::text||'|'||geom_cours_eau_signature||'|'||encode(ST_AsBinary(geom_reference),'hex') FROM milieux.ah_sections") == '|'.join([section['id'],section['geom_cours_eau_signature'],section.GetGeometryRef().ExportToWkb().hex()])
-            assert query("SELECT etat_reference FROM milieux.ah_sections_carte") == 'CONFORME'
+            assert query("SELECT id::text||'|'||geom_cours_eau_signature||'|'||encode(ST_AsBinary(geom_reference),'hex') FROM gemapi.ah_sections") == '|'.join([section['id'],section['geom_cours_eau_signature'],section.GetGeometryRef().ExportToWkb().hex()])
+            assert query("SELECT etat_reference FROM gemapi.ah_sections_carte") == 'CONFORME'
             # Replaying the accepted decision must not create duplicates or rewrite trace.
             query((ROOT/'demo/data/12_ah_sections.sql').read_text())
-            assert query("SELECT count(*) FROM milieux.ah_sections") == '1'
-            assert query("SELECT count(*) FROM milieux.prestations_fiches;") == "100"
-            assert query("SELECT count(DISTINCT id) FROM milieux.prestations;") == "100"
+            assert query("SELECT count(*) FROM gemapi.ah_sections") == '1'
+            assert query("SELECT count(*) FROM gemapi.prestations_fiches;") == "100"
+            assert query("SELECT count(DISTINCT id) FROM gemapi.prestations;") == "100"
             assert query("SELECT md5(string_agg(id::text || '|' || "
                          "coalesce(photo_1,'<NULL>') || '|' || "
                          "coalesce(photo_1_commentaire,'<NULL>') || '|' || "
                          "coalesce(photo_2,'<NULL>') || '|' || "
                          "coalesce(photo_2_commentaire,'<NULL>'), E'\\n' ORDER BY id)) "
-                         "FROM milieux.prestations;") == photo_hash
+                         "FROM gemapi.prestations;") == photo_hash
             assert query("SELECT count(*) FILTER (WHERE photo_1 LIKE 'photos/%'),"
                          "count(*) FILTER (WHERE photo_1 LIKE 'J:%'),"
                          "count(*) FILTER (WHERE photo_1 IS NULL),"
                          "count(*) FILTER (WHERE photo_2 IS NOT NULL) "
-                         "FROM milieux.prestations;") == "25|25|50|35"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE "
+                         "FROM gemapi.prestations;") == "25|25|50|35"
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE "
                          "photo_1 LIKE '/%' OR photo_2 LIKE '/%';") == "0"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE "
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE "
                          "(photo_1 IS NULL AND (photo_1_commentaire IS NOT NULL OR "
                          "photo_2 IS NOT NULL OR photo_2_commentaire IS NOT NULL)) "
                          "OR (photo_2 IS NULL AND photo_2_commentaire IS NOT NULL);") == "0"
-            assert query("SELECT count(*) FROM milieux.prestations p "
-                         "JOIN milieux.statuts_prestations s ON s.id=p.statut_id "
+            assert query("SELECT count(*) FROM gemapi.prestations p "
+                         "JOIN gemapi.statuts_prestations s ON s.id=p.statut_id "
                          "WHERE p.date_debut IS NOT NULL "
                          "AND p.date_fin >= p.date_debut;") == "100"
             assert query("SELECT min(date_debut)::text || '|' || max(date_fin)::text "
-                         "FROM milieux.prestations;") == "2026-01-01|2028-12-15"
+                         "FROM gemapi.prestations;") == "2026-01-01|2028-12-15"
             assert query("SELECT string_agg(code || ':' || n, ',' ORDER BY code) FROM ("
-                         "SELECT s.code,count(*)::text AS n FROM milieux.prestations p "
-                         "JOIN milieux.statuts_prestations s ON s.id=p.statut_id "
+                         "SELECT s.code,count(*)::text AS n FROM gemapi.prestations p "
+                         "JOIN gemapi.statuts_prestations s ON s.id=p.statut_id "
                          "GROUP BY s.code) counts") == "ANNULE:21,EN_COURS:26,PLANIFIE:30,TERMINE:23"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE technicien_id IS NULL") == "0"
-            assert query("SELECT count(DISTINCT technicien_id) FROM milieux.prestations") == "4"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE modifie_par=session_user "
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE technicien_id IS NULL") == "0"
+            assert query("SELECT count(DISTINCT technicien_id) FROM gemapi.prestations") == "4"
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE modifie_par=session_user "
                          "AND date_modification IS NOT NULL") == "100"
             if extension_schema == "public":
                 query("CREATE ROLE data04_editor NOLOGIN; CREATE ROLE data04_login LOGIN; "
                       "GRANT data04_editor TO data04_login;")
             query(
-                  "GRANT USAGE ON SCHEMA milieux TO data04_editor; "
-                  "GRANT SELECT, UPDATE ON milieux.prestations TO data04_editor;")
-            first_id = query("SELECT id::text FROM milieux.prestations ORDER BY id LIMIT 1")
+                  "GRANT USAGE ON SCHEMA gemapi TO data04_editor; "
+                  "GRANT SELECT, UPDATE ON gemapi.prestations TO data04_editor;")
+            first_id = query("SELECT id::text FROM gemapi.prestations ORDER BY id LIMIT 1")
             query("SET SESSION AUTHORIZATION data04_login; SET ROLE data04_editor; "
-                  "UPDATE milieux.prestations SET modifie_par='injection' "
+                  "UPDATE gemapi.prestations SET modifie_par='injection' "
                   f"WHERE id='{first_id}'::uuid; RESET ROLE; RESET SESSION AUTHORIZATION;")
-            assert query(f"SELECT modifie_par FROM milieux.prestations WHERE id='{first_id}'") == "data04_login"
+            assert query(f"SELECT modifie_par FROM gemapi.prestations WHERE id='{first_id}'") == "data04_login"
             rejected = command("docker", "exec", "-i", container, "psql", "-XAt",
                                "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", database,
-                               input_text="INSERT INTO milieux.prestations "
+                               input_text="INSERT INTO gemapi.prestations "
                                "(type_prestation_id,prestataire_id,statut_id,date_debut,date_fin,geom) "
                                "SELECT type_prestation_id,prestataire_id,statut_id,date_debut,date_fin,geom "
-                               "FROM milieux.prestations LIMIT 1;", check=False)
+                               "FROM gemapi.prestations LIMIT 1;", check=False)
             assert rejected.returncode != 0 and "technicien_id" in rejected.stderr
             assert query("SELECT count(*) FROM information_schema.tables WHERE "
-                         "table_schema='milieux' AND table_name='prestations__techniciens'") == "0"
+                         "table_schema='gemapi' AND table_name='prestations__techniciens'") == "0"
             for column, expected in (("ah_stockage_id","13"),("ah_ouvrage_id","6"),("cours_eau_id","62"),("digue_id","1"),("site_terrestre_id","6")):
-                assert query(f"SELECT count({column}) FROM milieux.prestations") == expected
-            assert query("SELECT count(vegetation_id) FROM milieux.prestations") == "12"
-            assert query("SELECT to_regclass('milieux.prestations__sites_zones') IS NULL") == "t"
-            assert query("SELECT count(*) FROM milieux.digues;") == "3"
-            assert query("SELECT count(*) FROM milieux.digues_reperes;") == "3"
-            assert query("SELECT count(*) FROM milieux.digues_carte;") == "3"
-            assert query("SELECT count(*) FROM milieux.digues_carte WHERE "
+                assert query(f"SELECT count({column}) FROM gemapi.prestations") == expected
+            assert query("SELECT count(vegetation_id) FROM gemapi.prestations") == "12"
+            assert query("SELECT to_regclass('gemapi.prestations__sites_zones') IS NULL") == "t"
+            assert query("SELECT count(*) FROM gemapi.digues;") == "3"
+            assert query("SELECT count(*) FROM gemapi.digues_reperes;") == "3"
+            assert query("SELECT count(*) FROM gemapi.digues_carte;") == "3"
+            assert query("SELECT count(*) FROM gemapi.digues_carte WHERE "
                          "etat_referentiel='COURS_EAU_NON_QUALIFIE' AND ST_SRID(geom)=3950 "
                          "AND ST_IsValid(geom) AND ST_Length(geom)>0;") == "3"
-            assert query("SELECT tgenabled FROM pg_trigger WHERE tgrelid='milieux.digues_reperes'::regclass AND tgname='digues_reperes_prepare_trg'") == "O"
+            assert query("SELECT tgenabled FROM pg_trigger WHERE tgrelid='gemapi.digues_reperes'::regclass AND tgname='digues_reperes_prepare_trg'") == "O"
             refused = command('docker','exec','-i',container,'psql','-XAt','-v','ON_ERROR_STOP=1',
                               '-U','postgres','-d',database,input_text=(
-                                  "BEGIN; INSERT INTO milieux.digues(nom) VALUES ('Nouveau refusé'); "
-                                  "INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
-                                  "SELECT d.id,r.id,'G',.1,.2 FROM milieux.digues d CROSS JOIN milieux.cours_eau r "
+                                  "BEGIN; INSERT INTO gemapi.digues(nom) VALUES ('Nouveau refusé'); "
+                                  "INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) "
+                                  "SELECT d.id,r.id,'G',.1,.2 FROM gemapi.digues d CROSS JOIN gemapi.cours_eau r "
                                   "WHERE d.nom='Nouveau refusé' LIMIT 1; COMMIT;"),check=False)
             assert refused.returncode != 0 and 'non admissible' in refused.stderr
-            assert query('SELECT count(*) FROM milieux.digues') == '3'
+            assert query('SELECT count(*) FROM gemapi.digues') == '3'
             for uid, digue_id, wkb, signature in digue_features:
-                assert query(f"SELECT encode(ST_AsBinary(geom_reference),'hex')='{wkb}' AND geom_riviere_signature='{signature}' FROM milieux.digues_reperes WHERE id='{uid}'") == "t"
+                assert query(f"SELECT encode(ST_AsBinary(geom_reference),'hex')='{wkb}' AND geom_riviere_signature='{signature}' FROM gemapi.digues_reperes WHERE id='{uid}'") == "t"
                 distance = query(
                     "SELECT ST_HausdorffDistance(geom, "
                     f"ST_GeomFromWKB(decode('{wkb}','hex'),3950)) "
-                    f"FROM milieux.digues_carte WHERE id='{uid}' AND digue_id='{digue_id}';"
+                    f"FROM gemapi.digues_carte WHERE id='{uid}' AND digue_id='{digue_id}';"
                 )
                 assert distance and float(distance) < 1e-6, (uid, distance)
-            assert query("SELECT count(*) FROM milieux.prestations WHERE geom IS NOT NULL;") == "88"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE vegetation_id IS NOT NULL AND geom IS NULL") == "12"
-            assert query("SELECT count(*) FROM milieux.prestations_carte WHERE geom IS NOT NULL") == "100"
-            assert query("SELECT count(*) FROM milieux.prestations p JOIN public.vegetation z ON z.id=p.vegetation_id JOIN milieux.prestations_carte c ON c.id=p.id WHERE ST_OrderingEquals(c.geom,z.geometry)") == "12"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE position='Indéfini';") == "100"
-            assert query("SELECT count(*) FROM milieux.prestations p WHERE "
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE geom IS NOT NULL;") == "88"
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE vegetation_id IS NOT NULL AND geom IS NULL") == "12"
+            assert query("SELECT count(*) FROM gemapi.prestations_carte WHERE geom IS NOT NULL") == "100"
+            assert query("SELECT count(*) FROM gemapi.prestations p JOIN gemapi.vegetation z ON z.id=p.vegetation_id JOIN gemapi.prestations_carte c ON c.id=p.id WHERE ST_OrderingEquals(c.geom,z.geometry)") == "12"
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE position='Indéfini';") == "100"
+            assert query("SELECT count(*) FROM gemapi.prestations p WHERE "
                          "num_nonnulls(cours_eau_id,digue_id,ah_stockage_id,ah_ouvrage_id,site_terrestre_id,troncon_id,ah_section_id,vegetation_id,cheminement_id,mobilier_id)=1") == "100"
             assert query("SELECT count(DISTINCT ST_GeometryType(geom)) "
-                         "FROM milieux.prestations;") == "6"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE "
+                         "FROM gemapi.prestations;") == "6"
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE "
                          "ST_GeometryType(geom) IN ('ST_MultiPoint','ST_MultiLineString',"
                          "'ST_MultiPolygon');") == str(multipart_count)
-            assert query("SELECT count(*) FROM milieux.prestations WHERE "
+            assert query("SELECT count(*) FROM gemapi.prestations WHERE "
                          "NOT ST_IsValid(geom) OR ST_IsEmpty(geom) OR ST_SRID(geom)<>3950;") == "0"
             assert query("SELECT count(DISTINCT EXTRACT(YEAR FROM date_debut)) FROM "
-                         "milieux.prestations;") == "3"
+                         "gemapi.prestations;") == "3"
             for column, expected in (("type_prestation_id", "9"),
                                      ("prestataire_id", "6"),
                                      ("technicien_id", "4"), ("statut_id", "4")):
-                assert query(f"SELECT count(DISTINCT {column}) FROM milieux.prestations;") == expected
+                assert query(f"SELECT count(DISTINCT {column}) FROM gemapi.prestations;") == expected
             assert query("SELECT count(DISTINCT c.id)::text || '|' || count(*)::text "
-                         "FROM milieux.prestations_carte p JOIN milieux.communes c "
+                         "FROM gemapi.prestations_carte p JOIN gemapi.communes c "
                          "ON ST_Intersects(p.geom,c.geom);") == commune_intersections
             assert query("SELECT string_agg(n::text || ':' || groups::text,',' ORDER BY n) "
                          "FROM (SELECT n,count(*) groups FROM ("
                          "SELECT EXTRACT(YEAR FROM date_debut)::int,"
                          "type_prestation_id,statut_id,count(*) n "
-                         "FROM milieux.prestations GROUP BY 1,2,3) leaves "
+                         "FROM gemapi.prestations GROUP BY 1,2,3) leaves "
                          "GROUP BY n) sizes;") == "1:4,2:4,3:24,4:4"
             for dimensions, expected in (("EXTRACT(YEAR FROM p.date_debut),"
                                           "p.type_prestation_id,p.statut_id", "36|100"),
                                          ("c.id,p.type_prestation_id,p.statut_id", commune_groups),
                                          ("p.prestataire_id,p.technicien_id,p.statut_id", "48|100")):
-                join = ("JOIN milieux.communes c ON ST_Intersects(p.geom,c.geom) "
+                join = ("JOIN gemapi.communes c ON ST_Intersects(p.geom,c.geom) "
                         if dimensions.startswith("c.id") else "")
                 assert query("SELECT count(*)::text || '|' || sum(n)::text FROM ("
-                             f"SELECT {dimensions},count(*) n FROM milieux.prestations_carte p "
+                             f"SELECT {dimensions},count(*) n FROM gemapi.prestations_carte p "
                              f"{join}GROUP BY 1,2,3) terminal;") == expected
             # Every seed table must have been populated, including the last import.
             expected_counts = {
@@ -369,26 +369,26 @@ def main():
                 "cours_eau": 58,
             }
             for table, expected in expected_counts.items():
-                assert int(query(f"SELECT count(*) FROM milieux.{table};")) == expected, table
-            assert query("SELECT count(*) FROM milieux.cours_eau WHERE valide=false;") == "57"
-            assert query("SELECT count(*) FROM information_schema.columns WHERE table_schema='milieux' "
+                assert int(query(f"SELECT count(*) FROM gemapi.{table};")) == expected, table
+            assert query("SELECT count(*) FROM gemapi.cours_eau WHERE valide=false;") == "57"
+            assert query("SELECT count(*) FROM information_schema.columns WHERE table_schema='gemapi' "
                          "AND table_name='cours_eau' AND column_name='code_topage';") == "0"
             assert query("SELECT data_type||'|'||is_nullable||'|'||is_generated "
-                         "FROM information_schema.columns WHERE table_schema='milieux' "
+                         "FROM information_schema.columns WHERE table_schema='gemapi' "
                          "AND table_name='cours_eau' AND column_name='valide';") == "boolean|NO|ALWAYS"
             null_result = command("docker", "exec", "-i", container, "psql", "-XAt",
                                   "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", database,
-                                  input_text="UPDATE milieux.cours_eau SET valide=NULL "
-                                  "WHERE id=(SELECT id FROM milieux.cours_eau LIMIT 1);",
+                                  input_text="UPDATE gemapi.cours_eau SET valide=NULL "
+                                  "WHERE id=(SELECT id FROM gemapi.cours_eau LIMIT 1);",
                                   check=False)
             assert null_result.returncode != 0 and "valide" in null_result.stderr
-            assert query("SELECT count(*) FROM (SELECT ah_id FROM milieux.ah_ouvrage "
+            assert query("SELECT count(*) FROM (SELECT ah_id FROM gemapi.ah_ouvrage "
                          "GROUP BY ah_id HAVING count(*)>1) parents;") == "3"
-            assert query("SELECT count(*) FROM milieux.sites_terrestres s WHERE "
-                         "NOT EXISTS (SELECT site_terrestre_id FROM public.vegetation WHERE site_terrestre_id=s.id UNION ALL SELECT site_terrestre_id FROM public.cheminements WHERE site_terrestre_id=s.id UNION ALL SELECT site_terrestre_id FROM public.mobilier WHERE site_terrestre_id=s.id);") == "0"
-            assert query("SELECT count(*) FROM milieux.ah_stockage WHERE ST_IsEmpty(geom) "
+            assert query("SELECT count(*) FROM gemapi.sites_terrestres s WHERE "
+                         "NOT EXISTS (SELECT site_terrestre_id FROM gemapi.vegetation WHERE site_terrestre_id=s.id UNION ALL SELECT site_terrestre_id FROM gemapi.cheminements WHERE site_terrestre_id=s.id UNION ALL SELECT site_terrestre_id FROM gemapi.mobilier WHERE site_terrestre_id=s.id);") == "0"
+            assert query("SELECT count(*) FROM gemapi.ah_stockage WHERE ST_IsEmpty(geom) "
                          "OR NOT ST_IsValid(geom) OR ST_GeometryType(geom)<>'ST_Polygon';") == "0"
-            assert query("SELECT count(*) FROM milieux.ah_ouvrage WHERE ST_IsEmpty(geom) "
+            assert query("SELECT count(*) FROM gemapi.ah_ouvrage WHERE ST_IsEmpty(geom) "
                          "OR NOT ST_IsValid(geom) OR ST_GeometryType(geom)<>'ST_LineString';") == "0"
             snapshots.append(check_patrimony(query))
             rerun = command("docker", "exec", "-e", "PGUSER=postgres", container, "bash",

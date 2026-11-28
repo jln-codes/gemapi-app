@@ -84,7 +84,7 @@ def start(iface):
         state['ah']=next(l for l in project.mapLayers().values() if l.name()=='ah')
         state['view']=next(l for l in project.mapLayers().values() if l.providerType()=='postgres' and QgsDataSourceUri(l.source()).table()=='ah_sections_carte')
         state['store']=ah_sections.store_for(state['ah'])
-        state['before']=state['store'].rows('SELECT count(*) FROM milieux.ah_sections')[0][0]
+        state['before']=state['store'].rows('SELECT count(*) FROM gemapi.ah_sections')[0][0]
         for layer in project.mapLayers().values():
             if layer.providerType()!='postgres':project.layerTreeRoot().findLayer(layer.id()).setItemVisibilityChecked(False)
         iface.mainWindow().resize(1500,950)
@@ -131,7 +131,7 @@ def start(iface):
         assert len(layers)==1
         layer=layers[0];state['proposals']=layer
         assert layer.featureCount()==4
-        assert state['store'].rows('SELECT count(*) FROM milieux.ah_sections')[0][0]==state['before']
+        assert state['store'].rows('SELECT count(*) FROM gemapi.ah_sections')[0][0]==state['before']
         record('native_action_candidates_no_write')
         tables=[w for w in QApplication.topLevelWidgets() if w.findChild(QWidget,'mMainView') is not None]
         table=next(w for w in tables if typed_children(w,QgsDualView)[0].masterModel().layer().id()==layer.id())
@@ -156,7 +156,7 @@ def start(iface):
         assert dialog.isVisible()
         capture('desktop_03_accept_confirmation')
         QTest.mouseClick(dialog.buttons.button(QDialogButtonBox.Cancel),Qt.LeftButton)
-        assert state['store'].rows('SELECT count(*) FROM milieux.ah_sections')[0][0]==state['before']
+        assert state['store'].rows('SELECT count(*) FROM gemapi.ah_sections')[0][0]==state['before']
         record('native_cancel_no_write')
         layer=state['proposals'];act=next(a for a in layer.actions().actions() if 'Accepter' in a.name())
         layer.actions().doActionFeature(act.id(),state['candidate'])
@@ -164,7 +164,7 @@ def start(iface):
     def accept():
         dialog=next(iter(state['actions']._dialogs))
         QTest.mouseClick(dialog.buttons.button(QDialogButtonBox.Save),Qt.LeftButton)
-        assert state['store'].rows('SELECT count(*) FROM milieux.ah_sections')[0][0]==state['before']+1
+        assert state['store'].rows('SELECT count(*) FROM gemapi.ah_sections')[0][0]==state['before']+1
         QTest.qWait(120)
         assert typed_children(state['candidate_table'],QgsDualView)[0].filteredFeatureCount()==3
         record('native_explicit_accept_saved')
@@ -185,7 +185,7 @@ def start(iface):
         capture('desktop_04_accepted_sections')
         record('reopened_native_relation_lists_both_sections')
         dialog.close()
-        state['reference']=state['store'].rows(f"SELECT id::text FROM milieux.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.4")[0][0]
+        state['reference']=state['store'].rows(f"SELECT id::text FROM gemapi.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.4")[0][0]
         state['edit_cycle']=0
         schedule(begin_edit)
     def begin_edit():
@@ -210,7 +210,7 @@ def start(iface):
             capture('desktop_07_unqualified_revalidation_refused')
             dialog.reject()
             record('native_revalidation_refused_on_unqualified_course')
-            state['store'].rows(f"UPDATE milieux.cours_eau SET direction=TRUE WHERE id='{uid('R1')}' AND source='TEST AH05'")
+            state['store'].rows(f"UPDATE gemapi.cours_eau SET direction=TRUE WHERE id='{uid('R1')}' AND source='TEST AH05'")
         else:
             assert dialog.signature is not None
             capture('desktop_06_fraction_preview' if state['edit_cycle']==0 else 'desktop_08_revalidation_preview')
@@ -219,7 +219,7 @@ def start(iface):
             assert state['store'].reference(state['reference'])[5]==revision
             record('native_fraction_edit_revision_2' if state['edit_cycle']==0 else 'native_explicit_revalidation_revision_3')
             if state['edit_cycle']==0:
-                state['store'].rows(f"UPDATE milieux.cours_eau SET geom=extensions.ST_Translate(geom,0,1) WHERE id='{uid('R1')}' AND source='TEST AH05'")
+                state['store'].rows(f"UPDATE gemapi.cours_eau SET geom=extensions.ST_Translate(geom,0,1) WHERE id='{uid('R1')}' AND source='TEST AH05'")
                 assert state['store'].reference(state['reference'])[6]=='REFERENTIEL_MODIFIE'
         state['section_native'].close()
         state['edit_cycle']+=1
@@ -254,7 +254,7 @@ def start(iface):
         assert manual.signature and not manual.start.isReadOnly()
         capture('desktop_09_manual_creation')
         QTest.mouseClick(manual.buttons.button(QDialogButtonBox.Save),Qt.LeftButton)
-        ref=state['store'].rows(f"SELECT id::text FROM milieux.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.05 AND fin_fraction=.8")[0][0]
+        ref=state['store'].rows(f"SELECT id::text FROM gemapi.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.05 AND fin_fraction=.8")[0][0]
         assert state['store'].reference(ref)[6]=='CONFORME'
         state['store'].delete(ref,1)
         parent_form.close()
@@ -266,8 +266,8 @@ def start(iface):
             dialog=natives()[-1]
             dialog.close();QTest.qWait(100)
         record('six_native_reopens_without_crash')
-        assert state['store'].rows('SELECT count(*) FROM milieux.ah_sections')[0][0]==state['before']+1
-        assert state['store'].rows("SELECT id::text FROM milieux.cours_eau WHERE source<>'TEST AH05' AND direction IS NOT NULL")==[['90368380-5d42-4a28-9889-6ae657f84a75']]
+        assert state['store'].rows('SELECT count(*) FROM gemapi.ah_sections')[0][0]==state['before']+1
+        assert state['store'].rows("SELECT id::text FROM gemapi.cours_eau WHERE source<>'TEST AH05' AND direction IS NOT NULL")==[['90368380-5d42-4a28-9889-6ae657f84a75']]
         record('consultation_no_unintended_write')
         assert utils.unloadPlugin('gemapi_app')
         assert not state['actions']._dialogs

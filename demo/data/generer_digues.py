@@ -62,28 +62,28 @@ def main():
     sql = [
         "-- Restauration administrative des trois instantanés fictifs ; aucune qualification inventée.",
         "BEGIN;",
-        "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'milieux'), true) FROM pg_catalog.pg_extension AS e JOIN pg_catalog.pg_namespace AS n ON n.oid=e.extnamespace WHERE e.extname='postgis';",
-        "LOCK TABLE milieux.digues, milieux.digues_reperes IN ACCESS EXCLUSIVE MODE;",
-        "DO $$ BEGIN IF EXISTS(SELECT 1 FROM milieux.digues) OR EXISTS(SELECT 1 FROM milieux.digues_reperes) THEN RAISE EXCEPTION 'Import des digues réservé aux tables vides'; END IF; END $$;",
-        "ALTER TABLE milieux.digues_reperes DISABLE TRIGGER digues_reperes_prepare_trg;",
+        "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'gemapi'), true) FROM pg_catalog.pg_extension AS e JOIN pg_catalog.pg_namespace AS n ON n.oid=e.extnamespace WHERE e.extname='postgis';",
+        "LOCK TABLE gemapi.digues, gemapi.digues_reperes IN ACCESS EXCLUSIVE MODE;",
+        "DO $$ BEGIN IF EXISTS(SELECT 1 FROM gemapi.digues) OR EXISTS(SELECT 1 FROM gemapi.digues_reperes) THEN RAISE EXCEPTION 'Import des digues réservé aux tables vides'; END IF; END $$;",
+        "ALTER TABLE gemapi.digues_reperes DISABLE TRIGGER digues_reperes_prepare_trg;",
     ]
     written_parents = set()
     for repere_id, digue_id, river_id, side, start, end, wkb, signature in rows:
         if digue_id not in written_parents:
             sql.append(
-                "INSERT INTO milieux.digues(id,nom) VALUES "
+                "INSERT INTO gemapi.digues(id,nom) VALUES "
                 f"({quote(digue_id)},{quote(parent_names[digue_id])});"
             )
             written_parents.add(digue_id)
         sql.append(
-            "INSERT INTO milieux.digues_reperes"
+            "INSERT INTO gemapi.digues_reperes"
             "(id,digue_id,riviere_id,rive,debut_fraction,fin_fraction,geom_reference,geom_riviere_signature) VALUES "
             f"({quote(repere_id)},{quote(digue_id)},{quote(river_id)},"
             f"{quote(side)},{start!r},{end!r},"
             f"ST_GeomFromWKB(decode('{wkb}','hex'),3950),{quote(signature)});"
         )
     sql.extend(["SET CONSTRAINTS ALL IMMEDIATE;",
-                "ALTER TABLE milieux.digues_reperes ENABLE TRIGGER digues_reperes_prepare_trg;", "COMMIT;", ""])
+                "ALTER TABLE gemapi.digues_reperes ENABLE TRIGGER digues_reperes_prepare_trg;", "COMMIT;", ""])
     SQL.write_text("\n".join(sql), encoding="utf-8")
     print(f"{len(rows)} repères fictifs exportés sans recalcul : {SQL.name}")
 

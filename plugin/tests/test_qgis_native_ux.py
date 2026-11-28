@@ -41,7 +41,7 @@ class NativeUx(unittest.TestCase):
                 relation = relations[widget.find(".//Option[@name='Relation']").get('value')]
                 target = sources[relation.get('referencedLayer')]
                 self.assertEqual(target.get('readOnly'), '1')
-                self.assertIn(f'"public"."{family}"', target.findtext('datasource'))
+                self.assertIn(f'"gemapi"."{family}"', target.findtext('datasource'))
                 self.assertIn('site_terrestre_id IS NOT NULL', target.findtext('datasource'))
 
     def check_selection(self,env):

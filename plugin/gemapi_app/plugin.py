@@ -27,8 +27,8 @@ def resolve_map_prestation(project, layer_id, prestation_id):
     if layer is None or not layer.isValid() or layer.providerType() != "postgres":
         raise ValueError("La couche de prestation n'est plus disponible.")
     uri = QgsDataSourceUri(layer.source())
-    if uri.schema() != "milieux" or uri.table() != "prestations_carte":
-        raise ValueError("Cette action est réservée à milieux.prestations_carte.")
+    if uri.schema() != "gemapi" or uri.table() != "prestations_carte":
+        raise ValueError("Cette action est réservée à gemapi.prestations_carte.")
     if uri.connectionInfo(False) != _connection_info(project):
         raise ValueError("La couche utilise une autre connexion PostgreSQL.")
     return str(UUID(str(prestation_id)))
@@ -319,7 +319,7 @@ class SigMilieuxUX(QObject):
 
     def open_creation_draft(self, values, associations):
         if not prestation_permissions(self.session.connection())["insert"]:
-            raise ValueError("Droit INSERT absent sur milieux.prestations.")
+            raise ValueError("Droit INSERT absent sur gemapi.prestations.")
         if self.creation is not None and self.creation._save_completed:
             if self.creation._saved_scope_generation != self.session.scope_generation:
                 self._dispose_creation()
@@ -393,7 +393,7 @@ class SigMilieuxUX(QObject):
     def show_creation(self, *_):
         try:
             if not prestation_permissions(self.session.connection())["insert"]:
-                raise ValueError("Droit INSERT absent sur milieux.prestations.")
+                raise ValueError("Droit INSERT absent sur gemapi.prestations.")
         except Exception as error:
             if hasattr(self.iface, "messageBar"):
                 message = str(error) if isinstance(error, ValueError) else "Connexion PostgreSQL indisponible."
@@ -436,7 +436,7 @@ class SigMilieuxUX(QObject):
         connection = self.session.connection()
         rights = prestation_permissions(connection)
         if not rights["select"]:
-            raise ValueError("Droit SELECT absent sur milieux.prestations.")
+            raise ValueError("Droit SELECT absent sur gemapi.prestations.")
         if origin == "map" and not rights["update"]:
             raise ValueError("Modification non autorisée. Utilisez le formulaire QGIS pour consulter la prestation.")
         mode = "edit" if rights["update"] else "view"

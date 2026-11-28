@@ -46,23 +46,23 @@ class ReportAhIntegration(unittest.TestCase):
         cls.q('CREATE SCHEMA extensions; CREATE EXTENSION postgis WITH SCHEMA extensions;')
         cls.q((ROOT / 'model/schema.sql').read_text())
         cls.q('SET search_path=pg_catalog,extensions,public')
-        cls.q("INSERT INTO milieux.prestataires(id,nom) VALUES (%s,'Entreprise fictive')", (uid('provider'),))
-        cls.q("INSERT INTO milieux.techniciens(id,nom) VALUES (%s,'Technicien fictif')", (uid('tech'),))
+        cls.q("INSERT INTO gemapi.prestataires(id,nom) VALUES (%s,'Entreprise fictive')", (uid('provider'),))
+        cls.q("INSERT INTO gemapi.techniciens(id,nom) VALUES (%s,'Technicien fictif')", (uid('tech'),))
         for name in ('T1', 'T2'):
-            cls.q('INSERT INTO milieux.types_prestations(id,code,libelle,categorie_id) '
-                  'SELECT %s,%s,%s,id FROM milieux.prestations_categorie ORDER BY ordre LIMIT 1',
+            cls.q('INSERT INTO gemapi.types_prestations(id,code,libelle,categorie_id) '
+                  'SELECT %s,%s,%s,id FROM gemapi.prestations_categorie ORDER BY ordre LIMIT 1',
                   (uid(name), name, 'Type fictif ' + name))
         for name in ('A', 'B'):
-            cls.q('INSERT INTO milieux.ah(id,nom) VALUES (%s,%s)', (uid(name), 'AH fictif ' + name))
-            cls.q("INSERT INTO milieux.ah_stockage(id,ah_id,nom,geom) VALUES (%s,%s,%s,"
+            cls.q('INSERT INTO gemapi.ah(id,nom) VALUES (%s,%s)', (uid(name), 'AH fictif ' + name))
+            cls.q("INSERT INTO gemapi.ah_stockage(id,ah_id,nom,geom) VALUES (%s,%s,%s,"
                   "ST_Translate(ST_GeomFromText('POLYGON((0 -5,600 -5,600 5,0 5,0 -5))',3950),1700000,9300000))",
                   (uid('S' + name), uid(name), 'Stockage ' + name))
-            cls.q("INSERT INTO milieux.ah_ouvrage(id,ah_id,nom,geom) VALUES (%s,%s,%s,"
+            cls.q("INSERT INTO gemapi.ah_ouvrage(id,ah_id,nom,geom) VALUES (%s,%s,%s,"
                   "ST_Translate(ST_GeomFromText('LINESTRING(100 -5,100 5)',3950),1700000,9300000))",
                   (uid('O' + name), uid(name), 'Ouvrage ' + name))
         # R2 shares the same axis deliberately: identity must still be checked.
         for name in ('R', 'R2'):
-            cls.q("INSERT INTO milieux.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
+            cls.q("INSERT INTO gemapi.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
                   "VALUES (%s,%s,'rivière','FICTION REPORT-AH-01',true,"
                   "ST_Translate(ST_GeomFromText('MULTILINESTRING((0 0,1000 0))',3950),1700000,9300000))",
                   (uid(name), 'Rivière fictive ' + name))
@@ -71,9 +71,9 @@ class ReportAhIntegration(unittest.TestCase):
             # The fixture's references must be actual components of storage intersections.
             polygon = ('POLYGON((100 -5,300 -5,300 2,400 2,400 -5,600 -5,600 5,100 5,100 -5))'
                        if parent=='A' else 'POLYGON((200 -5,500 -5,500 5,200 5,200 -5))')
-            cls.q('UPDATE milieux.ah_stockage SET geom=ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000) WHERE ah_id=%s',
+            cls.q('UPDATE gemapi.ah_stockage SET geom=ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000) WHERE ah_id=%s',
                   (polygon,uid(parent)))
-            cls.q('INSERT INTO milieux.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) '
+            cls.q('INSERT INTO gemapi.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) '
                   'VALUES (%s,%s,%s,%s,%s)', (uid(name),uid(parent),uid('R'),start,end))
         cls.cases = {
             'P01-stockage': ('ah_stockage_id', 'SA', None, False),
@@ -95,11 +95,11 @@ class ReportAhIntegration(unittest.TestCase):
             'P17-exterieur-section-A': ('cours_eau_id','R','POINT(350 0)',False),
         }
         for index, (name, (field, target, wkt, _)) in enumerate(cls.cases.items()):
-            cls.q(f'INSERT INTO milieux.prestations(id,intitule,type_prestation_id,prestataire_id,'
+            cls.q(f'INSERT INTO gemapi.prestations(id,intitule,type_prestation_id,prestataire_id,'
                   f'technicien_id,statut_id,date_debut,date_fin,quantite,unite,{field},geom) '
                   "SELECT %s,%s,%s,%s,%s,id,'2026-01-02','2026-01-03',%s,'interventions',%s,"
                   "ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000) "
-                  "FROM milieux.statuts_prestations WHERE code='TERMINE'",
+                  "FROM gemapi.statuts_prestations WHERE code='TERMINE'",
                   (uid(name),name,uid('T1' if index % 2 else 'T2'),uid('provider'),uid('tech'),index+1,uid(target),wkt))
         cls.db.commit()
         cls.initial = cls.fingerprint()
@@ -114,7 +114,7 @@ class ReportAhIntegration(unittest.TestCase):
     @classmethod
     def fingerprint(cls):
         return {table: cls.q(f"SELECT md5(string_agg(row_to_json(x)::text,',' ORDER BY x.id)) "
-                            f'FROM milieux.{table} x')[0][0]
+                            f'FROM gemapi.{table} x')[0][0]
                 for table in ('ah','ah_stockage','ah_ouvrage','cours_eau','ah_sections','prestations')}
 
     def tearDown(self):
@@ -137,8 +137,8 @@ class ReportAhIntegration(unittest.TestCase):
     def test_01_exact_intersection_all_allowed_geometry_types(self):
         self.assertEqual(self.names({'ah':[uid('A')]}), self.expected_a())
         # Independent SQL oracle, with no type discriminator or tolerance.
-        oracle = self.q("SELECT DISTINCT p.intitule FROM milieux.prestations p "
-                        "JOIN milieux.ah_sections_carte s ON s.cours_eau_id=p.cours_eau_id "
+        oracle = self.q("SELECT DISTINCT p.intitule FROM gemapi.prestations p "
+                        "JOIN gemapi.ah_sections_carte s ON s.cours_eau_id=p.cours_eau_id "
                         "WHERE s.ah_id=%s AND s.etat_reference='CONFORME' AND s.cours_eau_qualifie "
                         "AND ST_Intersects(p.geom,s.geom_reference)", (uid('A'),))
         self.assertEqual({r[0] for r in oracle}, self.expected_a()-{'P01-stockage','P02-ouvrage'})
@@ -157,7 +157,7 @@ class ReportAhIntegration(unittest.TestCase):
         self.assertTrue(record['reference_geometries'][0]['direct'])
         for row in rows.values():
             self.assertEqual(row['own_wkt'],self.q(
-                'SELECT ST_AsText(geom) FROM milieux.prestations WHERE id=%s',(row['id'],))[0][0])
+                'SELECT ST_AsText(geom) FROM gemapi.prestations WHERE id=%s',(row['id'],))[0][0])
         self.assertEqual(record['quantite'],'5')
 
     def test_03_children_course_and_management_remain_direct(self):
@@ -182,7 +182,7 @@ class ReportAhIntegration(unittest.TestCase):
         self.assertEqual(len(grouped_entries(rows+rows,())),17)
         self.assertEqual(own_totals(rows),own_totals(rows+rows))
         expected=self.q('SELECT COALESCE(sum(ST_Length(geom)) FILTER (WHERE ST_Dimension(geom)=1),0),'
-                        'COALESCE(sum(ST_Area(geom)) FILTER (WHERE ST_Dimension(geom)=2),0) FROM milieux.prestations')[0]
+                        'COALESCE(sum(ST_Area(geom)) FILTER (WHERE ST_Dimension(geom)=2),0) FROM gemapi.prestations')[0]
         self.assertEqual(own_totals(rows),tuple(map(float,expected)))
         shared=[r for _,r in entries if r['intitule']=='P06-deux-AH']
         self.assertEqual(len(shared),2)
@@ -199,32 +199,32 @@ class ReportAhIntegration(unittest.TestCase):
 
     def test_06_lost_qualification_excludes_indirect_only(self):
         for direction in (None,False):
-            self.q('UPDATE milieux.cours_eau SET direction=%s WHERE id=%s',(direction,uid('R')))
+            self.q('UPDATE gemapi.cours_eau SET direction=%s WHERE id=%s',(direction,uid('R')))
             self.assertEqual(self.names({'ah':[uid('A')]}),{'P01-stockage','P02-ouvrage'})
-        self.assertEqual(self.q('SELECT count(*) FROM milieux.ah_sections')[0][0],3)
+        self.assertEqual(self.q('SELECT count(*) FROM gemapi.ah_sections')[0][0],3)
 
     def test_07_changed_reference_excluded_without_recalculation(self):
-        before=self.q('SELECT id,ST_AsEWKB(geom_reference) FROM milieux.ah_sections ORDER BY id')
-        self.q('UPDATE milieux.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s',(uid('R'),))
-        self.q('UPDATE milieux.cours_eau SET direction=true WHERE id=%s',(uid('R'),))
+        before=self.q('SELECT id,ST_AsEWKB(geom_reference) FROM gemapi.ah_sections ORDER BY id')
+        self.q('UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s',(uid('R'),))
+        self.q('UPDATE gemapi.cours_eau SET direction=true WHERE id=%s',(uid('R'),))
         self.assertEqual(self.names({'ah':[uid('A')]}),{'P01-stockage','P02-ouvrage'})
-        self.assertEqual(before,self.q('SELECT id,ST_AsEWKB(geom_reference) FROM milieux.ah_sections ORDER BY id'))
+        self.assertEqual(before,self.q('SELECT id,ST_AsEWKB(geom_reference) FROM gemapi.ah_sections ORDER BY id'))
 
     def test_08_attribute_and_identical_geometry_keep_recognition(self):
-        self.q("UPDATE milieux.cours_eau SET nom='Nom modifié',geom=geom WHERE id=%s",(uid('R'),))
+        self.q("UPDATE gemapi.cours_eau SET nom='Nom modifié',geom=geom WHERE id=%s",(uid('R'),))
         self.assertEqual(self.names({'ah':[uid('A')]}),self.expected_a())
 
     def test_storage_change_keeps_indirect_and_global(self):
-        before=self.q('SELECT id,ST_AsEWKB(geom_reference) FROM milieux.ah_sections ORDER BY id')
-        self.q('UPDATE milieux.ah_stockage SET geom=ST_Translate(geom,0,1) WHERE ah_id=%s',(uid('A'),))
+        before=self.q('SELECT id,ST_AsEWKB(geom_reference) FROM gemapi.ah_sections ORDER BY id')
+        self.q('UPDATE gemapi.ah_stockage SET geom=ST_Translate(geom,0,1) WHERE ah_id=%s',(uid('A'),))
         self.assertEqual(self.names({'ah':[uid('A')]}),self.expected_a())
         self.assertEqual(len(self.records({})),17)
-        self.assertEqual(before,self.q('SELECT id,ST_AsEWKB(geom_reference) FROM milieux.ah_sections ORDER BY id'))
+        self.assertEqual(before,self.q('SELECT id,ST_AsEWKB(geom_reference) FROM gemapi.ah_sections ORDER BY id'))
         self.assertTrue(self.names({'ah':[uid('B')]}))
 
     def test_09_read_only_role_and_snapshot(self):
-        self.q('CREATE ROLE report_reader; GRANT USAGE ON SCHEMA milieux,extensions TO report_reader; '
-               'GRANT SELECT ON ALL TABLES IN SCHEMA milieux,public TO report_reader; SET ROLE report_reader')
+        self.q('CREATE ROLE report_reader; GRANT USAGE ON SCHEMA gemapi,extensions TO report_reader; '
+               'GRANT SELECT ON ALL TABLES IN SCHEMA gemapi TO report_reader; SET ROLE report_reader')
         self.assertEqual(self.names({'ah':[uid('A')]}),self.expected_a())
         self.q('RESET ROLE')
         self.assertEqual(self.fingerprint(),self.initial)

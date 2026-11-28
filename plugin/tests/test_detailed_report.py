@@ -63,7 +63,7 @@ class DetailedReportTests(unittest.TestCase):
             def providerType(self): return "postgres"
             def source(self):
                 return ("dbname='postgres' host=localhost user='postgres.exemple' "
-                        "key='id' srid=3950 type=Geometry table=\"milieux\".\"prestations\" (geom)")
+                        "key='id' srid=3950 type=Geometry table=\"gemapi\".\"prestations\" (geom)")
         class Project:
             def mapLayers(self): return {"one": Layer()}
         self.assertEqual(connection_login(Project()), "postgres.exemple")

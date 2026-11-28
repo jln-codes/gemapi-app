@@ -24,82 +24,82 @@ WITH references_patrimoniales AS (
     SELECT p.id AS prestation_id, 'cours_eau'::text AS famille,
            c.id AS patrimoine_id, c.nom AS patrimoine_nom,
            NULL::uuid AS parent_id, NULL::text AS parent_nom, c.geom
-      FROM milieux.prestations p JOIN milieux.cours_eau c ON c.id=p.cours_eau_id
+      FROM gemapi.prestations p JOIN gemapi.cours_eau c ON c.id=p.cours_eau_id
     UNION ALL
     SELECT p.id, 'digue', d.id, d.nom, NULL::uuid, NULL::text, r.geom_reference
-      FROM milieux.prestations p
-      JOIN milieux.digues d ON d.id=p.digue_id
-      JOIN milieux.digues_reperes r ON r.digue_id=d.id
+      FROM gemapi.prestations p
+      JOIN gemapi.digues d ON d.id=p.digue_id
+      JOIN gemapi.digues_reperes r ON r.digue_id=d.id
     UNION ALL
     SELECT p.id, 'ah_sections', h.id, c.nom, a.id, a.nom, h.geom_reference
-      FROM milieux.prestations p JOIN milieux.ah_sections h ON h.id=p.ah_section_id
-      JOIN milieux.cours_eau c ON c.id=h.cours_eau_id JOIN milieux.ah a ON a.id=h.ah_id
+      FROM gemapi.prestations p JOIN gemapi.ah_sections h ON h.id=p.ah_section_id
+      JOIN gemapi.cours_eau c ON c.id=h.cours_eau_id JOIN gemapi.ah a ON a.id=h.ah_id
     UNION ALL
     SELECT p.id, 'ah_stockage', s.id, s.nom, a.id, a.nom, s.geom
-      FROM milieux.prestations p
-      JOIN milieux.ah_stockage s ON s.id=p.ah_stockage_id
-      JOIN milieux.ah a ON a.id=s.ah_id
+      FROM gemapi.prestations p
+      JOIN gemapi.ah_stockage s ON s.id=p.ah_stockage_id
+      JOIN gemapi.ah a ON a.id=s.ah_id
     UNION ALL
     SELECT p.id, 'ah_ouvrage', o.id, o.nom, a.id, a.nom, o.geom
-      FROM milieux.prestations p
-      JOIN milieux.ah_ouvrage o ON o.id=p.ah_ouvrage_id
-      JOIN milieux.ah a ON a.id=o.ah_id
+      FROM gemapi.prestations p
+      JOIN gemapi.ah_ouvrage o ON o.id=p.ah_ouvrage_id
+      JOIN gemapi.ah a ON a.id=o.ah_id
     UNION ALL
     SELECT p.id, 'site_terrestre', s.id, s.nom, NULL::uuid, NULL::text, s.geom
-      FROM milieux.prestations p
-      JOIN milieux.sites_terrestres s ON s.id=p.site_terrestre_id
+      FROM gemapi.prestations p
+      JOIN gemapi.sites_terrestres s ON s.id=p.site_terrestre_id
     UNION ALL
-    SELECT p.id, 'troncon', z.id, z.designation, d.id, d.nom, z.geometry FROM milieux.prestations p JOIN public.troncons z ON z.id=p.troncon_id
-    JOIN milieux.digues d ON d.id=z.digue_id
+    SELECT p.id, 'troncon', z.id, z.designation, d.id, d.nom, z.geometry FROM gemapi.prestations p JOIN gemapi.troncons z ON z.id=p.troncon_id
+    JOIN gemapi.digues d ON d.id=z.digue_id
     UNION ALL
     SELECT p.id, 'mobilier', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
-    FROM milieux.prestations p JOIN public.mobilier z ON z.id=p.mobilier_id LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    FROM gemapi.prestations p JOIN gemapi.mobilier z ON z.id=p.mobilier_id LEFT JOIN gemapi.sites_terrestres s ON s.id=z.site_terrestre_id
     UNION ALL
     SELECT p.id, 'cheminement', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
-    FROM milieux.prestations p JOIN public.cheminements z ON z.id=p.cheminement_id LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    FROM gemapi.prestations p JOIN gemapi.cheminements z ON z.id=p.cheminement_id LEFT JOIN gemapi.sites_terrestres s ON s.id=z.site_terrestre_id
     UNION ALL
     SELECT p.id, 'vegetation', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
-    FROM milieux.prestations p JOIN public.vegetation z ON z.id=p.vegetation_id LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    FROM gemapi.prestations p JOIN gemapi.vegetation z ON z.id=p.vegetation_id LEFT JOIN gemapi.sites_terrestres s ON s.id=z.site_terrestre_id
 ),
 candidats AS (
     SELECT 'cours_eau'::text famille, id patrimoine_id, nom patrimoine_nom,
-           NULL::uuid parent_id, NULL::text parent_nom, geom FROM milieux.cours_eau
+           NULL::uuid parent_id, NULL::text parent_nom, geom FROM gemapi.cours_eau
     UNION ALL
     SELECT 'digue', d.id, d.nom, NULL::uuid, NULL::text, r.geom_reference
-      FROM milieux.digues d JOIN milieux.digues_reperes r ON r.digue_id=d.id
+      FROM gemapi.digues d JOIN gemapi.digues_reperes r ON r.digue_id=d.id
     UNION ALL
     SELECT 'ah_sections', h.id, c.nom, a.id, a.nom, h.geom_reference
-      FROM milieux.ah_sections_carte h JOIN milieux.cours_eau c ON c.id=h.cours_eau_id
-      JOIN milieux.ah a ON a.id=h.ah_id
+      FROM gemapi.ah_sections_carte h JOIN gemapi.cours_eau c ON c.id=h.cours_eau_id
+      JOIN gemapi.ah a ON a.id=h.ah_id
       WHERE h.etat_reference='CONFORME' AND h.cours_eau_qualifie IS TRUE
     UNION ALL
     SELECT 'ah_stockage', s.id, s.nom, a.id, a.nom, s.geom
-      FROM milieux.ah_stockage s JOIN milieux.ah a ON a.id=s.ah_id
+      FROM gemapi.ah_stockage s JOIN gemapi.ah a ON a.id=s.ah_id
     UNION ALL
     SELECT 'ah_ouvrage', o.id, o.nom, a.id, a.nom, o.geom
-      FROM milieux.ah_ouvrage o JOIN milieux.ah a ON a.id=o.ah_id
+      FROM gemapi.ah_ouvrage o JOIN gemapi.ah a ON a.id=o.ah_id
     UNION ALL
     SELECT 'site_terrestre', id, nom, NULL::uuid, NULL::text, geom
-      FROM milieux.sites_terrestres
+      FROM gemapi.sites_terrestres
     UNION ALL
-    SELECT 'troncon', z.id, z.designation, d.id, d.nom, z.geometry FROM public.troncons z
-    JOIN milieux.digues d ON d.id=z.digue_id
+    SELECT 'troncon', z.id, z.designation, d.id, d.nom, z.geometry FROM gemapi.troncons z
+    JOIN gemapi.digues d ON d.id=z.digue_id
     UNION ALL
     SELECT 'mobilier', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
-    FROM public.mobilier z LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    FROM gemapi.mobilier z LEFT JOIN gemapi.sites_terrestres s ON s.id=z.site_terrestre_id
     UNION ALL
     SELECT 'cheminement', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
-    FROM public.cheminements z LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    FROM gemapi.cheminements z LEFT JOIN gemapi.sites_terrestres s ON s.id=z.site_terrestre_id
     UNION ALL
     SELECT 'vegetation', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
-    FROM public.vegetation z LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    FROM gemapi.vegetation z LEFT JOIN gemapi.sites_terrestres s ON s.id=z.site_terrestre_id
 ),
 base AS (
     SELECT p.*, tp.libelle AS type_prestation, r.famille,
            r.patrimoine_id, r.patrimoine_nom, r.parent_id, r.parent_nom,
            r.geom AS patrimoine_geom
-      FROM milieux.prestations p
-      JOIN milieux.types_prestations tp ON tp.id=p.type_prestation_id
+      FROM gemapi.prestations p
+      JOIN gemapi.types_prestations tp ON tp.id=p.type_prestation_id
       LEFT JOIN references_patrimoniales r ON r.prestation_id=p.id
 )
 SELECT b.origine_mesures, ST_GeometryType(carte.geom) AS type_effectif, b.id, b.intitule, b.type_prestation, b.famille,
@@ -130,7 +130,7 @@ SELECT b.origine_mesures, ST_GeometryType(carte.geom) AS type_effectif, b.id, b.
        CASE WHEN b.geom IS NULL OR b.patrimoine_geom IS NULL THEN NULL
             ELSE ST_AsBinary(ST_ShortestLine(b.geom,b.patrimoine_geom)) END AS liaison_wkb,
        alt.liaison_wkb AS alternative_liaison_wkb
-  FROM base b JOIN milieux.prestations_carte carte ON carte.id=b.id
+  FROM base b JOIN gemapi.prestations_carte carte ON carte.id=b.id
   LEFT JOIN LATERAL (
       SELECT c.famille, c.patrimoine_id, c.patrimoine_nom, c.parent_nom,
              ST_Distance(b.geom,c.geom) AS distance_m,
@@ -164,7 +164,7 @@ affectations AS (
            p.geom,
            ST_ClusterDBSCAN(p.geom, eps := r.rayon_m, minpoints := 2)
                OVER (PARTITION BY r.rayon_m) AS cluster_id
-      FROM rayons r CROSS JOIN milieux.prestations p
+      FROM rayons r CROSS JOIN gemapi.prestations p
      WHERE p.geom IS NOT NULL
 )
 SELECT rayon_m, cluster_id, count(*) AS nombre_prestations,
@@ -248,7 +248,7 @@ def main():
     try:
         with connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout='5min'")
-            cursor.execute("""SELECT set_config('search_path',format('pg_catalog,%I,milieux',n.nspname),true)
+            cursor.execute("""SELECT set_config('search_path',format('pg_catalog,%I,gemapi',n.nspname),true)
                               FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
                               WHERE e.extname='postgis'""")
             cursor.execute(INVENTORY_SQL)

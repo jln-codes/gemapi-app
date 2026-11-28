@@ -34,7 +34,7 @@ def project_fields():
     assert layer.findtext("id").startswith("prestations_fiches_")
     assert layer.get("wkbType") == "NoGeometry" and layer.get("readOnly") == "1"
     assert layer.findtext("provider") == "postgres"
-    assert '"milieux"."prestations_fiches"' in layer.findtext("datasource")
+    assert '"gemapi"."prestations_fiches"' in layer.findtext("datasource")
     fields = [field.get("name") for field in layer.findall("./fieldConfiguration/field")]
     columns = layer.findall("./attributetableconfig/columns/column")
     shown = [column for column in columns if column.get("hidden") == "0"]
@@ -56,23 +56,23 @@ def scalar(container, statement):
 
 
 def assert_rows(container):
-    assert scalar(container, "SELECT count(*) FROM milieux.prestations") == "7"
-    assert scalar(container, "SELECT count(*) FROM milieux.prestations_fiches") == "7"
+    assert scalar(container, "SELECT count(*) FROM gemapi.prestations") == "7"
+    assert scalar(container, "SELECT count(*) FROM gemapi.prestations_fiches") == "7"
     assert scalar(container, "SELECT count(*) - count(DISTINCT id) "
-                  "FROM milieux.prestations_fiches") == "0"
+                  "FROM gemapi.prestations_fiches") == "0"
     assert scalar(container, "SELECT count(*) FROM ("
-                  "(SELECT id FROM milieux.prestations EXCEPT "
-                  "SELECT id FROM milieux.prestations_fiches) UNION ALL "
-                  "(SELECT id FROM milieux.prestations_fiches EXCEPT "
-                  "SELECT id FROM milieux.prestations)) x") == "0"
+                  "(SELECT id FROM gemapi.prestations EXCEPT "
+                  "SELECT id FROM gemapi.prestations_fiches) UNION ALL "
+                  "(SELECT id FROM gemapi.prestations_fiches EXCEPT "
+                  "SELECT id FROM gemapi.prestations)) x") == "0"
     assert scalar(container, "SELECT type_prestation, prestataire, statut, "
                   "technicien IS NOT NULL, type_geometrie, possede_geometrie, "
                   "intitule IS NULL, quantite, unite FROM "
-                  "milieux.prestations_fiches WHERE id="
+                  "gemapi.prestations_fiches WHERE id="
                   "'10000000-0000-0000-0000-000000000001'") == (
                       "Abattage|Entreprise Test|Planifié|t|Point|t|t|17|arbres")
     assert scalar(container, "SELECT technicien, technicien_id='" + TECH_ID + "' "
-                  "FROM milieux.prestations_fiches WHERE id="
+                  "FROM gemapi.prestations_fiches WHERE id="
                   "'10000000-0000-0000-0000-000000000002'") == "Ada Lovelace|t"
     expected = [
         ("Point", "ST_Point", "t", "", ""),
@@ -87,62 +87,62 @@ def assert_rows(container):
                  "coalesce(type_geometrie_postgis,''), "
                  "possede_geometrie, coalesce(longueur_m::text,''), "
                  "coalesce(surface_m2::text,'') "
-                 "FROM milieux.prestations_fiches ORDER BY id").splitlines()
+                 "FROM gemapi.prestations_fiches ORDER BY id").splitlines()
     for row, values in zip(got, expected, strict=True):
         actual = row.split("|")
         assert actual[:3] == list(values[:3]), (actual, values)
         assert (not actual[3] and not values[3]) or abs(float(actual[3]) - float(values[3])) < 1e-9
         assert (not actual[4] and not values[4]) or abs(float(actual[4]) - float(values[4])) < 1e-9
     assert scalar(container, "SELECT abs(surface_ha - 0.01) < 1e-12 FROM "
-                  "milieux.prestations_fiches WHERE id="
+                  "gemapi.prestations_fiches WHERE id="
                   "'10000000-0000-0000-0000-000000000006'") == "t"
     assert scalar(container, "SELECT abs(surface_ha - 0.02) < 1e-12 FROM "
-                  "milieux.prestations_fiches WHERE id="
+                  "gemapi.prestations_fiches WHERE id="
                   "'10000000-0000-0000-0000-000000000007'") == "t"
     assert scalar(container, "SELECT quantite <> longueur_m FROM "
-                  "milieux.prestations_fiches WHERE id="
+                  "gemapi.prestations_fiches WHERE id="
                   "'10000000-0000-0000-0000-000000000004'") == "t"
     assert scalar(container, "SELECT photo_1, photo_1_commentaire, "
                   "photo_2, photo_2_commentaire FROM "
-                  "milieux.prestations_fiches WHERE id="
+                  "gemapi.prestations_fiches WHERE id="
                   "'10000000-0000-0000-0000-000000000006'") == (
                       "images/avant.jpg|Avant|images/apres.jpg|Après")
-    assert scalar(container, "SELECT count(ah_stockage_id) FROM milieux.prestations "
+    assert scalar(container, "SELECT count(ah_stockage_id) FROM gemapi.prestations "
                   "WHERE id='10000000-0000-0000-0000-000000000006'") == "1"
-    assert scalar(container, "SELECT count(*) FROM milieux.prestations_fiches "
+    assert scalar(container, "SELECT count(*) FROM gemapi.prestations_fiches "
                   "WHERE id='10000000-0000-0000-0000-000000000006'") == "1"
     assert scalar(container, "SELECT count(*) FROM information_schema.columns "
-                  "WHERE table_schema='milieux' AND table_name='prestations_fiches' "
+                  "WHERE table_schema='gemapi' AND table_name='prestations_fiches' "
                   "AND column_name='geom'") == "0"
     assert scalar(container, "SELECT is_updatable FROM information_schema.views "
-                  "WHERE table_schema='milieux' AND table_name='prestations_fiches'") == "NO"
+                  "WHERE table_schema='gemapi' AND table_name='prestations_fiches'") == "NO"
     assert scalar(container, "SELECT reloptions @> ARRAY['security_invoker=true']::text[] "
-                  "FROM pg_class WHERE oid='milieux.prestations_fiches'::regclass") == "t"
-    assert sql(container, "UPDATE milieux.prestations_fiches SET intitule='Interdit' "
+                  "FROM pg_class WHERE oid='gemapi.prestations_fiches'::regclass") == "t"
+    assert sql(container, "UPDATE gemapi.prestations_fiches SET intitule='Interdit' "
                "WHERE id='10000000-0000-0000-0000-000000000001'", check=False).returncode != 0
-    assert sql(container, "DELETE FROM milieux.prestations_fiches WHERE "
+    assert sql(container, "DELETE FROM gemapi.prestations_fiches WHERE "
                "id='10000000-0000-0000-0000-000000000001'", check=False).returncode != 0
 
 
 def seed(container):
-    status_id = scalar(container, "SELECT id FROM milieux.statuts_prestations "
+    status_id = scalar(container, "SELECT id FROM gemapi.statuts_prestations "
                        "WHERE code='PLANIFIE'")
-    sql(container, f"BEGIN; INSERT INTO milieux.types_prestations (id, code, libelle, categorie_id) "
+    sql(container, f"BEGIN; INSERT INTO gemapi.types_prestations (id, code, libelle, categorie_id) "
                    f"VALUES ('{TYPE_ID}','ABATTAGE','Abattage', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa'); "
-                   f"INSERT INTO milieux.prestataires (id, nom) "
+                   f"INSERT INTO gemapi.prestataires (id, nom) "
                    f"VALUES ('{PROVIDER_ID}','Entreprise Test'); "
-                   f"INSERT INTO milieux.techniciens (id, nom, prenom) "
+                   f"INSERT INTO gemapi.techniciens (id, nom, prenom) "
                    f"VALUES ('{TECH_ID}','Lovelace','Ada'); "
-                   "INSERT INTO milieux.prestations (id, type_prestation_id, "
+                   "INSERT INTO gemapi.prestations (id, type_prestation_id, "
                    "prestataire_id, statut_id, technicien_id, date_debut, date_fin, quantite, unite, geom) "
                    "VALUES ('10000000-0000-0000-0000-000000000001', "
                    f"'{TYPE_ID}', '{PROVIDER_ID}', '{status_id}', '{TECH_ID}', "
                    "'2027-01-01','2027-01-02',17,'arbres',"
                    "ST_GeomFromText('POINT(100 100)',3950)); "
-                   "INSERT INTO milieux.cours_eau(id,nom,source,geom) VALUES "
+                   "INSERT INTO gemapi.cours_eau(id,nom,source,geom) VALUES "
                    "('40000000-0000-0000-0000-000000000001','Rivière témoin','TEST',"
                    "ST_GeomFromText('MULTILINESTRING((0 0,100 100))',3950)); "
-                   "UPDATE milieux.prestations SET cours_eau_id='40000000-0000-0000-0000-000000000001' WHERE id='10000000-0000-0000-0000-000000000001'; COMMIT;")
+                   "UPDATE gemapi.prestations SET cours_eau_id='40000000-0000-0000-0000-000000000001' WHERE id='10000000-0000-0000-0000-000000000001'; COMMIT;")
     geometries = [
         "POINT(0 0)",
         "MULTIPOINT((0 0),(1 1))",
@@ -158,37 +158,37 @@ def seed(container):
                   if number == 6 else "")
         photo_values = (", 'images/avant.jpg', 'Avant', 'images/apres.jpg', 'Après'"
                         if number == 6 else "")
-        sql(container, "BEGIN; INSERT INTO milieux.prestations "
+        sql(container, "BEGIN; INSERT INTO gemapi.prestations "
                        "(id, type_prestation_id, prestataire_id, statut_id, technicien_id, "
                        f"date_debut, date_fin, quantite, geom{photos}) "
                        f"VALUES ('{uid}','{TYPE_ID}','{PROVIDER_ID}','{status_id}','{TECH_ID}',"
                        f"'2027-01-01','2027-01-02',17,"
                        f"ST_GeomFromText('{wkt}',3950){photo_values}); "
-                       f"UPDATE milieux.prestations SET cours_eau_id='40000000-0000-0000-0000-000000000001' WHERE id='{uid}'; COMMIT;")
-    sql(container, "BEGIN; INSERT INTO milieux.ah(id,nom) VALUES "
+                       f"UPDATE gemapi.prestations SET cours_eau_id='40000000-0000-0000-0000-000000000001' WHERE id='{uid}'; COMMIT;")
+    sql(container, "BEGIN; INSERT INTO gemapi.ah(id,nom) VALUES "
                    "('30000000-0000-0000-0000-000000000001','AH 1'),"
                    "('30000000-0000-0000-0000-000000000002','AH 2'); "
-                   "INSERT INTO milieux.ah_stockage (id, ah_id, nom, geom) VALUES "
+                   "INSERT INTO gemapi.ah_stockage (id, ah_id, nom, geom) VALUES "
                    "('20000000-0000-0000-0000-000000000001',"
                    "'30000000-0000-0000-0000-000000000001','Z1',"
                    "ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))',3950)),"
                    "('20000000-0000-0000-0000-000000000002',"
                    "'30000000-0000-0000-0000-000000000002','Z2',"
                    "ST_GeomFromText('POLYGON((2 0,3 0,3 1,2 1,2 0))',3950)); "
-                   "INSERT INTO milieux.ah_ouvrage(ah_id,geom) VALUES "
+                   "INSERT INTO gemapi.ah_ouvrage(ah_id,geom) VALUES "
                    "('30000000-0000-0000-0000-000000000001',"
                    "ST_GeomFromText('LINESTRING(0 0,1 0)',3950)),"
                    "('30000000-0000-0000-0000-000000000002',"
                    "ST_GeomFromText('LINESTRING(2 0,3 0)',3950)); "
-                   "UPDATE milieux.prestations SET cours_eau_id=NULL,ah_stockage_id='20000000-0000-0000-0000-000000000001' "
+                   "UPDATE gemapi.prestations SET cours_eau_id=NULL,ah_stockage_id='20000000-0000-0000-0000-000000000001' "
                    "WHERE id='10000000-0000-0000-0000-000000000006'; COMMIT;")
 
 
 
 def measure(container, count):
-    sql(container, "ANALYZE milieux.prestations;")
+    sql(container, "ANALYZE gemapi.prestations;")
     plan = json.loads(sql(container, "EXPLAIN (ANALYZE, FORMAT JSON) "
-                          "SELECT * FROM milieux.prestations_fiches").stdout)
+                          "SELECT * FROM gemapi.prestations_fiches").stdout)
     return round(plan[0]["Execution Time"], 3)
 
 
@@ -208,21 +208,21 @@ def main():
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text(encoding="utf-8"))
         assert scalar(container, "SELECT count(*) FROM information_schema.views "
-                      "WHERE table_schema='milieux' AND table_name LIKE 'prestations_fiches%'") == "1"
-        assert scalar(container, "SELECT count(*) FROM milieux.prestations_fiches") == "0"
+                      "WHERE table_schema='gemapi' AND table_name LIKE 'prestations_fiches%'") == "1"
+        assert scalar(container, "SELECT count(*) FROM gemapi.prestations_fiches") == "0"
         columns = scalar(container, "SELECT string_agg(column_name, ',' "
                          "ORDER BY ordinal_position) FROM information_schema.columns "
-                         "WHERE table_schema='milieux' AND table_name='prestations_fiches'")
+                         "WHERE table_schema='gemapi' AND table_name='prestations_fiches'")
         assert set(fields) <= set(columns.split(","))
         assert scalar(container, "SELECT srtext LIKE '%UNIT[\"metre\",1%' "
                       "FROM spatial_ref_sys WHERE srid=3950") == "t"
         seed(container)
         assert_rows(container)
         # Add test-only rows with valid geometry to measure full view scans.
-        status_id = scalar(container, "SELECT id FROM milieux.statuts_prestations "
+        status_id = scalar(container, "SELECT id FROM gemapi.statuts_prestations "
                            "WHERE code='PLANIFIE'")
         for extra in (493, 4500):
-            sql(container, "BEGIN; WITH created AS (INSERT INTO milieux.prestations "
+            sql(container, "BEGIN; WITH created AS (INSERT INTO gemapi.prestations "
                            "(type_prestation_id, prestataire_id, statut_id, technicien_id, "
                            "date_debut, date_fin, cours_eau_id, geom) SELECT "
                            f"'{TYPE_ID}', '{PROVIDER_ID}', '{status_id}', '{TECH_ID}', "
@@ -230,12 +230,12 @@ def main():
                            "ST_SetSRID(ST_Point(n, n),3950) "
                            f"FROM generate_series(1,{extra}) AS n RETURNING id) "
                            "SELECT id FROM created; COMMIT;")
-            count = int(scalar(container, "SELECT count(*) FROM milieux.prestations"))
+            count = int(scalar(container, "SELECT count(*) FROM gemapi.prestations"))
             assert count in (500, 5000)
-            assert scalar(container, "SELECT count(*) FROM milieux.prestations_fiches") == str(count)
+            assert scalar(container, "SELECT count(*) FROM gemapi.prestations_fiches") == str(count)
             print(f"Vue : {count} lignes, EXPLAIN ANALYZE {measure(container, count)} ms")
         assert scalar(container, "SELECT count(*) - count(DISTINCT id) "
-                      "FROM milieux.prestations_fiches") == "0"
+                      "FROM gemapi.prestations_fiches") == "0"
 
         print("Vue : schéma courant, six types et lecture seule OK")
     finally:

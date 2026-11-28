@@ -22,7 +22,7 @@ def sources(name):
         root = ET.fromstring(archive.read(next(x for x in archive.namelist() if x.endswith('.qgs'))))
     return [(layer.findtext('id'), layer.findtext('datasource'))
             for layer in root.findall('./projectlayers/maplayer')
-            if 'table="milieux"."prestations_carte"' in (layer.findtext('datasource') or '')]
+            if '."prestations_carte"' in (layer.findtext('datasource') or '')]
 
 
 class Layer:

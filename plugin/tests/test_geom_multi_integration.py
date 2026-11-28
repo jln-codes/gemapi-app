@@ -41,20 +41,20 @@ def run_matrix(db):
     with db.cursor() as cur:
         cur.execute("CREATE SCHEMA extensions; CREATE EXTENSION postgis WITH SCHEMA extensions")
         cur.execute((ROOT / "model/schema.sql").read_text())
-        cur.execute("SET search_path=pg_catalog,extensions,milieux")
-        cur.execute("INSERT INTO milieux.techniciens(nom) VALUES ('Technicien fictif') RETURNING id")
+        cur.execute("SET search_path=pg_catalog,extensions,gemapi")
+        cur.execute("INSERT INTO gemapi.techniciens(nom) VALUES ('Technicien fictif') RETURNING id")
         technician = cur.fetchone()[0]
-        cur.execute("INSERT INTO milieux.prestataires(nom) VALUES ('Entreprise fictive') RETURNING id")
+        cur.execute("INSERT INTO gemapi.prestataires(nom) VALUES ('Entreprise fictive') RETURNING id")
         provider = cur.fetchone()[0]
-        cur.execute("INSERT INTO milieux.types_prestations(code,libelle,categorie_id) "
-                    "SELECT 'GEOM-MULTI','Travaux fictifs',id FROM milieux.prestations_categorie "
+        cur.execute("INSERT INTO gemapi.types_prestations(code,libelle,categorie_id) "
+                    "SELECT 'GEOM-MULTI','Travaux fictifs',id FROM gemapi.prestations_categorie "
                     "WHERE ordre=1 RETURNING id")
         prestation_type = cur.fetchone()[0]
-        cur.execute("SELECT id FROM milieux.statuts_prestations WHERE code='TERMINE'")
+        cur.execute("SELECT id FROM gemapi.statuts_prestations WHERE code='TERMINE'")
         status = cur.fetchone()[0]
     db.autocommit = False
     with db.cursor() as cur:
-        cur.execute("INSERT INTO milieux.sites_terrestres(nom,geom) VALUES "
+        cur.execute("INSERT INTO gemapi.sites_terrestres(nom,geom) VALUES "
                     "('Site témoin',ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000)) RETURNING id",
                     (SITE,))
         site = cur.fetchone()[0]
@@ -63,7 +63,7 @@ def run_matrix(db):
             for position, first, second, covered, intersects in POSITIONS:
                 title = f"Site {kind} {position}"
                 wkt = parts(kind, first, second)
-                cur.execute("INSERT INTO milieux.prestations(intitule,type_prestation_id,prestataire_id,"
+                cur.execute("INSERT INTO gemapi.prestations(intitule,type_prestation_id,prestataire_id,"
                             "technicien_id,statut_id,date_debut,date_fin,quantite,unite,site_terrestre_id,geom) "
                             "VALUES (%s,%s,%s,%s,%s,'2026-01-01','2026-01-02',7,'unités',%s,"
                             "ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000)) RETURNING id",
@@ -72,25 +72,25 @@ def run_matrix(db):
                 cur.execute("SELECT ST_Covers(s.geom,p.geom),ST_Intersects(s.geom,p.geom),"
                             "ST_NumGeometries(p.geom),ST_AsText(p.geom),"
                             "ST_AsEWKB(p.geom)=ST_AsEWKB(c.geom) "
-                            "FROM milieux.prestations p JOIN milieux.sites_terrestres s ON s.id=p.site_terrestre_id "
-                            "JOIN milieux.prestations_carte c ON c.id=p.id WHERE p.id=%s", (uid,))
+                            "FROM gemapi.prestations p JOIN gemapi.sites_terrestres s ON s.id=p.site_terrestre_id "
+                            "JOIN gemapi.prestations_carte c ON c.id=p.id WHERE p.id=%s", (uid,))
                 actual_covered, actual_intersects, count, original, map_exact = cur.fetchone()
                 assert (actual_covered, actual_intersects, count, map_exact) == (covered, intersects, 2, True)
                 cases[uid] = (original, MEASURES[kind])
 
         for kind in MEASURES:
-            cur.execute("INSERT INTO public.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
+            cur.execute("INSERT INTO gemapi.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
                         "VALUES ('ARBRES',%s,%s,ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000)) "
                         "RETURNING id,ST_AsText(geometry)", (site, f"Zone {kind}", parts(kind, 20, 420)))
             zone, shape = cur.fetchone()
-            cur.execute("INSERT INTO milieux.prestations(intitule,type_prestation_id,prestataire_id,"
+            cur.execute("INSERT INTO gemapi.prestations(intitule,type_prestation_id,prestataire_id,"
                         "technicien_id,statut_id,date_debut,date_fin,quantite,unite,vegetation_id) "
                         "VALUES (%s,%s,%s,%s,%s,'2026-01-01','2026-01-02',7,'unités',%s) RETURNING id",
                         (f"Zone {kind}", prestation_type, provider, technician, status, zone))
             uid = cur.fetchone()[0]
             cur.execute("SELECT p.geom IS NULL, ST_AsText(c.geom),f.longueur_m,f.surface_m2,f.surface_ha "
-                        "FROM milieux.prestations p JOIN milieux.prestations_carte c USING(id) "
-                        "JOIN milieux.prestations_fiches f USING(id) WHERE p.id=%s", (uid,))
+                        "FROM gemapi.prestations p JOIN gemapi.prestations_carte c USING(id) "
+                        "JOIN gemapi.prestations_fiches f USING(id) WHERE p.id=%s", (uid,))
             _, length, area = MEASURES[kind]
             assert cur.fetchone() == (True, shape, length, area,
                                       area / 10000 if area is not None else None)
@@ -140,7 +140,7 @@ def run_matrix(db):
             for wkt, srid in negatives:
                 cur.execute("SAVEPOINT invalid_geometry")
                 try:
-                    cur.execute(f"UPDATE milieux.{table} SET geom=ST_GeomFromText(%s,%s) WHERE {id_filter}=%s",
+                    cur.execute(f"UPDATE gemapi.{table} SET geom=ST_GeomFromText(%s,%s) WHERE {id_filter}=%s",
                                 (wkt, srid, site))
                 except (psycopg2.errors.CheckViolation, psycopg2.errors.InvalidParameterValue):
                     pass

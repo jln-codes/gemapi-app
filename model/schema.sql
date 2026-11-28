@@ -3,12 +3,15 @@
 -- Ne pas executer sur une base existante avec ces objets.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
-CREATE SCHEMA IF NOT EXISTS milieux;
-CREATE SCHEMA IF NOT EXISTS referentiel;
+CREATE SCHEMA IF NOT EXISTS gemapi;
 DO $$
 BEGIN
+  IF EXISTS (SELECT FROM pg_catalog.pg_depend WHERE refclassid='pg_catalog.pg_namespace'::regclass
+             AND refobjid='gemapi'::regnamespace) THEN
+    RAISE EXCEPTION 'Installation neuve requise : le schéma gemapi doit être vide';
+  END IF;
   IF EXISTS (SELECT FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-             WHERE n.nspname IN ('public','milieux','referentiel') AND c.relkind IN ('r','p','v','m','S','f')
+             WHERE n.nspname IN ('gemapi','public','milieux','referentiel') AND c.relkind IN ('r','p','v','m','S','f')
                AND NOT EXISTS (SELECT FROM pg_catalog.pg_depend dep
                                WHERE dep.classid='pg_catalog.pg_class'::regclass
                                  AND dep.objid=c.oid AND dep.deptype='e')) THEN
@@ -17,27 +20,27 @@ BEGIN
 END $$;
 SELECT pg_catalog.set_config(
   'search_path',
-  pg_catalog.format('pg_catalog,%I,%I,pg_temp', n.nspname, 'milieux'),
+  pg_catalog.format('pg_catalog,%I,%I,pg_temp', n.nspname, 'gemapi'),
   true
 )
 FROM pg_catalog.pg_extension AS e
 JOIN pg_catalog.pg_namespace AS n ON n.oid = e.extnamespace
 WHERE e.extname = 'postgis';
-CREATE TABLE milieux.prestations_categorie (
+CREATE TABLE gemapi.prestations_categorie (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     libelle text NOT NULL UNIQUE,
     ordre integer NOT NULL
 );
-CREATE TABLE milieux.types_prestations (
+CREATE TABLE gemapi.types_prestations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    categorie_id uuid NOT NULL REFERENCES milieux.prestations_categorie(id) ON DELETE RESTRICT,
+    categorie_id uuid NOT NULL REFERENCES gemapi.prestations_categorie(id) ON DELETE RESTRICT,
     code text NOT NULL UNIQUE,
     libelle text NOT NULL,
     actif boolean NOT NULL DEFAULT true,
     modifie_par text,
     date_modification timestamptz
 );
-CREATE TABLE milieux.statuts_prestations (
+CREATE TABLE gemapi.statuts_prestations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     code text NOT NULL UNIQUE CHECK (code IN ('PLANIFIE','EN_COURS','TERMINE','ANNULE')),
     libelle text NOT NULL UNIQUE,
@@ -45,147 +48,147 @@ CREATE TABLE milieux.statuts_prestations (
     date_modification timestamptz
 );
 
-CREATE TABLE referentiel.categories_desordre (
+CREATE TABLE gemapi.categories_desordre (
     id text PRIMARY KEY,
     libelle text,
     abrege text,
     designation text
 );
 
-CREATE TABLE referentiel.cotes (
+CREATE TABLE gemapi.cotes (
     id text PRIMARY KEY,
     designation text,
     abrege text,
     libelle text
 );
 
-CREATE TABLE referentiel.fonctions_structure (
+CREATE TABLE gemapi.fonctions_structure (
     id text PRIMARY KEY,
     code text UNIQUE,
     libelle text NOT NULL,
     designation text
 );
 
-CREATE TABLE referentiel.materiaux_structure (
+CREATE TABLE gemapi.materiaux_structure (
     id text PRIMARY KEY,
     code text UNIQUE,
     libelle text NOT NULL,
     designation text
 );
 
-CREATE TABLE referentiel.natures_structure (
+CREATE TABLE gemapi.natures_structure (
     id text PRIMARY KEY,
     code text UNIQUE,
     libelle text NOT NULL,
     designation text
 );
 
-CREATE TABLE referentiel.positions (
+CREATE TABLE gemapi.positions (
     id text PRIMARY KEY,
     designation text,
     abrege text,
     libelle text
 );
 
-CREATE TABLE referentiel.rives (
+CREATE TABLE gemapi.rives (
     id text PRIMARY KEY,
     designation text,
     abrege text,
     libelle text
 );
 
-CREATE TABLE referentiel.sources_information (
+CREATE TABLE gemapi.sources_information (
     id text PRIMARY KEY,
     designation text,
     abrege text,
     libelle text
 );
 
-CREATE TABLE referentiel.suites_apporter (
+CREATE TABLE gemapi.suites_apporter (
     id text PRIMARY KEY,
     designation text,
     abrege text,
     libelle text
 );
 
-CREATE TABLE referentiel.types_desordre (
+CREATE TABLE gemapi.types_desordre (
     id text PRIMARY KEY,
-    categorie_id text REFERENCES referentiel.categories_desordre(id) ON DELETE RESTRICT,
+    categorie_id text REFERENCES gemapi.categories_desordre(id) ON DELETE RESTRICT,
     libelle text,
     abrege text,
     designation text
 );
 
-CREATE TABLE referentiel.types_equipement_mesure (
+CREATE TABLE gemapi.types_equipement_mesure (
     id text PRIMARY KEY,
     code text NOT NULL UNIQUE,
     abrege text NOT NULL UNIQUE,
     libelle text NOT NULL
 );
 
-CREATE TABLE referentiel.types_ouvrage_hydraulique (
+CREATE TABLE gemapi.types_ouvrage_hydraulique (
     id text PRIMARY KEY,
     code text NOT NULL UNIQUE,
     abrege text NOT NULL UNIQUE,
     libelle text NOT NULL
 );
 
-CREATE TABLE referentiel.types_ouvrage_particulier (
+CREATE TABLE gemapi.types_ouvrage_particulier (
     id text PRIMARY KEY,
     code text UNIQUE,
     libelle text NOT NULL,
     designation text
 );
 
-CREATE TABLE referentiel.types_troncon (
+CREATE TABLE gemapi.types_troncon (
     id text PRIMARY KEY,
     code text UNIQUE,
     libelle text NOT NULL,
     designation text
 );
 
-CREATE TABLE referentiel.typologies_troncon (
+CREATE TABLE gemapi.typologies_troncon (
     id text PRIMARY KEY,
     designation text,
     abrege text,
     libelle text
 );
 
-CREATE TABLE referentiel.urgences (
+CREATE TABLE gemapi.urgences (
     id text PRIMARY KEY,
     libelle text,
     abrege text,
     designation text
 );
 
-CREATE TABLE referentiel.types_mobilier (
+CREATE TABLE gemapi.types_mobilier (
     id text PRIMARY KEY,
     code text NOT NULL UNIQUE,
     abrege text NOT NULL UNIQUE,
     libelle text NOT NULL
 );
 
-CREATE TABLE referentiel.types_cheminement (
+CREATE TABLE gemapi.types_cheminement (
     id text PRIMARY KEY,
     code text NOT NULL UNIQUE,
     abrege text NOT NULL UNIQUE,
     libelle text NOT NULL
 );
 
-CREATE TABLE referentiel.familles_vegetation (
+CREATE TABLE gemapi.familles_vegetation (
     id text PRIMARY KEY,
     code text NOT NULL UNIQUE,
     libelle text NOT NULL,
     designation text
 );
 
-INSERT INTO milieux.prestations_categorie (id, libelle, ordre) VALUES
+INSERT INTO gemapi.prestations_categorie (id, libelle, ordre) VALUES
     ('4946680e-3547-5f25-8508-2929a7f7a79e', 'Entretien manuel', 2),
     ('60410105-fbdd-5890-9d20-a331b4e61e88', 'Génie écologique', 3),
     ('ae1b972a-e127-5216-9660-7c66583eb893', 'Plantations', 4),
     ('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', 'Entretien mécanique', 1);
 
-INSERT INTO milieux.types_prestations (categorie_id, id, code, libelle, actif) VALUES
+INSERT INTO gemapi.types_prestations (categorie_id, id, code, libelle, actif) VALUES
     ('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', '272003ca-7006-5f4b-b5ac-f6d84281a3e2', 'CURAGE', 'Curage', true),
     ('4946680e-3547-5f25-8508-2929a7f7a79e', '6d6fa494-e36e-5ba5-bc50-dbf256d4fc7d', 'ELAGAGE', 'Élagage', true),
     ('60410105-fbdd-5890-9d20-a331b4e61e88', 'aae7d72e-377e-5cd8-a0fb-326d7bd03c5a', 'SUIVI', 'Suivi de milieu', true),
@@ -196,13 +199,13 @@ INSERT INTO milieux.types_prestations (categorie_id, id, code, libelle, actif) V
     ('60410105-fbdd-5890-9d20-a331b4e61e88', 'da65d85b-ecf1-5481-bd2a-a47cf9b14544', 'RESTAURATION', 'Restauration écologique', true),
     ('ae1b972a-e127-5216-9660-7c66583eb893', 'e2659d31-52c3-5f87-884e-56eedd7e1ee9', 'PLANTATION', 'Plantation', true);
 
-INSERT INTO milieux.statuts_prestations (id, code, libelle) VALUES
+INSERT INTO gemapi.statuts_prestations (id, code, libelle) VALUES
     ('58554fd0-fcc2-45b6-aa19-cc4a897af3fb', 'PLANIFIE', 'Planifié'),
     ('9ee713ca-13a1-4358-b5d8-fa79627fc256', 'EN_COURS', 'En cours'),
     ('421801d8-30be-4a5a-8e18-cb2b9ac0ea37', 'TERMINE', 'Terminé'),
     ('fdd48590-aace-4693-946e-80c1f4d8693f', 'ANNULE', 'Annulé');
 
-INSERT INTO referentiel.categories_desordre (id, libelle, abrege, designation) VALUES
+INSERT INTO gemapi.categories_desordre (id, libelle, abrege, designation) VALUES
     ('RefCategorieDesordre:1', 'Érosion externe', 'ERX', '1'),
     ('RefCategorieDesordre:2', 'Érosion interne', 'ERI', '2'),
     ('RefCategorieDesordre:3', 'Désordre affectant la structure', 'DAF', '3'),
@@ -211,7 +214,7 @@ INSERT INTO referentiel.categories_desordre (id, libelle, abrege, designation) V
     ('RefCategorieDesordre:6', 'Autre', 'AUT', '6'),
     ('RefCategorieDesordre:7', 'Défaut sur dispositif de protection', 'DDP', '7');
 
-INSERT INTO referentiel.cotes (id, designation, abrege, libelle) VALUES
+INSERT INTO gemapi.cotes (id, designation, abrege, libelle) VALUES
     ('RefCote:1', '1', 'RIV', 'Rivière'),
     ('RefCote:2', '2', 'TER', 'Terre'),
     ('RefCote:3', '3', 'E/C', 'Etang/Canal'),
@@ -222,7 +225,7 @@ INSERT INTO referentiel.cotes (id, designation, abrege, libelle) VALUES
     ('RefCote:8', '8', 'AVL', 'Aval'),
     ('RefCote:99', '99', 'IND', 'Indéfini');
 
-INSERT INTO referentiel.fonctions_structure (id, code, libelle, designation) VALUES
+INSERT INTO gemapi.fonctions_structure (id, code, libelle, designation) VALUES
     ('RefFonction:1', NULL, 'Drainage', '1'),
     ('RefFonction:2', NULL, 'Protection', '2'),
     ('RefFonction:3', NULL, 'Etanchéité', '3'),
@@ -236,7 +239,7 @@ INSERT INTO referentiel.fonctions_structure (id, code, libelle, designation) VAL
     ('RefFonction:11', NULL, 'Accès/gestion', '11'),
     ('RefFonction:99', NULL, 'Indéfini', '99');
 
-INSERT INTO referentiel.materiaux_structure (id, code, libelle, designation) VALUES
+INSERT INTO gemapi.materiaux_structure (id, code, libelle, designation) VALUES
     ('RefMateriau:1', 'TEV', 'Terre végétale', '1'),
     ('RefMateriau:2', 'GRA', 'Graviers (concassé 0.33 mm)', '2'),
     ('RefMateriau:3', 'PMA', 'Pierres Maçonnées', '3'),
@@ -278,7 +281,7 @@ INSERT INTO referentiel.materiaux_structure (id, code, libelle, designation) VAL
     ('RefMateriau:40', 'MAD', 'Matériau drainant', '40'),
     ('RefMateriau:99', 'IND', 'Indéfini', '99');
 
-INSERT INTO referentiel.natures_structure (id, code, libelle, designation) VALUES
+INSERT INTO gemapi.natures_structure (id, code, libelle, designation) VALUES
     ('RefNature:1', 'ABR', 'Absence de revêtement', '1'),
     ('RefNature:2', 'RVT', 'Revêtement', '2'),
     ('RefNature:3', 'PAL', 'Palplanche', '3'),
@@ -302,7 +305,7 @@ INSERT INTO referentiel.natures_structure (id, code, libelle, designation) VALUE
     ('RefNature:21', 'DIF', 'Dispositif fusible (déversoir)', '21'),
     ('RefNature:99', 'IND', 'Indéfini', '99');
 
-INSERT INTO referentiel.positions (id, designation, abrege, libelle) VALUES
+INSERT INTO gemapi.positions (id, designation, abrege, libelle) VALUES
     ('RefPosition:3', '3', 'PDI', 'Pied de digue'),
     ('RefPosition:4', '4', 'TAR', 'Talus risberme'),
     ('RefPosition:5', '5', 'SOR', 'Sommet risberme'),
@@ -318,13 +321,13 @@ INSERT INTO referentiel.positions (id, designation, abrege, libelle) VALUES
     ('RefPosition:15', '15', 'FOS', 'Fossé'),
     ('RefPosition:99', '99', 'IND', 'Indéfini');
 
-INSERT INTO referentiel.rives (id, designation, abrege, libelle) VALUES
+INSERT INTO gemapi.rives (id, designation, abrege, libelle) VALUES
     ('RefRive:1', '1', NULL, 'Gauche'),
     ('RefRive:2', '2', NULL, 'Droite'),
     ('RefRive:3', '3', NULL, 'Les deux'),
     ('RefRive:99', '99', NULL, 'Indéfini');
 
-INSERT INTO referentiel.sources_information (id, designation, abrege, libelle) VALUES
+INSERT INTO gemapi.sources_information (id, designation, abrege, libelle) VALUES
     ('RefSource:0', '0', 'NOB', 'Non observable'),
     ('RefSource:1', '1', 'DED', 'Déduction de l''observateur sur le terrain'),
     ('RefSource:2', '2', 'DOC', 'Document externe - archives'),
@@ -332,7 +335,7 @@ INSERT INTO referentiel.sources_information (id, designation, abrege, libelle) V
     ('RefSource:4', '4', 'VUO', 'Vu sur le terrain par l''observateur'),
     ('RefSource:99', '99', 'IND', 'Indéfini');
 
-INSERT INTO referentiel.suites_apporter (id, designation, abrege, libelle) VALUES
+INSERT INTO gemapi.suites_apporter (id, designation, abrege, libelle) VALUES
     ('RefSuiteApporter:1', '1', 'AUC', 'Aucune'),
     ('RefSuiteApporter:2', '2', 'SUR', 'Surveillance'),
     ('RefSuiteApporter:3', '3', 'ENT', 'Entretien'),
@@ -342,7 +345,7 @@ INSERT INTO referentiel.suites_apporter (id, designation, abrege, libelle) VALUE
     ('RefSuiteApporter:7', '7', 'PRI', 'Prioritaire'),
     ('RefSuiteApporter:8', '8', 'CST', 'Constat');
 
-INSERT INTO referentiel.types_desordre (id, categorie_id, libelle, abrege, designation) VALUES
+INSERT INTO gemapi.types_desordre (id, categorie_id, libelle, abrege, designation) VALUES
     ('RefTypeDesordre:1', 'RefCategorieDesordre:1', 'Erosion longitudinale diverse, autre que celle due au cours d''eau', 'ERD', '1'),
     ('RefTypeDesordre:2', 'RefCategorieDesordre:3', 'Fissure dans le terrain ou sur une structure rigide', 'FIS', '2'),
     ('RefTypeDesordre:3', 'RefCategorieDesordre:2', 'Fontis, indice d''activité karstique (infiltration)', 'FON', '3'),
@@ -418,7 +421,7 @@ INSERT INTO referentiel.types_desordre (id, categorie_id, libelle, abrege, desig
     ('RefTypeDesordre:73', 'RefCategorieDesordre:5', 'Défaut sur batardeau et/ou glissière (manquant, dégradé, cassé etc.)', 'DFB', '73'),
     ('RefTypeDesordre:99', 'RefCategorieDesordre:6', 'Indéfini', 'IND', '99');
 
-INSERT INTO referentiel.types_equipement_mesure (id, code, abrege, libelle) VALUES
+INSERT INTO gemapi.types_equipement_mesure (id, code, abrege, libelle) VALUES
     ('PIE', 'piezometre', 'PIE', 'Piézomètre'),
     ('ECH', 'echelle_limnimetrique', 'ECH', 'Échelle limnimétrique'),
     ('STA', 'station_mesure', 'STA', 'Station de mesure'),
@@ -426,7 +429,7 @@ INSERT INTO referentiel.types_equipement_mesure (id, code, abrege, libelle) VALU
     ('AUT', 'autre', 'AUT', 'Autre équipement de mesure'),
     ('IND', 'indefini', 'IND', 'Équipement de mesure indéfini');
 
-INSERT INTO referentiel.types_ouvrage_hydraulique (id, code, abrege, libelle) VALUES
+INSERT INTO gemapi.types_ouvrage_hydraulique (id, code, abrege, libelle) VALUES
     ('VAN', 'vanne', 'VAN', 'Vanne'),
     ('CLA', 'clapet', 'CLA', 'Clapet'),
     ('POS', 'poste_refoulement', 'POS', 'Poste de refoulement'),
@@ -449,7 +452,7 @@ INSERT INTO referentiel.types_ouvrage_hydraulique (id, code, abrege, libelle) VA
     ('PRISE_D_EAU', 'prise_d_eau', 'PDE', 'Prise d''eau'),
     ('OUVRAGE_HYDRAULIQUE', 'ouvrage_hydraulique', 'OHY', 'Ouvrage hydraulique');
 
-INSERT INTO referentiel.types_ouvrage_particulier (id, code, libelle, designation) VALUES
+INSERT INTO gemapi.types_ouvrage_particulier (id, code, libelle, designation) VALUES
     ('RefOuvrageParticulier:2', 'BAT', 'Bâtiment encastré ou très proche de la digue', '2'),
     ('RefOuvrageParticulier:3', 'ESC', 'Escalier', '3'),
     ('RefOuvrageParticulier:4', 'CAV', 'Cave encastrée dans la digue', '4'),
@@ -467,7 +470,7 @@ INSERT INTO referentiel.types_ouvrage_particulier (id, code, libelle, designatio
     ('RefOuvrageParticulier:21', 'PAA', 'Panneau d''alerte', '21'),
     ('RefOuvrageParticulier:99', 'IND', 'Indéfini', '99');
 
-INSERT INTO referentiel.types_troncon (id, code, libelle, designation) VALUES
+INSERT INTO gemapi.types_troncon (id, code, libelle, designation) VALUES
     ('BERGE', 'BERGE', 'Berge', NULL),
     ('TALUS', 'TALUS', 'Talus', NULL),
     ('TALUS_RISBERME', 'TALUS_RISBERME', 'Talus de risberme', NULL),
@@ -476,20 +479,20 @@ INSERT INTO referentiel.types_troncon (id, code, libelle, designation) VALUES
     ('FRANC_BORD', 'FRANC_BORD', 'Franc-bord', NULL),
     ('INDETERMINE', 'INDETERMINE', 'Indéterminé', NULL);
 
-INSERT INTO referentiel.typologies_troncon (id, designation, abrege, libelle) VALUES
+INSERT INTO gemapi.typologies_troncon (id, designation, abrege, libelle) VALUES
     ('RefTypologieTroncon:1', '1', 'TER', 'Terre'),
     ('RefTypologieTroncon:2', '2', 'TEN', 'Terre – enrochement'),
     ('RefTypologieTroncon:3', '3', 'PAL', 'Palplanche'),
     ('RefTypologieTroncon:4', '4', 'GCI', 'Génie-Civil'),
     ('RefTypologieTroncon:99', '99', 'AUT', 'Autre');
 
-INSERT INTO referentiel.urgences (id, libelle, abrege, designation) VALUES
+INSERT INTO gemapi.urgences (id, libelle, abrege, designation) VALUES
     ('RefUrgence:1', 'Faible', '0', '1'),
     ('RefUrgence:3', 'Intermédiaire', '2', '3'),
     ('RefUrgence:4', 'Élevée', '3', '4'),
     ('RefUrgence:99', 'Indéfini', 'IND', '99');
 
-INSERT INTO referentiel.types_mobilier (id, code, abrege, libelle) VALUES
+INSERT INTO gemapi.types_mobilier (id, code, abrege, libelle) VALUES
     ('MRE', 'mobilier_recreatif', 'MRE', 'Mobilier récréatif'),
     ('PAN', 'panneau', 'PAN', 'Panneau'),
     ('CLO', 'cloture', 'CLO', 'Clôture'),
@@ -503,7 +506,7 @@ INSERT INTO referentiel.types_mobilier (id, code, abrege, libelle) VALUES
     ('BOR', 'borne_voirie', 'BOR', 'Borne de voirie'),
     ('OBS', 'obstruction_passage', 'OBS', 'Ouvrage d’obstruction du passage');
 
-INSERT INTO referentiel.types_cheminement (id, code, abrege, libelle) VALUES
+INSERT INTO gemapi.types_cheminement (id, code, abrege, libelle) VALUES
     ('PNT', 'pont', 'PNT', 'Pont'),
     ('RAM', 'rampe', 'RAM', 'Rampe'),
     ('TUN', 'tunnel', 'TUN', 'Tunnel'),
@@ -516,12 +519,12 @@ INSERT INTO referentiel.types_cheminement (id, code, abrege, libelle) VALUES
     ('AUT', 'autre', 'AUT', 'Autre cheminement'),
     ('IND', 'indefini', 'IND', 'Cheminement indéfini');
 
-INSERT INTO referentiel.familles_vegetation (id, code, libelle, designation) VALUES
+INSERT INTO gemapi.familles_vegetation (id, code, libelle, designation) VALUES
     ('HERBACEES', 'HERBACEES', 'Herbacées', NULL),
     ('BUISSONS_ARBUSTES', 'BUISSONS_ARBUSTES', 'Buissons et arbustes', NULL),
     ('ARBRES', 'ARBRES', 'Arbres', NULL);
 
-CREATE TABLE milieux.techniciens (
+CREATE TABLE gemapi.techniciens (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nom text NOT NULL,
     prenom text,
@@ -531,7 +534,7 @@ CREATE TABLE milieux.techniciens (
     modifie_par text,
     date_modification timestamptz
 );
-CREATE TABLE milieux.communes (
+CREATE TABLE gemapi.communes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     insee text NOT NULL UNIQUE,
     nom text NOT NULL,
@@ -541,7 +544,7 @@ CREATE TABLE milieux.communes (
     date_modification timestamptz,
     CHECK(ST_IsValid(geom) AND NOT ST_IsEmpty(geom) AND ST_NDims(geom)=2)
 );
-CREATE TABLE milieux.prestataires (
+CREATE TABLE gemapi.prestataires (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nom text NOT NULL,
     actif boolean NOT NULL DEFAULT true,
@@ -549,16 +552,16 @@ CREATE TABLE milieux.prestataires (
     modifie_par text,
     date_modification timestamptz
 );
-CREATE TABLE milieux.ah (
+CREATE TABLE gemapi.ah (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nom text NOT NULL,
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
     modifie_par text,
     date_modification timestamptz
 );
-CREATE TABLE milieux.ah_stockage (
+CREATE TABLE gemapi.ah_stockage (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ah_id uuid NOT NULL UNIQUE REFERENCES milieux.ah(id) ON DELETE RESTRICT,
+    ah_id uuid NOT NULL UNIQUE REFERENCES gemapi.ah(id) ON DELETE RESTRICT,
     nom text NOT NULL,
     categorie text,
     surface_ha numeric,
@@ -568,9 +571,9 @@ CREATE TABLE milieux.ah_stockage (
     date_modification timestamptz,
     CONSTRAINT ah_stockage_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2)
 );
-CREATE TABLE milieux.ah_ouvrage (
+CREATE TABLE gemapi.ah_ouvrage (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ah_id uuid NOT NULL REFERENCES milieux.ah(id) ON DELETE RESTRICT,
+    ah_id uuid NOT NULL REFERENCES gemapi.ah(id) ON DELETE RESTRICT,
     nom text,
     geom geometry(LineString,3950) NOT NULL,
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -579,7 +582,7 @@ CREATE TABLE milieux.ah_ouvrage (
     CONSTRAINT ah_ouvrage_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2)
 );
 -- Contrôle de type explicite : le typmod MultiPolygon convertirait un Polygon à l'écriture.
-CREATE TABLE milieux.sites_terrestres (
+CREATE TABLE gemapi.sites_terrestres (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nom text NOT NULL,
     geom geometry(Geometry,3950) NOT NULL,
@@ -588,7 +591,7 @@ CREATE TABLE milieux.sites_terrestres (
     date_modification timestamptz,
     CONSTRAINT sites_terrestres_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2 AND ST_GeometryType(geom)='ST_MultiPolygon')
 );
-CREATE TABLE milieux.cours_eau (
+CREATE TABLE gemapi.cours_eau (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nom text NOT NULL CONSTRAINT cours_eau_nom_non_vide CHECK (nom ~ '[^[:space:]]'),
     type_ecoulement text,
@@ -603,7 +606,7 @@ CREATE TABLE milieux.cours_eau (
     CHECK(ST_IsValid(geom) AND NOT ST_IsEmpty(geom) AND ST_NDims(geom)=2)
 );
 -- Digues et repères du modèle courant.
-CREATE TABLE milieux.digues (
+CREATE TABLE gemapi.digues (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nom text NOT NULL CHECK (btrim(nom) <> ''),
     identifiant_externe text,
@@ -615,10 +618,10 @@ CREATE TABLE milieux.digues (
 
 -- Les fractions portent sur l'orientation actuelle de la rivière. La
 -- géométrie copiée demeure inchangée si le référentiel est redessiné.
-CREATE TABLE milieux.digues_reperes (
+CREATE TABLE gemapi.digues_reperes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    digue_id uuid NOT NULL REFERENCES milieux.digues(id) ON DELETE RESTRICT,
-    riviere_id uuid NOT NULL REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
+    digue_id uuid NOT NULL REFERENCES gemapi.digues(id) ON DELETE RESTRICT,
+    riviere_id uuid NOT NULL REFERENCES gemapi.cours_eau(id) ON DELETE RESTRICT,
     rive text NOT NULL CHECK (rive IN ('G', 'D')),
     debut_fraction double precision NOT NULL CHECK (debut_fraction BETWEEN 0 AND 1),
     fin_fraction double precision NOT NULL CHECK (fin_fraction BETWEEN 0 AND 1),
@@ -636,10 +639,10 @@ CREATE TABLE milieux.digues_reperes (
     )
 );
 -- Référencement hydrographique AH : décisions explicites, instantanés figés.
-CREATE TABLE milieux.ah_sections (
+CREATE TABLE gemapi.ah_sections (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ah_id uuid NOT NULL REFERENCES milieux.ah(id) ON DELETE RESTRICT,
-    cours_eau_id uuid NOT NULL REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
+    ah_id uuid NOT NULL REFERENCES gemapi.ah(id) ON DELETE RESTRICT,
+    cours_eau_id uuid NOT NULL REFERENCES gemapi.cours_eau(id) ON DELETE RESTRICT,
     debut_fraction double precision NOT NULL,
     fin_fraction double precision NOT NULL,
     geom_reference geometry(LineString,3950) NOT NULL,
@@ -658,32 +661,32 @@ CREATE TABLE milieux.ah_sections (
         NOT ST_IsEmpty(geom_reference) AND ST_IsValid(geom_reference)
         AND ST_NDims(geom_reference)=2 AND ST_Length(geom_reference)>0)
 );
-CREATE TABLE public.troncons (
+CREATE TABLE gemapi.troncons (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    type_troncon_id text NOT NULL REFERENCES referentiel.types_troncon(id) ON DELETE RESTRICT,
-    digue_id uuid NOT NULL REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    type_troncon_id text NOT NULL REFERENCES gemapi.types_troncon(id) ON DELETE RESTRICT,
+    digue_id uuid NOT NULL REFERENCES gemapi.digues(id) ON DELETE RESTRICT,
     date_debut date,
     date_fin date,
     commentaire text,
     designation text,
-    type_rive_id text REFERENCES referentiel.rives(id) ON DELETE RESTRICT,
-    typologie_troncon_id text REFERENCES referentiel.typologies_troncon(id) ON DELETE RESTRICT,
+    type_rive_id text REFERENCES gemapi.rives(id) ON DELETE RESTRICT,
+    typologie_troncon_id text REFERENCES gemapi.typologies_troncon(id) ON DELETE RESTRICT,
     geometry geometry(Geometry,3950),
     geometry_reperage geometry(LineString,3950),
     valid boolean NOT NULL DEFAULT false,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
-    source_id text REFERENCES referentiel.sources_information(id) ON DELETE RESTRICT,
-    cote_id text REFERENCES referentiel.cotes(id) ON DELETE RESTRICT,
-    position_id text REFERENCES referentiel.positions(id) ON DELETE RESTRICT,
-    fonction_id text REFERENCES referentiel.fonctions_structure(id) ON DELETE RESTRICT,
-    fonction_haut_id text REFERENCES referentiel.fonctions_structure(id) ON DELETE RESTRICT,
-    fonction_bas_id text REFERENCES referentiel.fonctions_structure(id) ON DELETE RESTRICT,
-    nature_id text REFERENCES referentiel.natures_structure(id) ON DELETE RESTRICT,
-    nature_haut_id text REFERENCES referentiel.natures_structure(id) ON DELETE RESTRICT,
-    nature_bas_id text REFERENCES referentiel.natures_structure(id) ON DELETE RESTRICT,
-    materiau_id text REFERENCES referentiel.materiaux_structure(id) ON DELETE RESTRICT,
-    materiau_haut_id text REFERENCES referentiel.materiaux_structure(id) ON DELETE RESTRICT,
-    materiau_bas_id text REFERENCES referentiel.materiaux_structure(id) ON DELETE RESTRICT,
+    source_id text REFERENCES gemapi.sources_information(id) ON DELETE RESTRICT,
+    cote_id text REFERENCES gemapi.cotes(id) ON DELETE RESTRICT,
+    position_id text REFERENCES gemapi.positions(id) ON DELETE RESTRICT,
+    fonction_id text REFERENCES gemapi.fonctions_structure(id) ON DELETE RESTRICT,
+    fonction_haut_id text REFERENCES gemapi.fonctions_structure(id) ON DELETE RESTRICT,
+    fonction_bas_id text REFERENCES gemapi.fonctions_structure(id) ON DELETE RESTRICT,
+    nature_id text REFERENCES gemapi.natures_structure(id) ON DELETE RESTRICT,
+    nature_haut_id text REFERENCES gemapi.natures_structure(id) ON DELETE RESTRICT,
+    nature_bas_id text REFERENCES gemapi.natures_structure(id) ON DELETE RESTRICT,
+    materiau_id text REFERENCES gemapi.materiaux_structure(id) ON DELETE RESTRICT,
+    materiau_haut_id text REFERENCES gemapi.materiaux_structure(id) ON DELETE RESTRICT,
+    materiau_bas_id text REFERENCES gemapi.materiaux_structure(id) ON DELETE RESTRICT,
     num_couche integer,
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
     modifie_par text,
@@ -703,19 +706,19 @@ CREATE TABLE public.troncons (
         materiau_haut_id, materiau_bas_id) = 0)
 );
 
-CREATE TABLE public.mobilier (
+CREATE TABLE gemapi.mobilier (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     designation text NOT NULL,
-    type_id text NOT NULL REFERENCES referentiel.types_mobilier(id) ON DELETE RESTRICT,
+    type_id text NOT NULL REFERENCES gemapi.types_mobilier(id) ON DELETE RESTRICT,
     commentaire text,
     date_debut date,
     date_fin date,
     geometry geometry(Geometry,3950) NOT NULL,
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
-    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES gemapi.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES gemapi.ah_sections(id) ON DELETE RESTRICT,
     valid boolean NOT NULL DEFAULT false,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -729,19 +732,19 @@ CREATE TABLE public.mobilier (
     CHECK (designation ~ '[^[:space:]]')
 );
 
-CREATE TABLE public.cheminements (
+CREATE TABLE gemapi.cheminements (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     designation text NOT NULL,
-    type_cheminement_id text NOT NULL REFERENCES referentiel.types_cheminement(id) ON DELETE RESTRICT,
+    type_cheminement_id text NOT NULL REFERENCES gemapi.types_cheminement(id) ON DELETE RESTRICT,
     commentaire text,
     date_debut date,
     date_fin date,
     geometry geometry(Geometry,3950) NOT NULL,
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
-    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES gemapi.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES gemapi.ah_sections(id) ON DELETE RESTRICT,
     valid boolean NOT NULL DEFAULT false,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -755,19 +758,19 @@ CREATE TABLE public.cheminements (
     CHECK (designation ~ '[^[:space:]]')
 );
 
-CREATE TABLE public.vegetation (
+CREATE TABLE gemapi.vegetation (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     designation text NOT NULL,
-    famille_vegetation text NOT NULL REFERENCES referentiel.familles_vegetation(id) ON DELETE RESTRICT,
+    famille_vegetation text NOT NULL REFERENCES gemapi.familles_vegetation(id) ON DELETE RESTRICT,
     commentaire text,
     date_debut date,
     date_fin date,
     geometry geometry(Geometry,3950) NOT NULL,
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
-    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES gemapi.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES gemapi.ah_sections(id) ON DELETE RESTRICT,
     valid boolean NOT NULL DEFAULT false,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -781,37 +784,37 @@ CREATE TABLE public.vegetation (
     CHECK (designation ~ '[^[:space:]]')
 );
 
-CREATE TABLE public.ouvrages_particuliers (
+CREATE TABLE gemapi.ouvrages_particuliers (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     designation text,
     commentaire text,
     date_debut date,
     date_fin date,
     geometry geometry(Geometry,3950),
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
     valid boolean NOT NULL DEFAULT false,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
-    type_id text REFERENCES referentiel.types_ouvrage_particulier(id) ON DELETE RESTRICT,
+    type_id text REFERENCES gemapi.types_ouvrage_particulier(id) ON DELETE RESTRICT,
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
     modifie_par text,
     date_modification timestamptz,
     CHECK (date_fin >= date_debut)
 );
 
-CREATE TABLE public.equipements_mesure (
+CREATE TABLE gemapi.equipements_mesure (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    type_id text NOT NULL REFERENCES referentiel.types_equipement_mesure(id) ON DELETE RESTRICT,
+    type_id text NOT NULL REFERENCES gemapi.types_equipement_mesure(id) ON DELETE RESTRICT,
     designation text,
     commentaire text,
     date_debut date,
     date_fin date,
-    cote_id text REFERENCES referentiel.cotes(id) ON DELETE RESTRICT,
-    position_id text REFERENCES referentiel.positions(id) ON DELETE RESTRICT,
-    source_id text REFERENCES referentiel.sources_information(id) ON DELETE RESTRICT,
+    cote_id text REFERENCES gemapi.cotes(id) ON DELETE RESTRICT,
+    position_id text REFERENCES gemapi.positions(id) ON DELETE RESTRICT,
+    source_id text REFERENCES gemapi.sources_information(id) ON DELETE RESTRICT,
     dimension_horizontale double precision,
     dimension_verticale double precision,
     geometry geometry(Geometry,3950),
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
     valid boolean,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -820,17 +823,17 @@ CREATE TABLE public.equipements_mesure (
     CHECK (date_fin >= date_debut)
 );
 
-CREATE TABLE public.ouvrages_hydrauliques (
+CREATE TABLE gemapi.ouvrages_hydrauliques (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    type_id text REFERENCES referentiel.types_ouvrage_hydraulique(id) ON DELETE RESTRICT,
+    type_id text REFERENCES gemapi.types_ouvrage_hydraulique(id) ON DELETE RESTRICT,
     designation text,
     commentaire text,
     date_debut date,
     date_fin date,
     geometry geometry(Geometry,3950),
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
     valid boolean,
     longueur double precision,
     largeur_max double precision,
@@ -843,31 +846,31 @@ CREATE TABLE public.ouvrages_hydrauliques (
     CONSTRAINT ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1)
 );
 
-CREATE TABLE public.desordres (
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    digue_id uuid REFERENCES milieux.digues(id) ON DELETE RESTRICT,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
-    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+CREATE TABLE gemapi.desordres (
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    digue_id uuid REFERENCES gemapi.digues(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES gemapi.ah_sections(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES gemapi.sites_terrestres(id) ON DELETE RESTRICT,
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    type_desordre_id text REFERENCES referentiel.types_desordre(id) ON DELETE RESTRICT,
-    categorie_desordre_id text REFERENCES referentiel.categories_desordre(id) ON DELETE RESTRICT,
+    type_desordre_id text REFERENCES gemapi.types_desordre(id) ON DELETE RESTRICT,
+    categorie_desordre_id text REFERENCES gemapi.categories_desordre(id) ON DELETE RESTRICT,
     designation text,
     commentaire text,
     lieu_dit text,
-    cote_id text REFERENCES referentiel.cotes(id) ON DELETE RESTRICT,
-    position_id text REFERENCES referentiel.positions(id) ON DELETE RESTRICT,
-    source_id text REFERENCES referentiel.sources_information(id) ON DELETE RESTRICT,
+    cote_id text REFERENCES gemapi.cotes(id) ON DELETE RESTRICT,
+    position_id text REFERENCES gemapi.positions(id) ON DELETE RESTRICT,
+    source_id text REFERENCES gemapi.sources_information(id) ON DELETE RESTRICT,
     date_debut date,
     date_fin date,
     geometry geometry(Geometry,3950),
     valid boolean,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
-    mobilier_id uuid REFERENCES public.mobilier(id) ON DELETE RESTRICT,
-    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
-    vegetation_id uuid REFERENCES public.vegetation(id) ON DELETE RESTRICT,
+    mobilier_id uuid REFERENCES gemapi.mobilier(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES gemapi.cheminements(id) ON DELETE RESTRICT,
+    vegetation_id uuid REFERENCES gemapi.vegetation(id) ON DELETE RESTRICT,
     modifie_par text,
     date_modification timestamptz,
     CHECK (date_fin >= date_debut),
@@ -876,41 +879,41 @@ CREATE TABLE public.desordres (
         mobilier_id, cheminement_id, vegetation_id) <= 1)
 );
 
-CREATE TABLE public.observations (
+CREATE TABLE gemapi.observations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    desordre_id uuid REFERENCES public.desordres(id) ON DELETE RESTRICT,
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    ouvrage_hydraulique_id uuid REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
-    equipement_mesure_id uuid REFERENCES public.equipements_mesure(id) ON DELETE RESTRICT,
-    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
-    mobilier_id uuid REFERENCES public.mobilier(id) ON DELETE RESTRICT,
-    vegetation_id uuid REFERENCES public.vegetation(id) ON DELETE RESTRICT,
-    ouvrage_particulier_id uuid REFERENCES public.ouvrages_particuliers(id) ON DELETE RESTRICT,
-    urgence_id text REFERENCES referentiel.urgences(id) ON DELETE RESTRICT,
+    desordre_id uuid REFERENCES gemapi.desordres(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    ouvrage_hydraulique_id uuid REFERENCES gemapi.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    equipement_mesure_id uuid REFERENCES gemapi.equipements_mesure(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES gemapi.cheminements(id) ON DELETE RESTRICT,
+    mobilier_id uuid REFERENCES gemapi.mobilier(id) ON DELETE RESTRICT,
+    vegetation_id uuid REFERENCES gemapi.vegetation(id) ON DELETE RESTRICT,
+    ouvrage_particulier_id uuid REFERENCES gemapi.ouvrages_particuliers(id) ON DELETE RESTRICT,
+    urgence_id text REFERENCES gemapi.urgences(id) ON DELETE RESTRICT,
     designation text,
     date_observation date NOT NULL,
     evolution text,
     suite text,
-    suite_apporter_id text REFERENCES referentiel.suites_apporter(id) ON DELETE RESTRICT,
+    suite_apporter_id text REFERENCES gemapi.suites_apporter(id) ON DELETE RESTRICT,
     nombre_desordres integer,
     valid boolean NOT NULL DEFAULT false,
     version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
     modifie_par text,
     date_modification timestamptz,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
-    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
-    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES gemapi.ah_sections(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES gemapi.sites_terrestres(id) ON DELETE RESTRICT,
     observateur text,
     CONSTRAINT ck_cible_unique CHECK (num_nonnulls(
         desordre_id, troncon_id, ah_ouvrage_id, ah_stockage_id, ah_section_id, site_terrestre_id,
         mobilier_id, cheminement_id, vegetation_id, ouvrage_hydraulique_id, ouvrage_particulier_id, equipement_mesure_id) = 1)
 );
 
-CREATE TABLE public.photos (
+CREATE TABLE gemapi.photos (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    observation_id uuid NOT NULL REFERENCES public.observations(id) ON DELETE RESTRICT,
+    observation_id uuid NOT NULL REFERENCES gemapi.observations(id) ON DELETE RESTRICT,
     date_photo date,
     designation text,
     commentaire text,
@@ -923,41 +926,41 @@ CREATE TABLE public.photos (
     photographe text
 );
 
-CREATE TABLE public.equipements_mesure__desordres (
-    equipement_mesure_id uuid NOT NULL REFERENCES public.equipements_mesure(id) ON DELETE RESTRICT,
-    desordre_id uuid NOT NULL REFERENCES public.desordres(id) ON DELETE RESTRICT,
+CREATE TABLE gemapi.equipements_mesure__desordres (
+    equipement_mesure_id uuid NOT NULL REFERENCES gemapi.equipements_mesure(id) ON DELETE RESTRICT,
+    desordre_id uuid NOT NULL REFERENCES gemapi.desordres(id) ON DELETE RESTRICT,
     PRIMARY KEY (equipement_mesure_id, desordre_id)
 );
 
-CREATE TABLE public.ouvrages_hydrauliques__desordres (
-    ouvrage_hydraulique_id uuid NOT NULL REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
-    desordre_id uuid NOT NULL REFERENCES public.desordres(id) ON DELETE RESTRICT,
+CREATE TABLE gemapi.ouvrages_hydrauliques__desordres (
+    ouvrage_hydraulique_id uuid NOT NULL REFERENCES gemapi.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    desordre_id uuid NOT NULL REFERENCES gemapi.desordres(id) ON DELETE RESTRICT,
     PRIMARY KEY (ouvrage_hydraulique_id, desordre_id)
 );
 
-CREATE TABLE public.ouvrages_particuliers__desordres (
-    ouvrage_particulier_id uuid NOT NULL REFERENCES public.ouvrages_particuliers(id) ON DELETE RESTRICT,
-    desordre_id uuid NOT NULL REFERENCES public.desordres(id) ON DELETE RESTRICT,
+CREATE TABLE gemapi.ouvrages_particuliers__desordres (
+    ouvrage_particulier_id uuid NOT NULL REFERENCES gemapi.ouvrages_particuliers(id) ON DELETE RESTRICT,
+    desordre_id uuid NOT NULL REFERENCES gemapi.desordres(id) ON DELETE RESTRICT,
     PRIMARY KEY (ouvrage_particulier_id, desordre_id)
 );
 
-CREATE TABLE public.ouvrages_hydrauliques__objets_lies (
+CREATE TABLE gemapi.ouvrages_hydrauliques__objets_lies (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ouvrage_hydraulique_id uuid NOT NULL REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
-    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
-    autre_ouvrage_hydraulique_id uuid REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
-    ouvrage_particulier_id uuid REFERENCES public.ouvrages_particuliers(id) ON DELETE RESTRICT,
-    equipement_mesure_id uuid REFERENCES public.equipements_mesure(id) ON DELETE RESTRICT,
+    ouvrage_hydraulique_id uuid NOT NULL REFERENCES gemapi.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES gemapi.cheminements(id) ON DELETE RESTRICT,
+    autre_ouvrage_hydraulique_id uuid REFERENCES gemapi.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    ouvrage_particulier_id uuid REFERENCES gemapi.ouvrages_particuliers(id) ON DELETE RESTRICT,
+    equipement_mesure_id uuid REFERENCES gemapi.equipements_mesure(id) ON DELETE RESTRICT,
     berge_id uuid,
     berge_id_type text GENERATED ALWAYS AS ('BERGE'::text) STORED,
-    digue_id uuid REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    digue_id uuid REFERENCES gemapi.digues(id) ON DELETE RESTRICT,
     CONSTRAINT fk_ouvrage_lie_berge FOREIGN KEY (berge_id, berge_id_type)
-        REFERENCES public.troncons(id, type_troncon_id) DEFERRABLE INITIALLY DEFERRED,
+        REFERENCES gemapi.troncons(id, type_troncon_id) DEFERRABLE INITIALLY DEFERRED,
     CONSTRAINT ck_cible_ouvrage_hydraulique_liee CHECK (num_nonnulls(
         cheminement_id, autre_ouvrage_hydraulique_id, ouvrage_particulier_id, equipement_mesure_id, berge_id, digue_id) = 1)
 );
 
-CREATE FUNCTION milieux.cours_eau_qualification() RETURNS trigger
+CREATE FUNCTION gemapi.cours_eau_qualification() RETURNS trigger
 LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 BEGIN
     IF ST_AsEWKB(NEW.geom) IS DISTINCT FROM ST_AsEWKB(OLD.geom) THEN
@@ -965,23 +968,23 @@ BEGIN
     END IF;
     RETURN NEW;
 END $$;
-CREATE TRIGGER hydro_qual_direction BEFORE UPDATE OF geom ON milieux.cours_eau
-FOR EACH ROW EXECUTE FUNCTION milieux.cours_eau_qualification();
-CREATE TABLE milieux.prestations (
-    cours_eau_id uuid REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
-    digue_id uuid REFERENCES milieux.digues(id) ON DELETE RESTRICT,
-    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
-    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
-    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
-    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
-    mobilier_id uuid REFERENCES public.mobilier(id) ON DELETE RESTRICT,
-    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
-    vegetation_id uuid REFERENCES public.vegetation(id) ON DELETE RESTRICT,
+CREATE TRIGGER hydro_qual_direction BEFORE UPDATE OF geom ON gemapi.cours_eau
+FOR EACH ROW EXECUTE FUNCTION gemapi.cours_eau_qualification();
+CREATE TABLE gemapi.prestations (
+    cours_eau_id uuid REFERENCES gemapi.cours_eau(id) ON DELETE RESTRICT,
+    digue_id uuid REFERENCES gemapi.digues(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES gemapi.ah_stockage(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES gemapi.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES gemapi.sites_terrestres(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES gemapi.troncons(id) ON DELETE RESTRICT,
+    mobilier_id uuid REFERENCES gemapi.mobilier(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES gemapi.cheminements(id) ON DELETE RESTRICT,
+    vegetation_id uuid REFERENCES gemapi.vegetation(id) ON DELETE RESTRICT,
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     intitule text,
-    type_prestation_id uuid NOT NULL REFERENCES milieux.types_prestations(id) ON DELETE RESTRICT,
-    prestataire_id uuid NOT NULL REFERENCES milieux.prestataires(id) ON DELETE RESTRICT,
-    statut_id uuid NOT NULL REFERENCES milieux.statuts_prestations(id) ON DELETE RESTRICT,
+    type_prestation_id uuid NOT NULL REFERENCES gemapi.types_prestations(id) ON DELETE RESTRICT,
+    prestataire_id uuid NOT NULL REFERENCES gemapi.prestataires(id) ON DELETE RESTRICT,
+    statut_id uuid NOT NULL REFERENCES gemapi.statuts_prestations(id) ON DELETE RESTRICT,
     date_debut date NOT NULL,
     date_fin date NOT NULL,
     quantite numeric,
@@ -994,7 +997,7 @@ CREATE TABLE milieux.prestations (
     photo_2 text,
     photo_2_commentaire text,
     geom geometry(Geometry,3950),
-    technicien_id uuid NOT NULL REFERENCES milieux.techniciens(id) ON DELETE RESTRICT,
+    technicien_id uuid NOT NULL REFERENCES gemapi.techniciens(id) ON DELETE RESTRICT,
     cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
     modifie_par text,
     date_modification timestamptz,
@@ -1003,7 +1006,7 @@ CREATE TABLE milieux.prestations (
 );
 -- L'ensemble des rattachements et la position sont contrôlés sur l'état final
 -- de la transaction, sans ordre de saisie imposé au formulaire QGIS.
-ALTER TABLE milieux.prestations ADD COLUMN nombre_points integer,
+ALTER TABLE gemapi.prestations ADD COLUMN nombre_points integer,
 ADD COLUMN longueur_m double precision,
 ADD COLUMN surface_m2 double precision,
 ADD COLUMN surface_ha double precision GENERATED ALWAYS AS(surface_m2/10000.0) STORED,
@@ -1011,22 +1014,22 @@ ADD COLUMN type_geometrie text,
 ADD COLUMN type_geometrie_postgis text,
 ADD COLUMN possede_geometrie boolean NOT NULL DEFAULT false,
 ADD COLUMN origine_mesures text NOT NULL DEFAULT 'Aucune géométrie',
-ADD COLUMN ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT;
-COMMENT ON COLUMN milieux.prestations.ah_section_id IS
+ADD COLUMN ah_section_id uuid REFERENCES gemapi.ah_sections(id) ON DELETE RESTRICT;
+COMMENT ON COLUMN gemapi.prestations.ah_section_id IS
 'Section AH directement rattachée ; géométrie propre de la prestation obligatoire, aucun héritage de geom_reference.';
 
-ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_direct_modes
+ALTER TABLE gemapi.prestations ADD CONSTRAINT prestations_direct_modes
 CHECK (num_nonnulls(cours_eau_id, digue_id, troncon_id, ah_stockage_id, ah_ouvrage_id, ah_section_id, site_terrestre_id, mobilier_id, cheminement_id, vegetation_id)<=1);
-ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_direct_geometry
+ALTER TABLE gemapi.prestations ADD CONSTRAINT prestations_direct_geometry
 CHECK ((cours_eau_id IS NULL AND digue_id IS NULL AND troncon_id IS NULL AND site_terrestre_id IS NULL AND ah_section_id IS NULL) OR geom IS NOT NULL);
-ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_site_multi_geometry
+ALTER TABLE gemapi.prestations ADD CONSTRAINT prestations_site_multi_geometry
 CHECK (site_terrestre_id IS NULL OR ST_GeometryType(geom) IN
        ('ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon'));
-CREATE FUNCTION milieux.assert_prestation_relations(prestation_uuid uuid) RETURNS void
+CREATE FUNCTION gemapi.assert_prestation_relations(prestation_uuid uuid) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $relations_assert$
-DECLARE p milieux.prestations%ROWTYPE;
+DECLARE p gemapi.prestations%ROWTYPE;
 BEGIN
-    SELECT * INTO p FROM milieux.prestations WHERE id=prestation_uuid FOR UPDATE;
+    SELECT * INTO p FROM gemapi.prestations WHERE id=prestation_uuid FOR UPDATE;
     IF NOT FOUND THEN RETURN; END IF;
     IF num_nonnulls(p.cours_eau_id, p.digue_id, p.troncon_id, p.ah_stockage_id, p.ah_ouvrage_id, p.ah_section_id, p.site_terrestre_id, p.mobilier_id, p.cheminement_id, p.vegetation_id)<>1 THEN
         RAISE EXCEPTION 'Exactement un mode de rattachement patrimonial est obligatoire pour %',p.id USING ERRCODE='23514';
@@ -1035,17 +1038,17 @@ BEGIN
         RAISE EXCEPTION 'Position ou rive incompatible avec le rattachement patrimonial' USING ERRCODE='23514';
     END IF;
 END $relations_assert$;
-CREATE FUNCTION milieux.prestation_relations_complete() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, milieux AS $relations_trigger$
+CREATE FUNCTION gemapi.prestation_relations_complete() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, gemapi, pg_temp AS $relations_trigger$
 BEGIN
-    IF TG_OP <> 'DELETE' THEN PERFORM milieux.assert_prestation_relations(NEW.id); END IF;
+    IF TG_OP <> 'DELETE' THEN PERFORM gemapi.assert_prestation_relations(NEW.id); END IF;
     RETURN NULL;
 END $relations_trigger$;
-REVOKE ALL ON FUNCTION milieux.assert_prestation_relations(uuid), milieux.prestation_relations_complete() FROM PUBLIC;
-CREATE CONSTRAINT TRIGGER prestation_relations_parent AFTER INSERT OR UPDATE ON milieux.prestations
-DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION milieux.prestation_relations_complete();
+REVOKE ALL ON FUNCTION gemapi.assert_prestation_relations(uuid), gemapi.prestation_relations_complete() FROM PUBLIC;
+CREATE CONSTRAINT TRIGGER prestation_relations_parent AFTER INSERT OR UPDATE ON gemapi.prestations
+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION gemapi.prestation_relations_complete();
 -- session_user conserve le role de connexion individuel meme apres SET ROLE.
-CREATE OR REPLACE FUNCTION milieux.stamp_modification() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
+CREATE FUNCTION gemapi.stamp_modification() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 BEGIN
  IF TG_OP='UPDATE' AND TG_ARGV[0]='metier' THEN
      IF NEW.cree_le IS DISTINCT FROM OLD.cree_le THEN
@@ -1058,67 +1061,67 @@ BEGIN
 END $$;
 DO $$ DECLARE t text; BEGIN
  FOREACH t IN ARRAY ARRAY['techniciens','communes','prestataires','ah','ah_stockage','ah_ouvrage','sites_terrestres','cours_eau','prestations'] LOOP
-   EXECUTE format('CREATE TRIGGER tr_stamp_%I BEFORE INSERT OR UPDATE ON milieux.%I FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification(''metier'')',t,t);
+   EXECUTE format('CREATE TRIGGER tr_stamp_%I BEFORE INSERT OR UPDATE ON gemapi.%I FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification(''metier'')',t,t);
  END LOOP;
 END $$;
 DO $$ DECLARE t text; BEGIN
  FOREACH t IN ARRAY ARRAY['communes','ah_stockage','ah_ouvrage','sites_terrestres','cours_eau','prestations'] LOOP
-   EXECUTE format('CREATE INDEX %I ON milieux.%I USING gist(geom)',t||'_geom_idx',t);
+   EXECUTE format('CREATE INDEX %I ON gemapi.%I USING gist(geom)',t||'_geom_idx',t);
  END LOOP;
 END $$;
-CREATE TRIGGER tr_stamp_types_prestations BEFORE INSERT OR UPDATE ON milieux.types_prestations
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
-CREATE TRIGGER tr_stamp_statuts_prestations BEFORE INSERT OR UPDATE ON milieux.statuts_prestations
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
+CREATE TRIGGER tr_stamp_types_prestations BEFORE INSERT OR UPDATE ON gemapi.types_prestations
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification();
+CREATE TRIGGER tr_stamp_statuts_prestations BEFORE INSERT OR UPDATE ON gemapi.statuts_prestations
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification();
 
-CREATE FUNCTION milieux.avancer_version_ressource() RETURNS trigger
+CREATE FUNCTION gemapi.avancer_version_ressource() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog AS $$
 BEGIN
     NEW.version := OLD.version + 1;
     RETURN NEW;
 END $$;
 
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.troncons
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.troncons
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.mobilier
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.mobilier
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.cheminements
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.cheminements
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.vegetation
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.vegetation
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.ouvrages_particuliers
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.ouvrages_particuliers
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.equipements_mesure
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.equipements_mesure
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.ouvrages_hydrauliques
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.desordres
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.desordres
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.observations
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.observations
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
-CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.photos
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
-CREATE TRIGGER tr_version BEFORE UPDATE ON public.photos
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.troncons
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.troncons
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.mobilier
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.mobilier
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.cheminements
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.cheminements
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.vegetation
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.vegetation
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.ouvrages_particuliers
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.ouvrages_particuliers
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.equipements_mesure
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.equipements_mesure
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.ouvrages_hydrauliques
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.desordres
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.desordres
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.observations
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.observations
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON gemapi.photos
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON gemapi.photos
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_ressource();
 
 -- Les deux extrémités d'une réaffectation portent la nouvelle version.
-CREATE FUNCTION milieux.avancer_version_desordre_lie() RETURNS trigger
+CREATE FUNCTION gemapi.avancer_version_desordre_lie() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog AS $$
 DECLARE ancien uuid; nouveau uuid; cible uuid;
 BEGIN
@@ -1126,97 +1129,97 @@ BEGIN
     IF TG_OP <> 'DELETE' THEN nouveau := NEW.desordre_id; END IF;
     FOR cible IN SELECT DISTINCT id FROM unnest(ARRAY[ancien, nouveau]) AS d(id)
                  WHERE id IS NOT NULL ORDER BY id LOOP
-        UPDATE public.desordres SET version=version WHERE id=cible;
+        UPDATE gemapi.desordres SET version=version WHERE id=cible;
     END LOOP;
     RETURN NULL;
 END $$;
-CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON public.equipements_mesure__desordres
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_desordre_lie();
-CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON public.ouvrages_hydrauliques__desordres
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_desordre_lie();
-CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON public.ouvrages_particuliers__desordres
-FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_desordre_lie();
+CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON gemapi.equipements_mesure__desordres
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_desordre_lie();
+CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON gemapi.ouvrages_hydrauliques__desordres
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_desordre_lie();
+CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON gemapi.ouvrages_particuliers__desordres
+FOR EACH ROW EXECUTE FUNCTION gemapi.avancer_version_desordre_lie();
 
-CREATE INDEX prestations_ah_section_id_idx ON milieux.prestations(ah_section_id);
-CREATE INDEX prestations_cours_eau_id_idx ON milieux.prestations(cours_eau_id);
-CREATE INDEX prestations_digue_id_idx ON milieux.prestations(digue_id);
-CREATE INDEX prestations_ah_stockage_id_idx ON milieux.prestations(ah_stockage_id);
-CREATE INDEX prestations_ah_ouvrage_id_idx ON milieux.prestations(ah_ouvrage_id);
-CREATE INDEX prestations_site_terrestre_id_idx ON milieux.prestations(site_terrestre_id);
-CREATE INDEX ON public.troncons (digue_id);
-CREATE INDEX ON public.troncons USING gist (geometry);
-CREATE INDEX ON public.troncons USING gist (geometry_reperage);
-CREATE INDEX ON public.mobilier USING gist (geometry);
-CREATE INDEX ON public.mobilier (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.mobilier (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
-CREATE INDEX ON public.mobilier (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
-CREATE INDEX ON public.mobilier (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
-CREATE INDEX ON public.mobilier (ah_section_id) WHERE ah_section_id IS NOT NULL;
-CREATE INDEX ON public.cheminements USING gist (geometry);
-CREATE INDEX ON public.cheminements (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.cheminements (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
-CREATE INDEX ON public.cheminements (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
-CREATE INDEX ON public.cheminements (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
-CREATE INDEX ON public.cheminements (ah_section_id) WHERE ah_section_id IS NOT NULL;
-CREATE INDEX ON public.vegetation USING gist (geometry);
-CREATE INDEX ON public.vegetation (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.vegetation (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
-CREATE INDEX ON public.vegetation (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
-CREATE INDEX ON public.vegetation (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
-CREATE INDEX ON public.vegetation (ah_section_id) WHERE ah_section_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_particuliers USING gist (geometry);
-CREATE INDEX ON public.ouvrages_particuliers (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.equipements_mesure USING gist (geometry);
-CREATE INDEX ON public.equipements_mesure (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques USING gist (geometry);
-CREATE INDEX ON public.ouvrages_hydrauliques (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
-CREATE INDEX ON public.desordres (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.desordres (digue_id) WHERE digue_id IS NOT NULL;
-CREATE INDEX ON public.desordres (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
-CREATE INDEX ON public.desordres (ah_section_id) WHERE ah_section_id IS NOT NULL;
-CREATE INDEX ON public.desordres (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
-CREATE INDEX ON public.desordres (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
-CREATE INDEX ON public.desordres USING gist (geometry);
-CREATE INDEX ON public.desordres (mobilier_id) WHERE mobilier_id IS NOT NULL;
-CREATE INDEX ON public.desordres (cheminement_id) WHERE cheminement_id IS NOT NULL;
-CREATE INDEX ON public.desordres (vegetation_id) WHERE vegetation_id IS NOT NULL;
-CREATE INDEX ON public.observations (desordre_id) WHERE desordre_id IS NOT NULL;
-CREATE INDEX ON public.observations (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON public.observations (ouvrage_hydraulique_id) WHERE ouvrage_hydraulique_id IS NOT NULL;
-CREATE INDEX ON public.observations (equipement_mesure_id) WHERE equipement_mesure_id IS NOT NULL;
-CREATE INDEX ON public.observations (cheminement_id) WHERE cheminement_id IS NOT NULL;
-CREATE INDEX ON public.observations (mobilier_id) WHERE mobilier_id IS NOT NULL;
-CREATE INDEX ON public.observations (vegetation_id) WHERE vegetation_id IS NOT NULL;
-CREATE INDEX ON public.observations (ouvrage_particulier_id) WHERE ouvrage_particulier_id IS NOT NULL;
-CREATE INDEX ON public.observations (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
-CREATE INDEX ON public.observations (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
-CREATE INDEX ON public.observations (ah_section_id) WHERE ah_section_id IS NOT NULL;
-CREATE INDEX ON public.observations (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
-CREATE INDEX ON public.photos (observation_id);
-CREATE INDEX ON public.equipements_mesure__desordres (desordre_id);
-CREATE INDEX ON public.ouvrages_hydrauliques__desordres (desordre_id);
-CREATE INDEX ON public.ouvrages_particuliers__desordres (desordre_id);
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (ouvrage_hydraulique_id);
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (cheminement_id) WHERE cheminement_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (autre_ouvrage_hydraulique_id) WHERE autre_ouvrage_hydraulique_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (ouvrage_particulier_id) WHERE ouvrage_particulier_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (equipement_mesure_id) WHERE equipement_mesure_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (berge_id) WHERE berge_id IS NOT NULL;
-CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (digue_id) WHERE digue_id IS NOT NULL;
-CREATE INDEX ON milieux.prestations (troncon_id) WHERE troncon_id IS NOT NULL;
-CREATE INDEX ON milieux.prestations (mobilier_id) WHERE mobilier_id IS NOT NULL;
-CREATE INDEX ON milieux.prestations (cheminement_id) WHERE cheminement_id IS NOT NULL;
-CREATE INDEX ON milieux.prestations (vegetation_id) WHERE vegetation_id IS NOT NULL;
-CREATE INDEX prestations_prestataire_idx ON milieux.prestations(prestataire_id);
-CREATE INDEX prestations_type_idx ON milieux.prestations(type_prestation_id);
-CREATE INDEX prestations_statut_idx ON milieux.prestations(statut_id);
-CREATE INDEX prestations_technicien_idx ON milieux.prestations(technicien_id);
+CREATE INDEX prestations_ah_section_id_idx ON gemapi.prestations(ah_section_id);
+CREATE INDEX prestations_cours_eau_id_idx ON gemapi.prestations(cours_eau_id);
+CREATE INDEX prestations_digue_id_idx ON gemapi.prestations(digue_id);
+CREATE INDEX prestations_ah_stockage_id_idx ON gemapi.prestations(ah_stockage_id);
+CREATE INDEX prestations_ah_ouvrage_id_idx ON gemapi.prestations(ah_ouvrage_id);
+CREATE INDEX prestations_site_terrestre_id_idx ON gemapi.prestations(site_terrestre_id);
+CREATE INDEX ON gemapi.troncons (digue_id);
+CREATE INDEX ON gemapi.troncons USING gist (geometry);
+CREATE INDEX ON gemapi.troncons USING gist (geometry_reperage);
+CREATE INDEX ON gemapi.mobilier USING gist (geometry);
+CREATE INDEX ON gemapi.mobilier (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.mobilier (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON gemapi.mobilier (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON gemapi.mobilier (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON gemapi.mobilier (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON gemapi.cheminements USING gist (geometry);
+CREATE INDEX ON gemapi.cheminements (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.cheminements (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON gemapi.cheminements (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON gemapi.cheminements (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON gemapi.cheminements (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON gemapi.vegetation USING gist (geometry);
+CREATE INDEX ON gemapi.vegetation (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.vegetation (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON gemapi.vegetation (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON gemapi.vegetation (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON gemapi.vegetation (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_particuliers USING gist (geometry);
+CREATE INDEX ON gemapi.ouvrages_particuliers (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.equipements_mesure USING gist (geometry);
+CREATE INDEX ON gemapi.equipements_mesure (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques USING gist (geometry);
+CREATE INDEX ON gemapi.ouvrages_hydrauliques (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (digue_id) WHERE digue_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres USING gist (geometry);
+CREATE INDEX ON gemapi.desordres (mobilier_id) WHERE mobilier_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON gemapi.desordres (vegetation_id) WHERE vegetation_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (desordre_id) WHERE desordre_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (ouvrage_hydraulique_id) WHERE ouvrage_hydraulique_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (equipement_mesure_id) WHERE equipement_mesure_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (mobilier_id) WHERE mobilier_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (vegetation_id) WHERE vegetation_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (ouvrage_particulier_id) WHERE ouvrage_particulier_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON gemapi.observations (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON gemapi.photos (observation_id);
+CREATE INDEX ON gemapi.equipements_mesure__desordres (desordre_id);
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__desordres (desordre_id);
+CREATE INDEX ON gemapi.ouvrages_particuliers__desordres (desordre_id);
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (ouvrage_hydraulique_id);
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (autre_ouvrage_hydraulique_id) WHERE autre_ouvrage_hydraulique_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (ouvrage_particulier_id) WHERE ouvrage_particulier_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (equipement_mesure_id) WHERE equipement_mesure_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (berge_id) WHERE berge_id IS NOT NULL;
+CREATE INDEX ON gemapi.ouvrages_hydrauliques__objets_lies (digue_id) WHERE digue_id IS NOT NULL;
+CREATE INDEX ON gemapi.prestations (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON gemapi.prestations (mobilier_id) WHERE mobilier_id IS NOT NULL;
+CREATE INDEX ON gemapi.prestations (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON gemapi.prestations (vegetation_id) WHERE vegetation_id IS NOT NULL;
+CREATE INDEX prestations_prestataire_idx ON gemapi.prestations(prestataire_id);
+CREATE INDEX prestations_type_idx ON gemapi.prestations(type_prestation_id);
+CREATE INDEX prestations_statut_idx ON gemapi.prestations(statut_id);
+CREATE INDEX prestations_technicien_idx ON gemapi.prestations(technicien_id);
 -- MESURES-07 : colonnes canoniques déclarées avant les vues qui les exposent.
 -- Le calcul et les triggers sont définis plus bas, après leurs dépendances.
 -- Géométrie propre prioritaire, puis géométrie de la cible directe.
-CREATE VIEW milieux.prestations_carte
+CREATE VIEW gemapi.prestations_carte
 WITH (security_invoker = true) AS
 SELECT
     p.id,
@@ -1254,16 +1257,16 @@ SELECT
     p.possede_geometrie,
     p.origine_mesures,
     p.ah_section_id
-FROM milieux.prestations p
-LEFT JOIN public.mobilier m ON m.id=p.mobilier_id
-LEFT JOIN public.cheminements ch ON ch.id=p.cheminement_id
-LEFT JOIN public.vegetation v ON v.id=p.vegetation_id
-LEFT JOIN milieux.ah_stockage s ON s.id=p.ah_stockage_id
-LEFT JOIN milieux.ah_ouvrage o ON o.id=p.ah_ouvrage_id;
+FROM gemapi.prestations p
+LEFT JOIN gemapi.mobilier m ON m.id=p.mobilier_id
+LEFT JOIN gemapi.cheminements ch ON ch.id=p.cheminement_id
+LEFT JOIN gemapi.vegetation v ON v.id=p.vegetation_id
+LEFT JOIN gemapi.ah_stockage s ON s.id=p.ah_stockage_id
+LEFT JOIN gemapi.ah_ouvrage o ON o.id=p.ah_ouvrage_id;
 -- Vue tabulaire QGIS : une fiche par prestation, sans jointure N:N.
 -- Les huit mesures sont celles enregistrées dans prestations, sans recalcul.
 -- Les deux nouveaux champs sont ajoutés en fin pour préserver les positions.
-CREATE VIEW milieux.prestations_fiches
+CREATE VIEW gemapi.prestations_fiches
 WITH (security_invoker = true) AS
 SELECT
     p.id,
@@ -1299,48 +1302,48 @@ SELECT
     p.nombre_points,
     p.origine_mesures,
     p.ah_section_id
-FROM milieux.prestations AS p
-JOIN milieux.types_prestations AS tp ON tp.id = p.type_prestation_id
-JOIN milieux.prestataires AS pr ON pr.id = p.prestataire_id
-JOIN milieux.statuts_prestations AS s ON s.id = p.statut_id
-JOIN milieux.techniciens AS t ON t.id = p.technicien_id;
+FROM gemapi.prestations AS p
+JOIN gemapi.types_prestations AS tp ON tp.id = p.type_prestation_id
+JOIN gemapi.prestataires AS pr ON pr.id = p.prestataire_id
+JOIN gemapi.statuts_prestations AS s ON s.id = p.statut_id
+JOIN gemapi.techniciens AS t ON t.id = p.technicien_id;
 
-CREATE INDEX digues_reperes_digue_idx ON milieux.digues_reperes(digue_id);
+CREATE INDEX digues_reperes_digue_idx ON gemapi.digues_reperes(digue_id);
 CREATE INDEX digues_reperes_riviere_rive_idx
-    ON milieux.digues_reperes(riviere_id, rive);
+    ON gemapi.digues_reperes(riviere_id, rive);
 CREATE INDEX digues_reperes_geom_gix
-    ON milieux.digues_reperes USING gist(geom_reference);
+    ON gemapi.digues_reperes USING gist(geom_reference);
 
-CREATE FUNCTION milieux.assert_digue_repere(digue_uuid uuid) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, milieux AS $$
+CREATE FUNCTION gemapi.assert_digue_repere(digue_uuid uuid) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, gemapi, pg_temp AS $$
 BEGIN
     -- Le verrou du parent sérialise les changements de repère concurrents.
-    PERFORM 1 FROM milieux.digues WHERE id = digue_uuid FOR UPDATE;
+    PERFORM 1 FROM gemapi.digues WHERE id = digue_uuid FOR UPDATE;
     IF FOUND AND NOT EXISTS (
-        SELECT 1 FROM milieux.digues_reperes WHERE digue_id = digue_uuid
+        SELECT 1 FROM gemapi.digues_reperes WHERE digue_id = digue_uuid
     ) THEN
         RAISE EXCEPTION 'Digue % sans repère', digue_uuid USING ERRCODE = '23514';
     END IF;
 END $$;
-CREATE FUNCTION milieux.digue_repere_complete() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, milieux AS $$
+CREATE FUNCTION gemapi.digue_repere_complete() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, gemapi, pg_temp AS $$
 BEGIN
     IF TG_TABLE_NAME = 'digues' THEN
-        IF TG_OP <> 'DELETE' THEN PERFORM milieux.assert_digue_repere(NEW.id); END IF;
+        IF TG_OP <> 'DELETE' THEN PERFORM gemapi.assert_digue_repere(NEW.id); END IF;
     ELSE
-        IF TG_OP <> 'INSERT' THEN PERFORM milieux.assert_digue_repere(OLD.digue_id); END IF;
-        IF TG_OP <> 'DELETE' THEN PERFORM milieux.assert_digue_repere(NEW.digue_id); END IF;
+        IF TG_OP <> 'INSERT' THEN PERFORM gemapi.assert_digue_repere(OLD.digue_id); END IF;
+        IF TG_OP <> 'DELETE' THEN PERFORM gemapi.assert_digue_repere(NEW.digue_id); END IF;
     END IF;
     RETURN NULL;
 END $$;
-REVOKE ALL ON FUNCTION milieux.assert_digue_repere(uuid), milieux.digue_repere_complete() FROM PUBLIC;
-CREATE CONSTRAINT TRIGGER digue_repere_parent AFTER INSERT OR UPDATE ON milieux.digues
-DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION milieux.digue_repere_complete();
-CREATE CONSTRAINT TRIGGER digue_repere_child AFTER INSERT OR UPDATE OR DELETE ON milieux.digues_reperes
-DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION milieux.digue_repere_complete();
+REVOKE ALL ON FUNCTION gemapi.assert_digue_repere(uuid), gemapi.digue_repere_complete() FROM PUBLIC;
+CREATE CONSTRAINT TRIGGER digue_repere_parent AFTER INSERT OR UPDATE ON gemapi.digues
+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION gemapi.digue_repere_complete();
+CREATE CONSTRAINT TRIGGER digue_repere_child AFTER INSERT OR UPDATE OR DELETE ON gemapi.digues_reperes
+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION gemapi.digue_repere_complete();
 
 -- Fonction pure : aucune lecture de table, aucune qualification implicite.
-CREATE FUNCTION milieux.cours_eau_reference_admissible(p_geom geometry, p_direction boolean, p_valide boolean)
+CREATE FUNCTION gemapi.cours_eau_reference_admissible(p_geom geometry, p_direction boolean, p_valide boolean)
 RETURNS boolean LANGUAGE sql IMMUTABLE PARALLEL SAFE
 SET search_path FROM CURRENT AS $admissible$
     SELECT CASE WHEN p_direction IS TRUE AND p_valide IS TRUE AND p_geom IS NOT NULL
@@ -1352,7 +1355,7 @@ SET search_path FROM CURRENT AS $admissible$
     ELSE false END
 $admissible$;
 
-CREATE FUNCTION milieux.digues_reperes_prepare() RETURNS trigger
+CREATE FUNCTION gemapi.digues_reperes_prepare() RETURNS trigger
 LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 DECLARE
     r_geom geometry;
@@ -1387,12 +1390,12 @@ BEGIN
 
     -- FOR SHARE empêche une correction concurrente du tracé entre la lecture
     -- et l'enregistrement de l'instantané dans cette transaction.
-    SELECT geom,direction,valide INTO r_geom,r_direction,r_valide FROM milieux.cours_eau
+    SELECT geom,direction,valide INTO r_geom,r_direction,r_valide FROM gemapi.cours_eau
       WHERE id = NEW.riviere_id FOR SHARE;
     IF r_geom IS NULL THEN
         RAISE EXCEPTION 'Rivière de référence introuvable';
     END IF;
-    IF NOT milieux.cours_eau_reference_admissible(r_geom,r_direction,r_valide) THEN
+    IF NOT gemapi.cours_eau_reference_admissible(r_geom,r_direction,r_valide) THEN
         RAISE EXCEPTION 'Cours d eau non admissible : direction et valide TRUE, ligne unique simple ouverte et positive requises'
             USING ERRCODE='23514';
     END IF;
@@ -1404,30 +1407,30 @@ BEGIN
     RETURN NEW;
 END $$;
 CREATE TRIGGER digues_reperes_prepare_trg
-BEFORE INSERT OR UPDATE ON milieux.digues_reperes
-FOR EACH ROW EXECUTE FUNCTION milieux.digues_reperes_prepare();
+BEFORE INSERT OR UPDATE ON gemapi.digues_reperes
+FOR EACH ROW EXECUTE FUNCTION gemapi.digues_reperes_prepare();
 CREATE TRIGGER tr_stamp_digues
-BEFORE INSERT OR UPDATE ON milieux.digues
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+BEFORE INSERT OR UPDATE ON gemapi.digues
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
 CREATE TRIGGER tr_stamp_digues_reperes
-BEFORE INSERT OR UPDATE ON milieux.digues_reperes
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+BEFORE INSERT OR UPDATE ON gemapi.digues_reperes
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
 
 -- Parcours explicites : droits du compte connecté, aucune élévation.
 -- Le jeton parent évite aussi d'écraser une modification native de ses attributs.
-CREATE FUNCTION milieux.digue_enregistrer(
+CREATE FUNCTION gemapi.digue_enregistrer(
     p_digue uuid, p_repere uuid, p_revision integer, p_parent_modification timestamptz,
     p_nom text, p_identifiant text, p_commentaire text,
     p_riviere uuid, p_rive text, p_debut double precision, p_fin double precision,
     p_signature text
 ) RETURNS uuid LANGUAGE plpgsql SECURITY INVOKER SET search_path FROM CURRENT AS $save$
 DECLARE
-    d milieux.digues%ROWTYPE;
-    s milieux.digues_reperes%ROWTYPE;
-    r milieux.cours_eau%ROWTYPE;
+    d gemapi.digues%ROWTYPE;
+    s gemapi.digues_reperes%ROWTYPE;
+    r gemapi.cours_eau%ROWTYPE;
 BEGIN
-    SELECT * INTO r FROM milieux.cours_eau WHERE id=p_riviere FOR SHARE;
-    IF NOT FOUND OR NOT milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide) THEN
+    SELECT * INTO r FROM gemapi.cours_eau WHERE id=p_riviere FOR SHARE;
+    IF NOT FOUND OR NOT gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide) THEN
         RAISE EXCEPTION 'Cours d eau non admissible : prévisualisez un support qualifié' USING ERRCODE='23514';
     END IF;
     IF p_signature IS NULL OR p_signature IS DISTINCT FROM md5(encode(ST_AsEWKB(r.geom),'hex')) THEN
@@ -1437,65 +1440,65 @@ BEGIN
         IF p_repere IS NOT NULL OR p_revision IS DISTINCT FROM 0 THEN
             RAISE EXCEPTION 'Nouvelle digue : identité ou révision incorrecte' USING ERRCODE='23514';
         END IF;
-        INSERT INTO milieux.digues(nom,identifiant_externe,commentaire)
+        INSERT INTO gemapi.digues(nom,identifiant_externe,commentaire)
         VALUES (p_nom,p_identifiant,p_commentaire) RETURNING * INTO d;
-        INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction)
+        INSERT INTO gemapi.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction)
         VALUES (d.id,p_riviere,p_rive,p_debut,p_fin) RETURNING id INTO p_repere;
     ELSE
-        SELECT * INTO d FROM milieux.digues WHERE id=p_digue FOR UPDATE;
+        SELECT * INTO d FROM gemapi.digues WHERE id=p_digue FOR UPDATE;
         IF NOT FOUND OR d.date_modification IS DISTINCT FROM p_parent_modification THEN
             RAISE EXCEPTION 'La digue a changé : rechargez la fiche' USING ERRCODE='40001';
         END IF;
-        SELECT * INTO s FROM milieux.digues_reperes WHERE digue_id=p_digue FOR UPDATE;
+        SELECT * INTO s FROM gemapi.digues_reperes WHERE digue_id=p_digue FOR UPDATE;
         IF NOT FOUND OR s.id IS DISTINCT FROM p_repere OR s.revision_validation IS DISTINCT FROM p_revision THEN
             RAISE EXCEPTION 'Le repère a changé : rechargez la fiche' USING ERRCODE='40001';
         END IF;
-        UPDATE milieux.digues SET nom=p_nom,identifiant_externe=p_identifiant,commentaire=p_commentaire
+        UPDATE gemapi.digues SET nom=p_nom,identifiant_externe=p_identifiant,commentaire=p_commentaire
         WHERE id=p_digue AND (nom,identifiant_externe,commentaire)
             IS DISTINCT FROM (p_nom,p_identifiant,p_commentaire);
-        UPDATE milieux.digues_reperes SET riviere_id=p_riviere,rive=p_rive,
+        UPDATE gemapi.digues_reperes SET riviere_id=p_riviere,rive=p_rive,
             debut_fraction=p_debut,fin_fraction=p_fin,revision_validation=revision_validation+1 WHERE id=p_repere;
     END IF;
     RETURN p_repere;
 END $save$;
 
-CREATE FUNCTION milieux.digue_supprimer(p_repere uuid,p_revision integer,p_parent_modification timestamptz)
+CREATE FUNCTION gemapi.digue_supprimer(p_repere uuid,p_revision integer,p_parent_modification timestamptz)
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path FROM CURRENT AS $delete$
 DECLARE
-    d milieux.digues%ROWTYPE;
-    s milieux.digues_reperes%ROWTYPE;
+    d gemapi.digues%ROWTYPE;
+    s gemapi.digues_reperes%ROWTYPE;
     nombre bigint;
 BEGIN
     -- Verrou du parent avant le repère, comme à l'enregistrement. Le verrou
     -- empêche aussi un rattachement FK concurrent pendant le contrôle.
-    SELECT d0.* INTO d FROM milieux.digues d0 JOIN milieux.digues_reperes s0
+    SELECT d0.* INTO d FROM gemapi.digues d0 JOIN gemapi.digues_reperes s0
         ON s0.digue_id=d0.id WHERE s0.id=p_repere FOR UPDATE OF d0;
     IF NOT FOUND OR d.date_modification IS DISTINCT FROM p_parent_modification THEN
         RAISE EXCEPTION 'La digue a changé : rechargez la fiche' USING ERRCODE='40001';
     END IF;
-    SELECT * INTO s FROM milieux.digues_reperes WHERE id=p_repere AND digue_id=d.id FOR UPDATE;
+    SELECT * INTO s FROM gemapi.digues_reperes WHERE id=p_repere AND digue_id=d.id FOR UPDATE;
     IF NOT FOUND OR s.revision_validation IS DISTINCT FROM p_revision THEN
         RAISE EXCEPTION 'Le repère a changé : rechargez la fiche' USING ERRCODE='40001';
     END IF;
-    SELECT count(*) INTO nombre FROM milieux.prestations WHERE digue_id=d.id;
+    SELECT count(*) INTO nombre FROM gemapi.prestations WHERE digue_id=d.id;
     IF nombre>0 THEN
         RAISE EXCEPTION 'Suppression impossible : % prestation(s) rattachée(s) à cette digue. Aucun objet supprimé.',nombre
             USING ERRCODE='23503';
     END IF;
-    SELECT count(*) INTO nombre FROM public.troncons WHERE digue_id=d.id;
+    SELECT count(*) INTO nombre FROM gemapi.troncons WHERE digue_id=d.id;
     IF nombre>0 THEN RAISE EXCEPTION 'Digue référencée par % tronçon(s)',nombre USING ERRCODE='23503'; END IF;
-    SELECT count(*) INTO nombre FROM public.desordres WHERE digue_id=d.id;
+    SELECT count(*) INTO nombre FROM gemapi.desordres WHERE digue_id=d.id;
     IF nombre>0 THEN RAISE EXCEPTION 'Digue référencée par % désordre(s)',nombre USING ERRCODE='23503'; END IF;
-    DELETE FROM milieux.digues_reperes WHERE id=p_repere;
-    DELETE FROM milieux.digues WHERE id=d.id;
+    DELETE FROM gemapi.digues_reperes WHERE id=p_repere;
+    DELETE FROM gemapi.digues WHERE id=d.id;
 END $delete$;
-REVOKE ALL ON FUNCTION milieux.digue_enregistrer(uuid,uuid,integer,timestamptz,text,text,text,uuid,text,double precision,double precision,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION milieux.digue_supprimer(uuid,integer,timestamptz) FROM PUBLIC;
-COMMENT ON COLUMN milieux.digues_reperes.revision_validation IS
+REVOKE ALL ON FUNCTION gemapi.digue_enregistrer(uuid,uuid,integer,timestamptz,text,text,text,uuid,text,double precision,double precision,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION gemapi.digue_supprimer(uuid,integer,timestamptz) FROM PUBLIC;
+COMMENT ON COLUMN gemapi.digues_reperes.revision_validation IS
 'Validation explicite : 1 à la création, puis +1, y compris à fractions identiques. UUID et parent immuables.';
 
 -- Couche géographique de consultation ; la géométrie affichée est l'instantané.
-CREATE VIEW milieux.digues_carte
+CREATE VIEW gemapi.digues_carte
 WITH (security_invoker = true) AS
 SELECT s.id, s.digue_id, d.nom AS digue_nom, s.riviere_id, r.nom AS riviere_nom,
        s.rive, s.debut_fraction, s.fin_fraction,
@@ -1504,20 +1507,20 @@ SELECT s.id, s.digue_id, d.nom AS digue_nom, s.riviere_id, r.nom AS riviere_nom,
            WHEN md5(encode(ST_AsEWKB(r.geom), 'hex'))
                 IS DISTINCT FROM s.geom_riviere_signature
            THEN 'REFERENTIEL_MODIFIE'
-           WHEN NOT milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
+           WHEN NOT gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
            THEN 'COURS_EAU_NON_QUALIFIE'
            ELSE 'CONFORME'
        END AS etat_referentiel
-FROM milieux.digues_reperes AS s
-JOIN milieux.digues AS d ON d.id = s.digue_id
-JOIN milieux.cours_eau AS r ON r.id = s.riviere_id;
+FROM gemapi.digues_reperes AS s
+JOIN gemapi.digues AS d ON d.id = s.digue_id
+JOIN gemapi.cours_eau AS r ON r.id = s.riviere_id;
 -- DIG-01 END
 
 
-CREATE INDEX ah_sections_cours_eau_idx ON milieux.ah_sections(cours_eau_id);
-CREATE INDEX ah_sections_geom_idx ON milieux.ah_sections USING gist(geom_reference);
+CREATE INDEX ah_sections_cours_eau_idx ON gemapi.ah_sections(cours_eau_id);
+CREATE INDEX ah_sections_geom_idx ON gemapi.ah_sections USING gist(geom_reference);
 
-CREATE FUNCTION milieux.ah_sections_prepare() RETURNS trigger
+CREATE FUNCTION gemapi.ah_sections_prepare() RETURNS trigger
 LANGUAGE plpgsql SET search_path FROM CURRENT AS $prepare$
 DECLARE
     r_geom geometry;
@@ -1550,17 +1553,17 @@ BEGIN
        OR NOT (NEW.debut_fraction>=0 AND NEW.debut_fraction<NEW.fin_fraction AND NEW.fin_fraction<=1) THEN
         RAISE EXCEPTION 'Fractions attendues : 0 <= début < fin <= 1' USING ERRCODE='23514';
     END IF;
-    IF NOT EXISTS(SELECT FROM milieux.ah WHERE id=NEW.ah_id) THEN
+    IF NOT EXISTS(SELECT FROM gemapi.ah WHERE id=NEW.ah_id) THEN
         RAISE EXCEPTION 'Parent AH introuvable' USING ERRCODE='23503';
     END IF;
     -- Verrou partagé jusqu'à la fin de transaction : empêche un tracé ou une
     -- qualification concurrents entre lecture et enregistrement de l'instantané.
-    SELECT geom,direction,valide INTO r_geom,r_direction,r_valide FROM milieux.cours_eau
+    SELECT geom,direction,valide INTO r_geom,r_direction,r_valide FROM gemapi.cours_eau
         WHERE id=NEW.cours_eau_id FOR SHARE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Cours d eau de référence introuvable' USING ERRCODE='23503';
     END IF;
-    IF NOT milieux.cours_eau_reference_admissible(r_geom,r_direction,r_valide) THEN
+    IF NOT gemapi.cours_eau_reference_admissible(r_geom,r_direction,r_valide) THEN
         RAISE EXCEPTION 'Cours d eau non admissible : direction et valide TRUE, ligne unique simple ouverte et positive requises'
             USING ERRCODE='23514';
     END IF;
@@ -1570,41 +1573,41 @@ BEGIN
     NEW.date_validation := clock_timestamp();
     RETURN NEW;
 END $prepare$;
-CREATE TRIGGER ah_sections_prepare_trg BEFORE INSERT OR UPDATE ON milieux.ah_sections
-FOR EACH ROW EXECUTE FUNCTION milieux.ah_sections_prepare();
-CREATE TRIGGER tr_stamp_ah_sections BEFORE INSERT OR UPDATE ON milieux.ah_sections
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER ah_sections_prepare_trg BEFORE INSERT OR UPDATE ON gemapi.ah_sections
+FOR EACH ROW EXECUTE FUNCTION gemapi.ah_sections_prepare();
+CREATE TRIGGER tr_stamp_ah_sections BEFORE INSERT OR UPDATE ON gemapi.ah_sections
+FOR EACH ROW EXECUTE FUNCTION gemapi.stamp_modification('metier');
 
-CREATE VIEW milieux.ah_sections_carte WITH (security_invoker=true) AS
+CREATE VIEW gemapi.ah_sections_carte WITH (security_invoker=true) AS
 SELECT s.id,s.ah_id,s.cours_eau_id,s.debut_fraction,s.fin_fraction,s.geom_reference,
        s.geom_cours_eau_signature,s.revision_validation,s.valide_par,s.date_validation,
        s.commentaire,s.modifie_par,s.date_modification, s.geom_reference AS geom,
        md5(encode(ST_AsEWKB(r.geom),'hex'))=s.geom_cours_eau_signature AS signature_conforme,
-       milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide) AS cours_eau_qualifie,
+       gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide) AS cours_eau_qualifie,
        CASE WHEN md5(encode(ST_AsEWKB(r.geom),'hex')) IS DISTINCT FROM s.geom_cours_eau_signature
                 THEN 'REFERENTIEL_MODIFIE'
-            WHEN NOT milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
+            WHEN NOT gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
                 THEN 'COURS_EAU_NON_QUALIFIE'
             ELSE 'CONFORME' END AS etat_reference
-FROM milieux.ah_sections s JOIN milieux.cours_eau r ON r.id=s.cours_eau_id;
+FROM gemapi.ah_sections s JOIN gemapi.cours_eau r ON r.id=s.cours_eau_id;
 
 -- L'admissibilité est vérifiée à l'écriture, sous verrous partagés.
 -- Une ancienne association obsolète reste consultable et éditable sans réaffectation.
-CREATE FUNCTION milieux.prestations_section_admissible() RETURNS trigger
+CREATE FUNCTION gemapi.prestations_section_admissible() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $section_check$
-DECLARE section_row milieux.ah_sections%ROWTYPE; reference_row milieux.cours_eau%ROWTYPE;
+DECLARE section_row gemapi.ah_sections%ROWTYPE; reference_row gemapi.cours_eau%ROWTYPE;
 BEGIN
     IF NEW.ah_section_id IS NULL THEN RETURN NEW; END IF;
     IF TG_OP='UPDATE' THEN
         IF NEW.ah_section_id IS NOT DISTINCT FROM OLD.ah_section_id
            AND ST_AsEWKB(NEW.geom) IS NOT DISTINCT FROM ST_AsEWKB(OLD.geom) THEN RETURN NEW; END IF;
     END IF;
-    SELECT * INTO section_row FROM milieux.ah_sections WHERE id=NEW.ah_section_id FOR SHARE;
+    SELECT * INTO section_row FROM gemapi.ah_sections WHERE id=NEW.ah_section_id FOR SHARE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Section AH introuvable' USING ERRCODE='23503';
     END IF;
-    SELECT * INTO reference_row FROM milieux.cours_eau WHERE id=section_row.cours_eau_id FOR SHARE;
-    IF NOT milieux.cours_eau_reference_admissible(reference_row.geom,reference_row.direction,reference_row.valide)
+    SELECT * INTO reference_row FROM gemapi.cours_eau WHERE id=section_row.cours_eau_id FOR SHARE;
+    IF NOT gemapi.cours_eau_reference_admissible(reference_row.geom,reference_row.direction,reference_row.valide)
        OR md5(encode(ST_AsEWKB(reference_row.geom),'hex')) IS DISTINCT FROM section_row.geom_cours_eau_signature
        OR NOT ST_Equals(section_row.geom_reference,ST_LineSubstring(ST_GeometryN(reference_row.geom,1),
                                               section_row.debut_fraction,section_row.fin_fraction)) THEN
@@ -1613,20 +1616,20 @@ BEGIN
     END IF;
     RETURN NEW;
 END $section_check$;
-REVOKE ALL ON FUNCTION milieux.prestations_section_admissible() FROM PUBLIC;
-CREATE TRIGGER prestations_section_admissible_trg BEFORE INSERT OR UPDATE ON milieux.prestations
-FOR EACH ROW EXECUTE FUNCTION milieux.prestations_section_admissible();
+REVOKE ALL ON FUNCTION gemapi.prestations_section_admissible() FROM PUBLIC;
+CREATE TRIGGER prestations_section_admissible_trg BEFORE INSERT OR UPDATE ON gemapi.prestations
+FOR EACH ROW EXECUTE FUNCTION gemapi.prestations_section_admissible();
 
 -- Propositions en lecture seule depuis l'unique stockage facultatif du parent.
 -- Aucun INSERT ni validation métier : accepter exige une écriture explicite.
-CREATE FUNCTION milieux.ah_sections_candidates(p_ah_id uuid)
+CREATE FUNCTION gemapi.ah_sections_candidates(p_ah_id uuid)
 RETURNS TABLE (cours_eau_id uuid, debut_fraction double precision, fin_fraction double precision,
                geom_reference geometry, geom_cours_eau_signature text)
 LANGUAGE sql STABLE SET search_path FROM CURRENT AS $candidates$
     WITH supports AS MATERIALIZED (
         SELECT r.id,r.geom,ST_GeometryN(r.geom,1) AS ligne,s.geom AS stockage_geom
-        FROM milieux.ah_stockage s JOIN milieux.cours_eau r ON ST_Intersects(s.geom,r.geom)
-        WHERE s.ah_id=p_ah_id AND milieux.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
+        FROM gemapi.ah_stockage s JOIN gemapi.cours_eau r ON ST_Intersects(s.geom,r.geom)
+        WHERE s.ah_id=p_ah_id AND gemapi.cours_eau_reference_admissible(r.geom,r.direction,r.valide)
     ), parties AS (
         SELECT r.id,r.geom,r.ligne,p.geom AS partie
         FROM supports r CROSS JOIN LATERAL ST_Dump(ST_LineMerge(ST_UnaryUnion(
@@ -1644,58 +1647,58 @@ LANGUAGE sql STABLE SET search_path FROM CURRENT AS $candidates$
     FROM fractions WHERE debut<fin AND ST_Equals(ST_LineSubstring(ligne,debut,fin),partie)
     ORDER BY id,debut,fin
 $candidates$;
-COMMENT ON TABLE milieux.ah_sections IS
+COMMENT ON TABLE gemapi.ah_sections IS
 'Sections du parent AH définies par fractions manuelles sur un cours d eau qualifié. Géométrie calculée et figée, revalidation explicite ; aucune dépendance au stockage.';
-COMMENT ON COLUMN milieux.ah_sections.revision_validation IS
+COMMENT ON COLUMN gemapi.ah_sections.revision_validation IS
 '1 à la création ; augmenter exactement de 1 pour accepter une nouvelle référence, même avec les mêmes fractions. Aucun recalcul sur modification du cours d eau.';
-COMMENT ON FUNCTION milieux.ah_sections_candidates(uuid) IS
+COMMENT ON FUNCTION gemapi.ah_sections_candidates(uuid) IS
 'Propositions spatiales en lecture seule sur cours d eau qualifiés ; aucune décision métier enregistrée.';
 -- Fin du référencement hydrographique AH.
 
 -- Liaisons de consultation consolidées pour les formulaires QGIS des parents.
 -- L'identifiant technique stable permet de charger chaque vue sans géométrie
 -- avec une clé simple ; les couples métier restent les deux UUID exposés.
-CREATE VIEW milieux.prestations__ah
+CREATE VIEW gemapi.prestations__ah
 WITH (security_invoker = true) AS
 SELECT md5('prestations__ah:' || links.prestation_id::text || ':' || links.ah_id::text)::uuid AS id,
        links.prestation_id, links.ah_id
 FROM (
     SELECT l.id AS prestation_id, s.ah_id
-    FROM milieux.prestations AS l
-    JOIN milieux.ah_stockage AS s ON s.id = l.ah_stockage_id
+    FROM gemapi.prestations AS l
+    JOIN gemapi.ah_stockage AS s ON s.id = l.ah_stockage_id
     UNION
     SELECT l.id AS prestation_id, o.ah_id
-    FROM milieux.prestations AS l
-    JOIN milieux.ah_ouvrage AS o ON o.id = l.ah_ouvrage_id
+    FROM gemapi.prestations AS l
+    JOIN gemapi.ah_ouvrage AS o ON o.id = l.ah_ouvrage_id
     UNION
     SELECT l.id AS prestation_id, s.ah_id
-    FROM milieux.prestations AS l
-    JOIN milieux.ah_sections AS s ON s.id = l.ah_section_id
+    FROM gemapi.prestations AS l
+    JOIN gemapi.ah_sections AS s ON s.id = l.ah_section_id
 ) AS links;
 
-CREATE VIEW milieux.prestations__sites_terrestres
+CREATE VIEW gemapi.prestations__sites_terrestres
 WITH (security_invoker = true) AS
 SELECT md5('prestations__sites_terrestres:' || links.prestation_id::text || ':' || links.site_terrestre_id::text)::uuid AS id,
        links.prestation_id, links.site_terrestre_id
 FROM (
-    SELECT id AS prestation_id, site_terrestre_id FROM milieux.prestations WHERE site_terrestre_id IS NOT NULL
+    SELECT id AS prestation_id, site_terrestre_id FROM gemapi.prestations WHERE site_terrestre_id IS NOT NULL
     UNION ALL
-    SELECT p.id, enfant.site_terrestre_id FROM milieux.prestations p
-    JOIN public.mobilier enfant ON enfant.id=p.mobilier_id WHERE enfant.site_terrestre_id IS NOT NULL
+    SELECT p.id, enfant.site_terrestre_id FROM gemapi.prestations p
+    JOIN gemapi.mobilier enfant ON enfant.id=p.mobilier_id WHERE enfant.site_terrestre_id IS NOT NULL
     UNION ALL
-    SELECT p.id, enfant.site_terrestre_id FROM milieux.prestations p
-    JOIN public.cheminements enfant ON enfant.id=p.cheminement_id WHERE enfant.site_terrestre_id IS NOT NULL
+    SELECT p.id, enfant.site_terrestre_id FROM gemapi.prestations p
+    JOIN gemapi.cheminements enfant ON enfant.id=p.cheminement_id WHERE enfant.site_terrestre_id IS NOT NULL
     UNION ALL
-    SELECT p.id, enfant.site_terrestre_id FROM milieux.prestations p
-    JOIN public.vegetation enfant ON enfant.id=p.vegetation_id WHERE enfant.site_terrestre_id IS NOT NULL
+    SELECT p.id, enfant.site_terrestre_id FROM gemapi.prestations p
+    JOIN gemapi.vegetation enfant ON enfant.id=p.vegetation_id WHERE enfant.site_terrestre_id IS NOT NULL
 ) AS links;
 
 -- Mesures enregistrées : géométrie propre prioritaire, sinon patrimoine.
 -- La quantité déclarée reste indépendante. Actualiser la fiche après sauvegarde.
-SELECT pg_catalog.set_config('search_path',pg_catalog.format('pg_catalog,%I,milieux,pg_temp',n.nspname),true)
+SELECT pg_catalog.set_config('search_path',pg_catalog.format('pg_catalog,%I,gemapi,pg_temp',n.nspname),true)
 FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace
 WHERE e.extname='postgis';
-CREATE FUNCTION milieux.mesures07_resoudre(
+CREATE FUNCTION gemapi.mesures07_resoudre(
     propre geometry, stockage uuid, ouvrage uuid, mobilier uuid, cheminement uuid, vegetation uuid,
     OUT nombre_points integer,OUT longueur_m double precision,
     OUT surface_m2 double precision,OUT surface_ha double precision,
@@ -1706,11 +1709,11 @@ SET search_path FROM CURRENT AS $resolve$
 DECLARE g geometry;
 BEGIN
     IF propre IS NOT NULL THEN g:=propre;
-    ELSIF stockage IS NOT NULL THEN SELECT geom INTO g FROM milieux.ah_stockage WHERE id=stockage;
-    ELSIF ouvrage IS NOT NULL THEN SELECT geom INTO g FROM milieux.ah_ouvrage WHERE id=ouvrage;
-    ELSIF mobilier IS NOT NULL THEN SELECT obj.geometry INTO g FROM public.mobilier obj WHERE obj.id=mobilier;
-    ELSIF cheminement IS NOT NULL THEN SELECT obj.geometry INTO g FROM public.cheminements obj WHERE obj.id=cheminement;
-    ELSIF vegetation IS NOT NULL THEN SELECT obj.geometry INTO g FROM public.vegetation obj WHERE obj.id=vegetation;
+    ELSIF stockage IS NOT NULL THEN SELECT geom INTO g FROM gemapi.ah_stockage WHERE id=stockage;
+    ELSIF ouvrage IS NOT NULL THEN SELECT geom INTO g FROM gemapi.ah_ouvrage WHERE id=ouvrage;
+    ELSIF mobilier IS NOT NULL THEN SELECT obj.geometry INTO g FROM gemapi.mobilier obj WHERE obj.id=mobilier;
+    ELSIF cheminement IS NOT NULL THEN SELECT obj.geometry INTO g FROM gemapi.cheminements obj WHERE obj.id=cheminement;
+    ELSIF vegetation IS NOT NULL THEN SELECT obj.geometry INTO g FROM gemapi.vegetation obj WHERE obj.id=vegetation;
     END IF;
     possede_geometrie:=g IS NOT NULL AND NOT ST_IsEmpty(g);
     origine_mesures:=CASE WHEN NOT possede_geometrie THEN 'Aucune géométrie'
@@ -1724,9 +1727,9 @@ BEGIN
         ELSE NULL;
     END CASE;
 END $resolve$;
-REVOKE ALL ON FUNCTION milieux.mesures07_resoudre(geometry,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION gemapi.mesures07_resoudre(geometry,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
 
-CREATE FUNCTION milieux.mesures07_preparer() RETURNS trigger
+CREATE FUNCTION gemapi.mesures07_preparer() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $prepare$
 DECLARE
     m record;
@@ -1755,14 +1758,14 @@ BEGIN
     -- FOR SHARE requiert UPDATE sur le parent : le trigger seul, non appelable
     -- directement, porte cette capacité. Aucun GRANT d'édition de parent au rôle Prestations.
     IF NEW.geom IS NULL THEN
-        IF NEW.ah_stockage_id IS NOT NULL THEN PERFORM 1 FROM milieux.ah_stockage WHERE id=NEW.ah_stockage_id FOR SHARE;
-        ELSIF NEW.ah_ouvrage_id IS NOT NULL THEN PERFORM 1 FROM milieux.ah_ouvrage WHERE id=NEW.ah_ouvrage_id FOR SHARE;
-        ELSIF NEW.mobilier_id IS NOT NULL THEN PERFORM 1 FROM public.mobilier WHERE id=NEW.mobilier_id FOR SHARE;
-        ELSIF NEW.cheminement_id IS NOT NULL THEN PERFORM 1 FROM public.cheminements WHERE id=NEW.cheminement_id FOR SHARE;
-        ELSIF NEW.vegetation_id IS NOT NULL THEN PERFORM 1 FROM public.vegetation WHERE id=NEW.vegetation_id FOR SHARE;
+        IF NEW.ah_stockage_id IS NOT NULL THEN PERFORM 1 FROM gemapi.ah_stockage WHERE id=NEW.ah_stockage_id FOR SHARE;
+        ELSIF NEW.ah_ouvrage_id IS NOT NULL THEN PERFORM 1 FROM gemapi.ah_ouvrage WHERE id=NEW.ah_ouvrage_id FOR SHARE;
+        ELSIF NEW.mobilier_id IS NOT NULL THEN PERFORM 1 FROM gemapi.mobilier WHERE id=NEW.mobilier_id FOR SHARE;
+        ELSIF NEW.cheminement_id IS NOT NULL THEN PERFORM 1 FROM gemapi.cheminements WHERE id=NEW.cheminement_id FOR SHARE;
+        ELSIF NEW.vegetation_id IS NOT NULL THEN PERFORM 1 FROM gemapi.vegetation WHERE id=NEW.vegetation_id FOR SHARE;
         END IF;
     END IF;
-    SELECT * INTO m FROM milieux.mesures07_resoudre(NEW.geom, NEW.ah_stockage_id, NEW.ah_ouvrage_id,
+    SELECT * INTO m FROM gemapi.mesures07_resoudre(NEW.geom, NEW.ah_stockage_id, NEW.ah_ouvrage_id,
         NEW.mobilier_id, NEW.cheminement_id, NEW.vegetation_id);
     NEW.nombre_points:=m.nombre_points;
     NEW.longueur_m:=m.longueur_m;
@@ -1773,37 +1776,37 @@ BEGIN
     NEW.origine_mesures:=m.origine_mesures;
     RETURN NEW;
 END $prepare$;
-REVOKE ALL ON FUNCTION milieux.mesures07_preparer() FROM PUBLIC;
-CREATE TRIGGER zz_mesures07_preparer BEFORE INSERT OR UPDATE ON milieux.prestations
-FOR EACH ROW EXECUTE FUNCTION milieux.mesures07_preparer();
+REVOKE ALL ON FUNCTION gemapi.mesures07_preparer() FROM PUBLIC;
+CREATE TRIGGER zz_mesures07_preparer BEFORE INSERT OR UPDATE ON gemapi.prestations
+FOR EACH ROW EXECUTE FUNCTION gemapi.mesures07_preparer();
 
 -- Recalcul des seules prestations qui empruntent cette géométrie.
-CREATE FUNCTION milieux.mesures07_parent() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+CREATE FUNCTION gemapi.mesures07_parent() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
 SET search_path FROM CURRENT AS $parent$
 BEGIN
     IF TG_TABLE_NAME='ah_stockage' THEN
-        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND ah_stockage_id=NEW.id;
+        UPDATE gemapi.prestations SET origine_mesures=NULL WHERE geom IS NULL AND ah_stockage_id=NEW.id;
     ELSIF TG_TABLE_NAME='ah_ouvrage' THEN
-        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND ah_ouvrage_id=NEW.id;
+        UPDATE gemapi.prestations SET origine_mesures=NULL WHERE geom IS NULL AND ah_ouvrage_id=NEW.id;
     ELSIF TG_TABLE_NAME='mobilier' THEN
-        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND mobilier_id=NEW.id;
+        UPDATE gemapi.prestations SET origine_mesures=NULL WHERE geom IS NULL AND mobilier_id=NEW.id;
     ELSIF TG_TABLE_NAME='cheminements' THEN
-        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND cheminement_id=NEW.id;
+        UPDATE gemapi.prestations SET origine_mesures=NULL WHERE geom IS NULL AND cheminement_id=NEW.id;
     ELSIF TG_TABLE_NAME='vegetation' THEN
-        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND vegetation_id=NEW.id;
+        UPDATE gemapi.prestations SET origine_mesures=NULL WHERE geom IS NULL AND vegetation_id=NEW.id;
     END IF;
     RETURN NULL;
 END $parent$;
-REVOKE ALL ON FUNCTION milieux.mesures07_parent() FROM PUBLIC;
-CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON milieux.ah_stockage FOR EACH ROW
-WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION milieux.mesures07_parent();
-CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON milieux.ah_ouvrage FOR EACH ROW
-WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION milieux.mesures07_parent();
-CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON public.mobilier FOR EACH ROW
-WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION milieux.mesures07_parent();
-CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON public.cheminements FOR EACH ROW
-WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION milieux.mesures07_parent();
-CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON public.vegetation FOR EACH ROW
-WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION milieux.mesures07_parent();
+REVOKE ALL ON FUNCTION gemapi.mesures07_parent() FROM PUBLIC;
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON gemapi.ah_stockage FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION gemapi.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON gemapi.ah_ouvrage FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION gemapi.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON gemapi.mobilier FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION gemapi.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON gemapi.cheminements FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION gemapi.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON gemapi.vegetation FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION gemapi.mesures07_parent();
 
 COMMIT;

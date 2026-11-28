@@ -46,34 +46,34 @@ def main():
             "fosse", "riviere", "site", "ah_1", "ah_2", "site_parent", "technician")}
         sql(container, f"""
             BEGIN;
-            INSERT INTO milieux.techniciens(id,nom,prenom) VALUES
+            INSERT INTO gemapi.techniciens(id,nom,prenom) VALUES
               ('{ids['technician']}', 'Responsable', 'Test');
-            INSERT INTO milieux.prestataires(id, nom) VALUES
+            INSERT INTO gemapi.prestataires(id, nom) VALUES
               ('{ids['provider_1']}', 'Entreprise A'), ('{ids['provider_2']}', 'Entreprise B');
-            INSERT INTO milieux.types_prestations(id, code, libelle, categorie_id) VALUES
+            INSERT INTO gemapi.types_prestations(id, code, libelle, categorie_id) VALUES
               ('{ids['type_1']}', 'ENTRETIEN', 'Entretien', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa'),
               ('{ids['type_2']}', 'EDIT_RESTAURATION', 'Restauration', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa');
-            INSERT INTO milieux.ah(id,nom) VALUES
+            INSERT INTO gemapi.ah(id,nom) VALUES
               ('{ids['ah_1']}', 'AH A'), ('{ids['ah_2']}', 'AH B');
-            INSERT INTO milieux.ah_stockage(id, ah_id, nom, geom) VALUES
+            INSERT INTO gemapi.ah_stockage(id, ah_id, nom, geom) VALUES
               ('{ids['zec_1']}', '{ids['ah_1']}', 'ZEC A', ST_GeomFromText(
                   'POLYGON((0 0,10 0,10 10,0 10,0 0))', 3950)),
               ('{ids['zec_2']}', '{ids['ah_2']}', 'ZEC B', ST_GeomFromText(
                   'POLYGON((20 20,30 20,30 30,20 30,20 20))', 3950));
-            INSERT INTO milieux.ah_ouvrage(ah_id,geom) VALUES
+            INSERT INTO gemapi.ah_ouvrage(ah_id,geom) VALUES
               ('{ids['ah_1']}',ST_GeomFromText('LINESTRING(0 0,10 0)',3950)),
               ('{ids['ah_2']}',ST_GeomFromText('LINESTRING(20 20,30 20)',3950));
-            INSERT INTO milieux.cours_eau(id, nom, type_ecoulement, source, geom) VALUES
+            INSERT INTO gemapi.cours_eau(id, nom, type_ecoulement, source, geom) VALUES
               ('{ids['fosse']}', 'Fossé A', 'fossé', 'TEST', ST_Multi(ST_GeomFromText('LINESTRING(0 0,10 10)',3950))),
               ('{ids['riviere']}', 'Rivière A', 'rivière', 'TEST', ST_Multi(ST_GeomFromText('LINESTRING(0 0,10 10)',3950)));
-            INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES
+            INSERT INTO gemapi.sites_terrestres(id,nom,geom) VALUES
               ('{ids['site_parent']}','Site parent',ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 10,0 0)))',3950));
-            INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES
+            INSERT INTO gemapi.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES
               ('ARBRES','{ids['site']}', '{ids['site_parent']}', 'Site A', ST_GeomFromText('MULTIPOINT((0 0))',3950));
             COMMIT;
         """)
         status = dict(line.split("|", 1) for line in sql(container,
-            "SELECT code, id::text FROM milieux.statuts_prestations").stdout.strip().splitlines())
+            "SELECT code, id::text FROM gemapi.statuts_prestations").stdout.strip().splitlines())
         port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[-1]
 
         app = QgsApplication([], True)
@@ -89,7 +89,7 @@ def main():
         def make_layer(table, geometry_column=""):
             uri = QgsDataSourceUri()
             uri.setConnection("127.0.0.1", port, "postgres", "postgres", "")
-            uri.setDataSource("milieux", table, geometry_column, "", "id")
+            uri.setDataSource("gemapi", table, geometry_column, "", "id")
             if geometry_column:
                 kind = {"ah_stockage": QgsWkbTypes.Polygon,
                         "ah_ouvrage": QgsWkbTypes.LineString,
@@ -212,20 +212,20 @@ def main():
             ("ST_LineString", "ST_Polygon", "POLYGON((0 0,10 0,10 10,0 0))"),
             ("ST_Polygon", "ST_Point", "POINT(5 5)"),
         ):
-            assert sql(container, f"SELECT ST_GeometryType(geom) FROM milieux.prestations "
+            assert sql(container, f"SELECT ST_GeometryType(geom) FROM gemapi.prestations "
                        f"WHERE id='{first}'").stdout.strip() == source
             edit(first, geometry=wkt)
             assert sql(container, f"SELECT ST_GeometryType(geom),ST_SRID(geom) "
-                       f"FROM milieux.prestations WHERE id='{first}'").stdout.strip() == f"{target}|3950"
+                       f"FROM gemapi.prestations WHERE id='{first}'").stdout.strip() == f"{target}|3950"
 
         # A storage can be replaced atomically without changing the prestation.
         links = [("ah_stockage", ids["zec_2"])]
         edit(first, new_links=links)
         assert loaded(first)[3] is not None
         assert set(loaded(first)[2]) == set(links)
-        assert sql(container, f"SELECT count(*) FROM milieux.prestations "
+        assert sql(container, f"SELECT count(*) FROM gemapi.prestations "
                    f"WHERE id='{first}' AND ah_stockage_id='{ids['zec_1']}'").stdout.strip() == "0"
-        assert sql(container, "SELECT count(*) FROM milieux.ah_stockage").stdout.strip() == "2"
+        assert sql(container, "SELECT count(*) FROM gemapi.ah_stockage").stdout.strip() == "2"
         try:
             edit(first, new_links=[], geometry=None)
         except ValueError as error:
@@ -244,7 +244,7 @@ def main():
 
         # Changes to the row and link-only changes by another writer conflict.
         version, before, old_links, wkt = loaded(first)
-        sql(container, f"UPDATE milieux.prestations SET description='Concurrent' WHERE id='{first}'")
+        sql(container, f"UPDATE gemapi.prestations SET description='Concurrent' WHERE id='{first}'")
         conflict = sql(container, build_update(first, version, before,
             {**before, "description": "Écrasement"}, old_links, old_links, wkt, wkt),
             check=False)
@@ -253,17 +253,17 @@ def main():
         version, before, old_links, wkt = loaded(first)
         assert build_update(first, version, before, before, old_links, old_links,
                             wkt, wkt) is None
-        sql(container, "CREATE ROLE edit_readonly; GRANT USAGE ON SCHEMA milieux "
+        sql(container, "CREATE ROLE edit_readonly; GRANT USAGE ON SCHEMA gemapi "
                        "TO edit_readonly; GRANT SELECT ON ALL TABLES IN SCHEMA "
-                       "milieux TO edit_readonly;")
+                       "gemapi TO edit_readonly;")
         forbidden = sql(container, "SET ROLE edit_readonly; " + build_update(
             first, version, before, {**before, "description": "Interdit"},
             old_links, old_links, wkt, wkt), check=False)
         assert forbidden.returncode != 0 and "permission denied" in forbidden.stderr.lower()
         assert loaded(first)[1]["description"] == "Concurrent"
-        sql(container, "CREATE ROLE edit_limited; GRANT USAGE ON SCHEMA milieux "
+        sql(container, "CREATE ROLE edit_limited; GRANT USAGE ON SCHEMA gemapi "
                        "TO edit_limited; GRANT SELECT ON ALL TABLES IN SCHEMA "
-                       "milieux TO edit_limited; GRANT UPDATE ON milieux.prestations "
+                       "gemapi TO edit_limited; GRANT UPDATE ON gemapi.prestations "
                        "TO edit_limited;")
         version, before, old_links, wkt = loaded(first)
         sql(container, "SET ROLE edit_limited; " + build_update(
@@ -272,13 +272,13 @@ def main():
         assert loaded(first)[1]["description"] == "Accès limité"
         edit(first, geometry="POINT(6 6)")
         version, before, old_links, wkt = loaded(first)
-        sql(container, f"UPDATE milieux.prestations SET ah_stockage_id='{ids['zec_1']}' WHERE id='{first}';")
+        sql(container, f"UPDATE gemapi.prestations SET ah_stockage_id='{ids['zec_1']}' WHERE id='{first}';")
         conflict = sql(container, build_update(first, version, before,
             {**before, "description": "Écrasement"}, old_links, old_links, wkt, wkt),
             check=False)
         assert conflict.returncode != 0 and "SIG_PRESTATIONS_CONFLICT" in conflict.stderr
         assert loaded(first)[1]["description"] == "Accès limité"
-        sql(container, f"UPDATE milieux.prestations SET ah_stockage_id='{ids['zec_2']}' WHERE id='{first}';")
+        sql(container, f"UPDATE gemapi.prestations SET ah_stockage_id='{ids['zec_2']}' WHERE id='{first}';")
         edit(first, geometry="MULTILINESTRING((0 0,1 1),(10 10,11 11))")
 
         # The QGIS form loads two UUIDs in sequence without carrying over fields.
@@ -295,7 +295,7 @@ def main():
             assert all(queries == 0 for _, queries in form_samples[1:])
         assert manager.connection is not None, manager.statusLabel.text()
         external_provider = str(uuid4())
-        sql(container, "INSERT INTO milieux.prestataires(id,nom) VALUES "
+        sql(container, "INSERT INTO gemapi.prestataires(id,nom) VALUES "
                        f"('{external_provider}','Prestataire externe')")
         def provider_ids():
             picker = manager.pickers["providers"]
@@ -407,7 +407,7 @@ def main():
         plugin.show_existing()
         dialog = plugin.creation
         dialog.descriptionEdit.setPlainText("Modification locale à refuser")
-        sql(container, f"UPDATE milieux.prestations SET description='Version externe' "
+        sql(container, f"UPDATE gemapi.prestations SET description='Version externe' "
                        f"WHERE id='{first}'")
         dialog.saveButton.click()
         assert plugin.creation is dialog and "Recharger la fiche" in dialog.statusLabel.text()
@@ -428,7 +428,7 @@ def main():
         app.processEvents()
         assert plugin.creation is dialog and dialog._save_completed and not dialog.isVisible()
         assert plugin.home.isVisible()
-        assert sql(container, f"SELECT ST_NumGeometries(geom) FROM milieux.prestations "
+        assert sql(container, f"SELECT ST_NumGeometries(geom) FROM gemapi.prestations "
                    f"WHERE id='{first}'").stdout.strip() == "3"
         assert loaded(first)[2] == before_links
         assert plugin.creation is dialog and plugin.manage is manager
@@ -451,7 +451,7 @@ def main():
         form._update_save_state()
         assert form.saveButton.isEnabled(), form.statusLabel.text()
         form.saveButton.click()
-        assert sql(container, "SELECT type_prestation_id FROM milieux.prestations "
+        assert sql(container, "SELECT type_prestation_id FROM gemapi.prestations "
                    "WHERE intitule='Création hiérarchique'").stdout.strip() == ids["type_1"], form.statusLabel.text()
         assert form._save_completed and not form.isVisible()
         form._reset()  # A new input starts explicitly; a successful form is retained hidden.
@@ -468,7 +468,7 @@ def main():
         assert form.saveButton.isEnabled()
         form.saveButton.click()
         site_prestation = sql(container, "SELECT id::text,ST_AsText(geom),site_terrestre_id "
-                              "FROM milieux.prestations WHERE intitule='Création sur site'").stdout.strip().split("|")
+                              "FROM gemapi.prestations WHERE intitule='Création sur site'").stdout.strip().split("|")
         assert site_prestation[1:] == ["MULTIPOINT((1 1))", ids["site_parent"]], form.statusLabel.text()
         site_form = CreationDialog(plugin.iface, window, mode="edit", session=plugin.session)
         site_form.load_existing(site_form._connection(), site_prestation[0])
@@ -478,7 +478,7 @@ def main():
         site_form.saveButton.click()
         assert site_form._edit_saved, site_form.statusLabel.text()
         assert sql(container, "SELECT ST_AsText(geom),site_terrestre_id "
-                   f"FROM milieux.prestations WHERE id='{site_prestation[0]}'").stdout.strip() == (
+                   f"FROM gemapi.prestations WHERE id='{site_prestation[0]}'").stdout.strip() == (
                        "MULTILINESTRING((0 0,3 4))|" + ids["site_parent"])
         site_form.shutdown()
         form.close()

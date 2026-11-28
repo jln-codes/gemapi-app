@@ -23,10 +23,11 @@ class DemoAhReports(unittest.TestCase):
         cls.addClassCleanup(section_tests.AhSections.doClassCleanups)
         cls.db=section_tests.AhSections.connect();cls.addClassCleanup(cls.db.close)
         for p in sorted((ROOT/'demo/data').glob('[0-9][0-9]_*.sql')):
-            if p.name<'15_':cls.q(p.read_text())
+            if p.name<'14_':cls.q(p.read_text())
         cls.q((ROOT/'demo/data/digues.sql').read_text())
+        cls.q((ROOT/'demo/data/14_patrimoine.sql').read_text())
         cls.q((ROOT/'demo/data/15_prestations.sql').read_text())
-        cls.q('SET search_path=pg_catalog,extensions,milieux')
+        cls.q('SET search_path=pg_catalog,extensions,gemapi')
         cls.db.commit()
         cls.before=cls.fingerprint()
 
@@ -38,7 +39,7 @@ class DemoAhReports(unittest.TestCase):
 
     @classmethod
     def fingerprint(cls):
-        return cls.q("SELECT md5(string_agg(row_to_json(t)::text,'' ORDER BY t.id)) FROM milieux.prestations t")[0][0]
+        return cls.q("SELECT md5(string_agg(row_to_json(t)::text,'' ORDER BY t.id)) FROM gemapi.prestations t")[0][0]
 
     def rows(self,filters):
         rows=prepare_rows(self.q(build_report_query(filters,include_geometry=True)))
@@ -59,31 +60,31 @@ class DemoAhReports(unittest.TestCase):
         self.assertEqual(float(river[0]['quantite']),96)
         self.assertEqual(river[0]['unite'],'m²')
         self.assertEqual(location(river[0])[0][0],river[0]['own_wkt'])
-        self.assertEqual(self.q('SELECT cours_eau_id::text,ah_stockage_id,ah_ouvrage_id FROM milieux.prestations WHERE id=%s',(INDIRECT,))[0],(RIVER,None,None))
+        self.assertEqual(self.q('SELECT cours_eau_id::text,ah_stockage_id,ah_ouvrage_id FROM gemapi.prestations WHERE id=%s',(INDIRECT,))[0],(RIVER,None,None))
         # The only accepted section is the complete server-generated intersection.
-        self.assertEqual(self.q('SELECT count(*) FROM milieux.ah_sections_carte s JOIN milieux.ah_stockage a ON a.ah_id=s.ah_id '
-                               'JOIN milieux.cours_eau r ON r.id=s.cours_eau_id WHERE etat_reference=\'CONFORME\' '
+        self.assertEqual(self.q('SELECT count(*) FROM gemapi.ah_sections_carte s JOIN gemapi.ah_stockage a ON a.ah_id=s.ah_id '
+                               'JOIN gemapi.cours_eau r ON r.id=s.cours_eau_id WHERE etat_reference=\'CONFORME\' '
                                'AND ST_Equals(s.geom_reference,ST_Intersection(a.geom,r.geom))')[0][0],1)
-        self.assertEqual(self.q('SELECT count(*) FROM milieux.cours_eau WHERE direction IS TRUE')[0][0],1)
-        self.assertEqual(self.q('SELECT count(*) FROM milieux.cours_eau WHERE direction IS NULL')[0][0],57)
+        self.assertEqual(self.q('SELECT count(*) FROM gemapi.cours_eau WHERE direction IS TRUE')[0][0],1)
+        self.assertEqual(self.q('SELECT count(*) FROM gemapi.cours_eau WHERE direction IS NULL')[0][0],57)
 
     def test_idempotent_sql_and_geopackage(self):
         from osgeo import ogr
         ds=ogr.Open(str(PACKAGE));f=next(iter(ds.GetLayerByName('ah_sections')))
-        before=self.q('SELECT id::text,debut_fraction,fin_fraction,geom_cours_eau_signature,encode(ST_AsBinary(geom_reference),\'hex\'),revision_validation,valide_par,date_validation FROM milieux.ah_sections')
+        before=self.q('SELECT id::text,debut_fraction,fin_fraction,geom_cours_eau_signature,encode(ST_AsBinary(geom_reference),\'hex\'),revision_validation,valide_par,date_validation FROM gemapi.ah_sections')
         self.assertEqual(before[0][:5],(f['id'],f['debut_fraction'],f['fin_fraction'],f['geom_cours_eau_signature'],f.GetGeometryRef().ExportToWkb().hex()))
         self.q((ROOT/'demo/data/12_ah_sections.sql').read_text())
-        self.q('SET search_path=pg_catalog,extensions,milieux')
-        self.assertEqual(self.q('SELECT id::text,debut_fraction,fin_fraction,geom_cours_eau_signature,encode(ST_AsBinary(geom_reference),\'hex\'),revision_validation,valide_par,date_validation FROM milieux.ah_sections'),before)
+        self.q('SET search_path=pg_catalog,extensions,gemapi')
+        self.assertEqual(self.q('SELECT id::text,debut_fraction,fin_fraction,geom_cours_eau_signature,encode(ST_AsBinary(geom_reference),\'hex\'),revision_validation,valide_par,date_validation FROM gemapi.ah_sections'),before)
 
     def test_import_refuses_changed_sources(self):
         import psycopg2
-        self.q('UPDATE milieux.cours_eau SET geom=ST_Translate(geom,1,0) WHERE id=%s',(RIVER,))
+        self.q('UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,1,0) WHERE id=%s',(RIVER,))
         with self.assertRaises(psycopg2.Error):
             self.q((ROOT/'demo/data/12_ah_sections.sql').read_text())
         self.db.rollback()
-        self.q('SET search_path=pg_catalog,extensions,milieux')
-        self.assertEqual(self.q('SELECT etat_reference FROM milieux.ah_sections_carte')[0][0],'CONFORME')
+        self.q('SET search_path=pg_catalog,extensions,gemapi')
+        self.assertEqual(self.q('SELECT etat_reference FROM gemapi.ah_sections_carte')[0][0],'CONFORME')
 
     @unittest.skipUnless(os.environ.get('DEMO_AH_PDFS')=='1','PDF generation opt-in')
     def test_reports_pdf(self):
@@ -94,7 +95,7 @@ class DemoAhReports(unittest.TestCase):
         OUT.mkdir(parents=True,exist_ok=True)
         # Local storage context, no network basemap or real data.
         base=QgsVectorLayer('Polygon?crs=EPSG:3950','Stockage fictif','memory')
-        wkt=self.q('SELECT ST_AsText(geom) FROM milieux.ah_stockage WHERE id=%s',(STORAGE,))[0][0]
+        wkt=self.q('SELECT ST_AsText(geom) FROM gemapi.ah_stockage WHERE id=%s',(STORAGE,))[0][0]
         f=QgsFeature();f.setGeometry(QgsGeometry.fromWkt(wkt));base.dataProvider().addFeatures([f]);base.updateExtents()
         base.renderer().setSymbol(QgsFillSymbol.createSimple({'color':'210,233,245,90','outline_color':'70,115,145','outline_width':'0.3'}))
         results={}

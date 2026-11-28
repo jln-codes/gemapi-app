@@ -26,6 +26,10 @@ def local_document(path, port, database="postgres", user="postgres"):
         source = QgsDataSourceUri(value)
         uri = QgsDataSourceUri()
         uri.setConnection("127.0.0.1", port, database, user, "")
+        service = "service='gemapi_demo' "
+        if value.startswith(service):
+            # Keep native layer options, including the full subset expression.
+            return uri.connectionInfo(False) + " " + value[len(service):]
         uri.setDataSource(source.schema(), source.table(), source.geometryColumn(),
                           source.sql(), source.keyColumn())
         uri.setWkbType(source.wkbType())
@@ -91,8 +95,8 @@ def main():
         load_demo_rows(container)
 
         sql(container, "CREATE ROLE qgis_release_reader LOGIN; "
-                       "GRANT USAGE ON SCHEMA milieux TO qgis_release_reader; "
-                       "GRANT SELECT ON ALL TABLES IN SCHEMA milieux TO qgis_release_reader;")
+                       "GRANT USAGE ON SCHEMA gemapi TO qgis_release_reader; "
+                       "GRANT SELECT ON ALL TABLES IN SCHEMA gemapi TO qgis_release_reader;")
         port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[-1]
         document = local_document(ROOT / "demo/prestations_demo.qgz", port)
         app = QgsApplication([], True)
@@ -142,7 +146,7 @@ def main():
                     assert layer.fields().at(index).constraints().constraintStrength(flag) == QgsFieldConstraints.ConstraintStrengthHard
             reader_uri = QgsDataSourceUri()
             reader_uri.setConnection("127.0.0.1", port, "postgres", "qgis_release_reader", "")
-            reader_uri.setDataSource("milieux", "prestations", "", "", "id")
+            reader_uri.setDataSource("gemapi", "prestations", "", "", "id")
             reader_layer = QgsVectorLayer(reader_uri.uri(False), "lecture", "postgres")
             assert reader_layer.isValid() and reader_layer.featureCount() == 100
             capabilities = reader_layer.dataProvider().capabilities()

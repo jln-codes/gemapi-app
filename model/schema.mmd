@@ -1,10 +1,10 @@
-%% SIG-FUSION-08 - Modèle patrimonial v0.6.1
+%% SIG-FUSION-11 - Modèle v0.6.1, schéma applicatif unique gemapi
 %% Base v0.6 : feabcb8926bdc91e4d71fb90ebd3710b07b09d3e
 %% Source digues-app/development : eecec0a44f25a908484b76f838a7e2be0c8cfee5
 erDiagram
     direction TB
 
-    TECHNICIENS["milieux.techniciens"] {
+    TECHNICIENS["gemapi.techniciens"] {
         uuid id PK "NOT NULL"
         text nom "NOT NULL"
         text prenom "NULL; nullable"
@@ -15,7 +15,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    COMMUNES["milieux.communes"] {
+    COMMUNES["gemapi.communes"] {
         uuid id PK "NOT NULL"
         text insee UK "NOT NULL"
         text nom "NOT NULL"
@@ -25,7 +25,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    COURS_EAU["milieux.cours_eau"] {
+    COURS_EAU["gemapi.cours_eau"] {
         uuid id PK "NOT NULL"
         text nom "NOT NULL; obligatoire; non blanc"
         text type_ecoulement "NULL; nullable"
@@ -39,7 +39,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    AH["milieux.ah"] {
+    AH["gemapi.ah"] {
         uuid id PK "NOT NULL"
         text nom "NOT NULL"
         text modifie_par "NULL; compte PostgreSQL"
@@ -47,7 +47,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    AH_STOCKAGE["milieux.ah_stockage"] {
+    AH_STOCKAGE["gemapi.ah_stockage"] {
         uuid id PK "NOT NULL"
         uuid ah_id FK,UK "NOT NULL"
         text nom "NOT NULL"
@@ -59,7 +59,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    AH_OUVRAGE["milieux.ah_ouvrage"] {
+    AH_OUVRAGE["gemapi.ah_ouvrage"] {
         uuid id PK "NOT NULL"
         uuid ah_id FK "NOT NULL"
         text nom "NULL; nullable"
@@ -69,7 +69,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    AH_SECTIONS["milieux.ah_sections"] {
+    AH_SECTIONS["gemapi.ah_sections"] {
         uuid id PK "NOT NULL"
         uuid ah_id FK "NOT NULL; parent obligatoire"
         uuid cours_eau_id FK "NOT NULL; cours d'eau qualifié à la validation"
@@ -86,7 +86,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    SITES_TERRESTRES["milieux.sites_terrestres"] {
+    SITES_TERRESTRES["gemapi.sites_terrestres"] {
         uuid id PK "NOT NULL"
         text nom "NOT NULL"
         geometry geom "NOT NULL; geometry(Geometry,3950); MultiPolygon 3950 valide non vide"
@@ -95,7 +95,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    PRESTATAIRES["milieux.prestataires"] {
+    PRESTATAIRES["gemapi.prestataires"] {
         uuid id PK "NOT NULL"
         text nom "NOT NULL"
         boolean actif "NOT NULL"
@@ -104,13 +104,13 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    PRESTATIONS_CATEGORIE["milieux.prestations_categorie"] {
+    PRESTATIONS_CATEGORIE["gemapi.prestations_categorie"] {
         uuid id PK "NOT NULL"
         text libelle UK "NOT NULL"
         integer ordre "NOT NULL"
     }
 
-    TYPES_PRESTATIONS["milieux.types_prestations"] {
+    TYPES_PRESTATIONS["gemapi.types_prestations"] {
         uuid categorie_id FK "NOT NULL"
         uuid id PK "NOT NULL"
         text code UK "NOT NULL"
@@ -120,7 +120,7 @@ erDiagram
         timestamptz date_modification "NULL; nullable"
     }
 
-    STATUTS_PRESTATIONS["milieux.statuts_prestations"] {
+    STATUTS_PRESTATIONS["gemapi.statuts_prestations"] {
         uuid id PK "NOT NULL"
         text code UK "NOT NULL"
         text libelle UK "NOT NULL"
@@ -128,7 +128,7 @@ erDiagram
         timestamptz date_modification "NULL; nullable"
     }
 
-    PRESTATIONS["milieux.prestations"] {
+    PRESTATIONS["gemapi.prestations"] {
         uuid cours_eau_id FK "NULL; nullable"
         uuid digue_id FK "NULL; nullable"
         uuid troncon_id FK "NULL; nullable; geometrie propre obligatoire"
@@ -170,7 +170,7 @@ erDiagram
         uuid vegetation_id FK "NULL; cible directe exclusive"
     }
 
-    DIGUES["milieux.digues"] {
+    DIGUES["gemapi.digues"] {
         uuid id PK "NOT NULL"
         text nom "NOT NULL"
         text identifiant_externe "NULL; nullable"
@@ -180,7 +180,7 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    DIGUES_REPERES["milieux.digues_reperes"] {
+    DIGUES_REPERES["gemapi.digues_reperes"] {
         uuid id PK "NOT NULL"
         uuid digue_id FK,UK "NOT NULL; un repère obligatoire par digue"
         uuid riviere_id FK "NOT NULL"
@@ -195,10 +195,10 @@ erDiagram
         timestamptz cree_le "NOT NULL DEFAULT clock_timestamp(); immuable apres insertion"
     }
 
-    public__troncons["public.troncons"] {
+    public__troncons["gemapi.troncons"] {
         uuid id PK "NOT NULL"
         text type_troncon_id FK "NOT NULL"
-        uuid digue_id FK "NOT NULL; milieux.digues.id"
+        uuid digue_id FK "NOT NULL; gemapi.digues.id"
         date date_debut "NULL"
         date date_fin "NULL"
         text commentaire "NULL"
@@ -227,7 +227,7 @@ erDiagram
         timestamptz date_modification "NULL; clock_timestamp derniere ecriture"
     }
 
-    public__desordres["public.desordres"] {
+    public__desordres["gemapi.desordres"] {
         uuid troncon_id FK "NULL"
         uuid digue_id FK "NULL"
         uuid ah_ouvrage_id FK "NULL"
@@ -256,7 +256,7 @@ erDiagram
         timestamptz date_modification "NULL; clock_timestamp derniere ecriture"
     }
 
-    public__observations["public.observations"] {
+    public__observations["gemapi.observations"] {
         uuid id PK "NOT NULL"
         uuid desordre_id FK "NULL"
         uuid troncon_id FK "NULL"
@@ -285,7 +285,7 @@ erDiagram
         text observateur "NULL; attribution metier documentaire, sans FK contacts"
     }
 
-    public__photos["public.photos"] {
+    public__photos["gemapi.photos"] {
         uuid id PK "NOT NULL"
         uuid observation_id FK "NOT NULL"
         date date_photo "NULL"
@@ -300,7 +300,7 @@ erDiagram
         text photographe "NULL; attribution documentaire, pas necessairement technicien"
     }
 
-    public__ouvrages_particuliers["public.ouvrages_particuliers"] {
+    public__ouvrages_particuliers["gemapi.ouvrages_particuliers"] {
         uuid id PK "NOT NULL"
         text designation "NULL"
         text commentaire "NULL"
@@ -316,7 +316,7 @@ erDiagram
         timestamptz date_modification "NULL; clock_timestamp derniere ecriture"
     }
 
-    public__equipements_mesure["public.equipements_mesure"] {
+    public__equipements_mesure["gemapi.equipements_mesure"] {
         uuid id PK "NOT NULL"
         text type_id FK "NOT NULL"
         text designation "NULL"
@@ -337,7 +337,7 @@ erDiagram
         timestamptz date_modification "NULL; clock_timestamp derniere ecriture"
     }
 
-    public__ouvrages_hydrauliques["public.ouvrages_hydrauliques"] {
+    public__ouvrages_hydrauliques["gemapi.ouvrages_hydrauliques"] {
         uuid id PK "NOT NULL"
         text type_id FK "NULL"
         text designation "NULL"
@@ -346,8 +346,8 @@ erDiagram
         date date_fin "NULL"
         geometry geometry "NULL; SQL geometry(Geometry,3950)"
         uuid troncon_id FK "NULL"
-        uuid ah_ouvrage_id FK "NULL; milieux.ah_ouvrage.id"
-        uuid ah_stockage_id FK "NULL; milieux.ah_stockage.id"
+        uuid ah_ouvrage_id FK "NULL; gemapi.ah_ouvrage.id"
+        uuid ah_stockage_id FK "NULL; gemapi.ah_stockage.id"
         boolean valid "NULL"
         double_precision longueur "NULL; SQL double precision"
         double_precision largeur_max "NULL; SQL double precision"
@@ -358,22 +358,22 @@ erDiagram
         timestamptz date_modification "NULL; clock_timestamp derniere ecriture"
     }
 
-    public__equipements_mesure__desordres["public.equipements_mesure__desordres"] {
+    public__equipements_mesure__desordres["gemapi.equipements_mesure__desordres"] {
         uuid equipement_mesure_id PK, FK "NOT NULL"
         uuid desordre_id PK, FK "NOT NULL"
     }
 
-    public__ouvrages_hydrauliques__desordres["public.ouvrages_hydrauliques__desordres"] {
+    public__ouvrages_hydrauliques__desordres["gemapi.ouvrages_hydrauliques__desordres"] {
         uuid ouvrage_hydraulique_id PK, FK "NOT NULL"
         uuid desordre_id PK, FK "NOT NULL"
     }
 
-    public__ouvrages_particuliers__desordres["public.ouvrages_particuliers__desordres"] {
+    public__ouvrages_particuliers__desordres["gemapi.ouvrages_particuliers__desordres"] {
         uuid ouvrage_particulier_id PK, FK "NOT NULL"
         uuid desordre_id PK, FK "NOT NULL"
     }
 
-    public__ouvrages_hydrauliques__objets_lies["public.ouvrages_hydrauliques__objets_lies"] {
+    public__ouvrages_hydrauliques__objets_lies["gemapi.ouvrages_hydrauliques__objets_lies"] {
         uuid id PK "NOT NULL"
         uuid ouvrage_hydraulique_id FK "NOT NULL"
         uuid cheminement_id FK "NULL"
@@ -385,70 +385,70 @@ erDiagram
         uuid digue_id FK "NULL"
     }
 
-    referentiel__categories_desordre["referentiel.categories_desordre"] {
+    referentiel__categories_desordre["gemapi.categories_desordre"] {
         text id PK "NOT NULL"
         text libelle "NULL"
         text abrege "NULL"
         text designation "NULL"
     }
 
-    referentiel__cotes["referentiel.cotes"] {
+    referentiel__cotes["gemapi.cotes"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
     }
 
-    referentiel__fonctions_structure["referentiel.fonctions_structure"] {
+    referentiel__fonctions_structure["gemapi.fonctions_structure"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
     }
 
-    referentiel__materiaux_structure["referentiel.materiaux_structure"] {
+    referentiel__materiaux_structure["gemapi.materiaux_structure"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
     }
 
-    referentiel__natures_structure["referentiel.natures_structure"] {
+    referentiel__natures_structure["gemapi.natures_structure"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
     }
 
-    referentiel__positions["referentiel.positions"] {
+    referentiel__positions["gemapi.positions"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
     }
 
-    referentiel__rives["referentiel.rives"] {
+    referentiel__rives["gemapi.rives"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
     }
 
-    referentiel__sources_information["referentiel.sources_information"] {
+    referentiel__sources_information["gemapi.sources_information"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
     }
 
-    referentiel__suites_apporter["referentiel.suites_apporter"] {
+    referentiel__suites_apporter["gemapi.suites_apporter"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
     }
 
-    referentiel__types_desordre["referentiel.types_desordre"] {
+    referentiel__types_desordre["gemapi.types_desordre"] {
         text id PK "NOT NULL"
         text categorie_id FK "NULL"
         text libelle "NULL"
@@ -456,49 +456,49 @@ erDiagram
         text designation "NULL"
     }
 
-    referentiel__types_equipement_mesure["referentiel.types_equipement_mesure"] {
+    referentiel__types_equipement_mesure["gemapi.types_equipement_mesure"] {
         text id PK "NOT NULL"
         text code UK "NOT NULL"
         text abrege UK "NOT NULL"
         text libelle "NOT NULL"
     }
 
-    referentiel__types_ouvrage_hydraulique["referentiel.types_ouvrage_hydraulique"] {
+    referentiel__types_ouvrage_hydraulique["gemapi.types_ouvrage_hydraulique"] {
         text id PK "NOT NULL"
         text code UK "NOT NULL"
         text abrege UK "NOT NULL"
         text libelle "NOT NULL"
     }
 
-    referentiel__types_ouvrage_particulier["referentiel.types_ouvrage_particulier"] {
+    referentiel__types_ouvrage_particulier["gemapi.types_ouvrage_particulier"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
     }
 
-    referentiel__types_troncon["referentiel.types_troncon"] {
+    referentiel__types_troncon["gemapi.types_troncon"] {
         text id PK "NOT NULL"
         text code UK "NULL"
         text libelle "NOT NULL"
         text designation "NULL"
     }
 
-    referentiel__typologies_troncon["referentiel.typologies_troncon"] {
+    referentiel__typologies_troncon["gemapi.typologies_troncon"] {
         text id PK "NOT NULL"
         text designation "NULL"
         text abrege "NULL"
         text libelle "NULL"
     }
 
-    referentiel__urgences["referentiel.urgences"] {
+    referentiel__urgences["gemapi.urgences"] {
         text id PK "NOT NULL"
         text libelle "NULL"
         text abrege "NULL"
         text designation "NULL"
     }
 
-    public__mobilier["public.mobilier"] {
+    public__mobilier["gemapi.mobilier"] {
         uuid id PK "NOT NULL DEFAULT gen_random_uuid()"
         text designation "NOT NULL; non blanche"
         text type_id FK "NOT NULL"
@@ -518,7 +518,7 @@ erDiagram
         timestamptz date_modification "nullable"
     }
 
-    public__cheminements["public.cheminements"] {
+    public__cheminements["gemapi.cheminements"] {
         uuid id PK "NOT NULL DEFAULT gen_random_uuid()"
         text designation "NOT NULL; non blanche"
         text type_cheminement_id FK "NOT NULL"
@@ -538,7 +538,7 @@ erDiagram
         timestamptz date_modification "nullable"
     }
 
-    public__vegetation["public.vegetation"] {
+    public__vegetation["gemapi.vegetation"] {
         uuid id PK "NOT NULL DEFAULT gen_random_uuid()"
         text designation "NOT NULL; non blanche"
         text famille_vegetation FK "NOT NULL"
@@ -558,21 +558,21 @@ erDiagram
         timestamptz date_modification "nullable"
     }
 
-    referentiel__types_mobilier["referentiel.types_mobilier"] {
+    referentiel__types_mobilier["gemapi.types_mobilier"] {
         text id PK "NOT NULL"
         text code UK "NOT NULL"
         text abrege UK "NOT NULL"
         text libelle "NOT NULL"
     }
 
-    referentiel__types_cheminement["referentiel.types_cheminement"] {
+    referentiel__types_cheminement["gemapi.types_cheminement"] {
         text id PK "NOT NULL"
         text code UK "NOT NULL"
         text abrege UK "NOT NULL"
         text libelle "NOT NULL"
     }
 
-    referentiel__familles_vegetation["referentiel.familles_vegetation"] {
+    referentiel__familles_vegetation["gemapi.familles_vegetation"] {
         text id PK "NOT NULL"
         text code UK "NOT NULL"
         text libelle "NOT NULL"
@@ -689,18 +689,18 @@ erDiagram
     SITES_TERRESTRES |o..o{ public__observations : "site_terrestre_id"
     DIGUES |o..o{ public__ouvrages_hydrauliques__objets_lies : "digue_id"
     %% RULE {"title": "Périmètre", "body": "Les 48 tables forment une projection structurellement autonome. Le schéma SQL installe ces 48 tables dans une base neuve PostgreSQL/PostGIS. Le présent contrat couvre les données et les règles de la base."}
-    %% RULE {"title": "Traçabilité commune", "body": "Toutes les tables métier : cree_le TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), immuable après insertion ; modifie_par TEXT et date_modification TIMESTAMPTZ. Référence : milieux.stamp_modification(), session_user et clock_timestamp(). Fournir la création côté serveur, refuser en BEFORE UPDATE toute différence de cree_le, pas de réécriture silencieuse. Ne pas modifier les dates métier. Attribution historique informatique non reprise comme auteur courant ; auteur d’import réel seulement. Les associations et référentiels gardent leurs colonnes techniques existantes."}
+    %% RULE {"title": "Traçabilité commune", "body": "Toutes les tables métier : cree_le TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), immuable après insertion ; modifie_par TEXT et date_modification TIMESTAMPTZ. Référence : gemapi.stamp_modification(), session_user et clock_timestamp(). Fournir la création côté serveur, refuser en BEFORE UPDATE toute différence de cree_le, pas de réécriture silencieuse. Ne pas modifier les dates métier. Attribution historique informatique non reprise comme auteur courant ; auteur d’import réel seulement. Les associations et référentiels gardent leurs colonnes techniques existantes."}
     %% RULE {"title": "Observation datée et cible unique", "body": "date_observation NOT NULL. ck_cible_unique CHECK(num_nonnulls(desordre_id,troncon_id,ah_ouvrage_id,ah_stockage_id,ah_section_id,site_terrestre_id,mobilier_id,cheminement_id,vegetation_id,ouvrage_hydraulique_id,ouvrage_particulier_id,equipement_mesure_id)=1). Chaque FK reste individuellement facultative, chaque cible reçoit 0..N constats. Aucun parent digue, système ou AH global. Un site avec ou sans enfants est admissible. Un constat ordinaire ne crée pas de désordre. Conserver urgence, evolution, suite, suite_apporter_id et nombre_desordres ; aucune nouvelle restriction de ces champs aux seuls désordres."}
-    %% RULE {"title": "Convergence des cibles tronçons", "body": "Une seule FK simple vers public.troncons(id), tous types physiques admis. La reprise des trois anciens pointeurs collecte leurs UUID distincts après résolution explicite des identités : un seul UUID permet la conversion ; plusieurs UUID distincts bloquent la conversion. Aucun objet tronçon fusionné."}
-    %% RULE {"title": "Parent obligatoire des ouvrages hydrauliques", "body": "CONSTRAINT ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1). Les trois FK visent respectivement public.troncons(id), milieux.ah_ouvrage(id) et milieux.ah_stockage(id), chacune avec ON DELETE RESTRICT. Chaque parent peut recevoir 0..N ouvrages. Réaffecter explicitement tout ouvrage avant suppression de son parent. À la reprise, absence de parent identifiable et conflit de plusieurs candidats sont deux motifs distincts de blocage."}
+    %% RULE {"title": "Convergence des cibles tronçons", "body": "Une seule FK simple vers gemapi.troncons(id), tous types physiques admis. La reprise des trois anciens pointeurs collecte leurs UUID distincts après résolution explicite des identités : un seul UUID permet la conversion ; plusieurs UUID distincts bloquent la conversion. Aucun objet tronçon fusionné."}
+    %% RULE {"title": "Parent obligatoire des ouvrages hydrauliques", "body": "CONSTRAINT ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1). Les trois FK visent respectivement gemapi.troncons(id), gemapi.ah_ouvrage(id) et gemapi.ah_stockage(id), chacune avec ON DELETE RESTRICT. Chaque parent peut recevoir 0..N ouvrages. Réaffecter explicitement tout ouvrage avant suppression de son parent. À la reprise, absence de parent identifiable et conflit de plusieurs candidats sont deux motifs distincts de blocage."}
     %% RULE {"title": "Désordre persistant", "body": "Identité UUID conservée. date_fin IS NULL : actif ; date_fin IS NOT NULL : archivé. Aucun statut supplémentaire. Archivage sans suppression des observations ou photographies ; urgence qualifie le constat, pas le cycle du désordre. Au plus une cible directe parmi troncon_id,digue_id,ah_ouvrage_id,ah_section_id,ah_stockage_id,site_terrestre_id,mobilier_id,cheminement_id,vegetation_id. Les associations techniques conservées restent distinctes de la cible directe."}
     %% RULE {"title": "Photos documentaires", "body": "Une photo a une observation obligatoire, qui est datée, et aucune géométrie ni localisation propre. La localisation suit la cible de l’observation ; si cette cible est un désordre sans géométrie, indiquer localisation indisponible, sans inventer de point. Conserver date_photo, designation, commentaire, storage_key (unique si renseignée), valid et version. photographe et observateur sont des mentions textuelles métier facultatives obtenues seulement d’une attribution source explicite ; pas de FK contacts ni de technicien imposé. Les photos de prestations restent photo_1/photo_2 et leurs commentaires, sans observation intermédiaire."}
     %% RULE {"title": "Prestations : dix cibles", "body": "CHECK immédiat num_nonnulls(cours_eau_id,digue_id,troncon_id,ah_stockage_id,ah_ouvrage_id,ah_section_id,site_terrestre_id,mobilier_id,cheminement_id,vegetation_id)<=1 ; contrôle différé =1. assert_prestation_relations contrôle la complétude en fin de transaction via prestation_relations_parent. Les cinq cibles suivantes exigent une géométrie propre : cours d’eau, digue, tronçon, section AH et site ; Multi* pour le site. Pour les trois familles nouvelles, géométrie propre prioritaire, sinon celle de l’enfant, sans remonter au parent. Mesures stockées et non recalculées dans les vues ; origine Prestation ou Patrimoine de rattachement. Les quantités déclarées restent indépendantes. Position/rive inchangées ; pas de N:N supplémentaire."}
     %% RULE {"title": "Repérage par géométrie", "body": "geometry décrit l’objet ; geometry_reperage est un axe LineString facultatif, non copie automatique de la forme métier. Son orientation doit être connue ; une fraction f dans [0,1] donne ST_LineInterpolatePoint(axe,f), une abscisse métrique d donne f=d/ST_Length(axe). ST_LineLocatePoint calcule la fraction d’un XY validé ; contrôler écart à l’axe et tolérance métier avant projection. Pas de borne intermédiaire ni table SIRS de repérage importée. Une position relative seule sans axe, origine, sens et unité fiables reste non convertible ; diagnostic et aucune géométrie fabriquée. Conserver digues_reperes et les références hydrographiques des sections AH."}
     %% RULE {"title": "Identité des tronçons", "body": "Chaque tronçon garde son UUID, son type physique et ses géométries. Aucun lien de support ni hiérarchie de substitution. Les sept types sont admissibles pour chaque rattachement générique à un tronçon. Les identités et références de support historiques sont inventoriées à la reprise."}
-    %% RULE {"title": "Géométrie et contraintes de tronçons", "body": "digue_id NOT NULL vers milieux.digues(id). ck_troncons_type conserve les sept codes de referentiel.types_troncon. ck_troncons_geometry_b4 impose une geometry LINESTRING ou POLYGON valide et non vide pour RISBERME et FRANC_BORD quand valid est vrai. ck_troncons_axe_reperage accepte un axe NULL ou valide, non vide, de longueur positive. ck_troncons_crete_fields CHECK (type_troncon_id <> 'CRETE' OR num_nonnulls(cote_id, position_id, fonction_haut_id, fonction_bas_id, nature_haut_id, nature_bas_id, materiau_haut_id, materiau_bas_id) = 0). Contrôler le SRID source avant transformation. Le tracé est propre au tronçon."}
+    %% RULE {"title": "Géométrie et contraintes de tronçons", "body": "digue_id NOT NULL vers gemapi.digues(id). ck_troncons_type conserve les sept codes de gemapi.types_troncon. ck_troncons_geometry_b4 impose une geometry LINESTRING ou POLYGON valide et non vide pour RISBERME et FRANC_BORD quand valid est vrai. ck_troncons_axe_reperage accepte un axe NULL ou valide, non vide, de longueur positive. ck_troncons_crete_fields CHECK (type_troncon_id <> 'CRETE' OR num_nonnulls(cote_id, position_id, fonction_haut_id, fonction_bas_id, nature_haut_id, nature_bas_id, materiau_haut_id, materiau_bas_id) = 0). Contrôler le SRID source avant transformation. Le tracé est propre au tronçon."}
     %% RULE {"title": "Classe historique hors projection", "body": "StructureAmenagementHydraulique est une classe source non projetée. Inventorier documents, références, observations et fichiers photo. Un constat dont cette structure était la seule cible reste non convertible jusqu’à une décision explicite. Conserver les sources intactes."}
-    %% RULE {"title": "Objets liés : périmètre interne", "body": "Retirer les liens vers voirie, réseaux hydrauliques, télécom-énergie et réseaux techniques, familles non projetées. Le lien digue_id vise désormais milieux.digues, avec correspondance d’UUID explicite à l’import. ck_cible_ouvrage_hydraulique_liee : num_nonnulls(cheminement_id,autre_ouvrage_hydraulique_id,ouvrage_particulier_id,equipement_mesure_id,berge_id,digue_id)=1. Ne pas garder de ligne associative vide après suppression d’une cible. fk_ouvrage_lie_berge (berge_id, berge_id_type) référence public.troncons(id, type_troncon_id), DEFERRABLE INITIALLY DEFERRED. berge_id_type est généré avec la constante BERGE. uq_troncons_type UNIQUE (id, type_troncon_id) garantit la clé référencée."}
+    %% RULE {"title": "Objets liés : périmètre interne", "body": "Retirer les liens vers voirie, réseaux hydrauliques, télécom-énergie et réseaux techniques, familles non projetées. Le lien digue_id vise désormais gemapi.digues, avec correspondance d’UUID explicite à l’import. ck_cible_ouvrage_hydraulique_liee : num_nonnulls(cheminement_id,autre_ouvrage_hydraulique_id,ouvrage_particulier_id,equipement_mesure_id,berge_id,digue_id)=1. Ne pas garder de ligne associative vide après suppression d’une cible. fk_ouvrage_lie_berge (berge_id, berge_id_type) référence gemapi.troncons(id, type_troncon_id), DEFERRABLE INITIALLY DEFERRED. berge_id_type est généré avec la constante BERGE. uq_troncons_type UNIQUE (id, type_troncon_id) garantit la clé référencée."}
     %% RULE {"title": "Validité et version", "body": "valid et version restent partout où v0.4 les porte. version commence à 1 par défaut et avance à chaque UPDATE, dans la borne 1..9007199254740991. Une écriture sur une des trois associations techniques de désordre avance aussi la version des désordres concernés. Les colonnes valid obligatoires ont false pour défaut. Les autres restent nullables, sans valeur par défaut. valid conditionne notamment ck_troncons_geometry_b4 et les états éditables source. Il ne signifie pas archivé. Ne pas importer de journal ou authentification ni reprendre les triggers d’attribution contacts ; le stamp commun les remplace pour les écritures informatiques."}
     %% RULE {"title": "Nouvelles familles conservées", "body": "Mobilier, cheminements et végétation gardent exactement un parent parmi site terrestre, tronçon, ouvrage AH, stockage AH et section AH. CHECK (num_nonnulls(site_terrestre_id, troncon_id, ah_ouvrage_id, ah_stockage_id, ah_section_id) = 1). Les cinq FK sont facultatives individuellement et portent ON DELETE RESTRICT. Géométries propres obligatoires 3950 2D valides non vides, Point/LineString/Polygon et Multi*. Désignation et type obligatoires, dates facultatives cohérentes. Les valeurs de référentiels v0.4 sont préservées ; pas de nouvelles spécialisations SIRS ni de nouveaux types voirie. Libelle métier redondant reste supprimé ; nom et intitule historiques conservés."}
     %% VALUE {"table": "referentiel__types_mobilier", "id": "MRE", "code": "mobilier_recreatif", "abrege": "MRE", "libelle": "Mobilier récréatif"}

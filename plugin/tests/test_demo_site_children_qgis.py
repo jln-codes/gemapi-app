@@ -2,6 +2,7 @@
 
 Run with QT_QPA_PLATFORM=offscreen /usr/bin/python3 plugin/tests/test_demo_site_children_qgis.py
 """
+import argparse
 from collections import Counter
 from pathlib import Path
 import os
@@ -45,13 +46,14 @@ def qualify(directory):
     project = QgsProject.instance()
     assert project.read(str(ROOT / "demo/prestations_demo.qgz"))
     assert all(layer.isValid() for layer in project.mapLayers().values())
+    assert len(project.mapLayers()) == 33
     relations = project.relationManager().relations()
     assert len(relations) == 70 and all(rel.isValid() for rel in relations.values())
     for layer in project.mapLayers().values():
         if layer.providerType() != "postgres":
             continue
         uri = QgsDataSourceUri(layer.source())
-        assert uri.service() == "gemapi_demo"
+        assert uri.service() == "gemapi_demo" and uri.schema() == "gemapi"
         if uri.table() in ("prestations_fiches", "prestations_carte"):
             assert {target.fk for target in TARGETS.values()} <= set(layer.fields().names())
             assert layer.editFormConfig().readOnly(layer.fields().indexOf("troncon_id"))
@@ -85,7 +87,7 @@ def qualify(directory):
     known_site = "6fb4c2ae-3be1-5ba1-cc5f-31daadd0c6f4"
     filters = {"site_terrestre": [known_site]}
     selected = report(filters)
-    expected = {r[0] for r in db.executeSql("SELECT prestation_id::text FROM milieux.prestations__sites_terrestres "
+    expected = {r[0] for r in db.executeSql("SELECT prestation_id::text FROM gemapi.prestations__sites_terrestres "
                                             f"WHERE site_terrestre_id='{known_site}'")}
     assert len(expected) == 8 and {r["id"] for r in selected} == expected
     assert {r[0] for r in list_prestations(db, filters)} == expected
@@ -129,7 +131,7 @@ def qualify(directory):
         unavailable = [str(uuid4())]
         if family in SITE_CHILDREN:
             unavailable.extend(r[0] for r in db.executeSql(
-                f"SELECT id::text FROM public.{family} WHERE site_terrestre_id IS NULL"))
+                f"SELECT id::text FROM gemapi.{family} WHERE site_terrestre_id IS NULL"))
         for absent in unavailable:
             try:
                 form.load_draft(values, [(family, absent)])
@@ -143,7 +145,7 @@ def qualify(directory):
         assert form.saved_prestation_id, form.statusLabel.text()
         fk = TARGETS[family].fk
         shape, origin, qty = db.executeSql(
-            f"SELECT ST_AsText(c.geom),c.origine_mesures,c.quantite::text FROM milieux.prestations_carte c "
+            f"SELECT ST_AsText(c.geom),c.origine_mesures,c.quantite::text FROM gemapi.prestations_carte c "
             f"WHERE c.id='{form.saved_prestation_id}' AND c.{fk}='{uid}'")[0]
         assert origin == "Patrimoine de rattachement" and qty == values["quantite"]
         assert iface.canvas.extent().contains(QgsGeometry.fromWkt(shape).boundingBox())
@@ -155,7 +157,7 @@ def qualify(directory):
 
     for family in (*SITE_CHILDREN, "troncons"):
         where = " WHERE site_terrestre_id IS NULL" if family in SITE_CHILDREN else ""
-        uid = db.executeSql(f"SELECT id::text FROM public.{family}{where} LIMIT 1")[0][0]
+        uid = db.executeSql(f"SELECT id::text FROM gemapi.{family}{where} LIMIT 1")[0][0]
         own = "POINT(1700000 9300000)" if family == "troncons" else None
         key = db.executeSql(build_insert(values, [(family, uid)], own))[0][0]
         row, links = load_prestation(db, key)
@@ -169,6 +171,9 @@ def qualify(directory):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--postgis-extensions", action="store_true")
+    dedicated = parser.parse_args().postgis_extensions
     container = "gemapi-qgis-" + uuid4().hex
     command("docker", "run", "--rm", "-d", "--name", container, "-p", "127.0.0.1::5432",
             "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "postgis/postgis:16-3.4")
@@ -179,18 +184,19 @@ def main():
             sleep(1)
         else:
             raise RuntimeError("PostGIS jetable indisponible")
-        install_demo(container)
+        install_demo(container, dedicated_postgis=dedicated)
         setup = (ROOT / "model/roles_milieux.sql").read_text() + "\nCREATE ROLE qgis_technicien LOGIN IN ROLE milieux_prestations;\n"
         for table, col, code in (("mobilier", "type_id", "PAN"), ("cheminements", "type_cheminement_id", "PAS"),
                                ("vegetation", "famille_vegetation", "ARBRES")):
-            setup += (f"INSERT INTO public.{table}(designation,{col},geometry,ah_section_id) "
-                      f"SELECT 'Objet hors site','{code}','SRID=3950;POINT(1 1)',id FROM milieux.ah_sections LIMIT 1;\n")
+            setup += (f"INSERT INTO gemapi.{table}(designation,{col},geometry,ah_section_id) "
+                      f"SELECT 'Objet hors site','{code}','SRID=3950;POINT(1 1)',id FROM gemapi.ah_sections LIMIT 1;\n")
         command("docker", "exec", "-i", container, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "demo_qualification", input_text=setup)
         port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[1]
         with TemporaryDirectory(dir=ROOT / "audits") as folder:
             directory = Path(folder)
             service = directory / "pg_service.conf"
-            service.write_text(f"[gemapi_demo]\nhost=127.0.0.1\nport={port}\ndbname=demo_qualification\nuser=qgis_technicien\n")
+            service.write_text(f"[gemapi_demo]\nhost=127.0.0.1\nport={port}\ndbname=demo_qualification\nuser=qgis_technicien\n"
+                               + ("options=-csearch_path=pg_catalog,extensions,pg_temp\n" if dedicated else ""))
             os.environ["PGSERVICEFILE"] = str(service)
             qualify(directory)
     finally:

@@ -1,5 +1,11 @@
 # Relations du projet QGIS
 
+## Connexions et comptes
+
+Le projet de démonstration utilise 32 couches PostgreSQL sur le service libpq `gemapi_demo` et un fond OSM. Ses 70 relations s’appuient sur des identifiants de couches stables. Les sources des couches et les URI mémorisées dans les widgets pointent vers le schéma fixe `gemapi`. Le service libpq définit la base et le compte. [Configuration et ouverture](../demo/README.md)
+
+Les sections datées décrivent les qualifications successives du socle commun. Le projet CABBALR conserve sa configuration indépendante. [Registre CABBALR](../CABBALR_ACCES.md)
+
 ## État PERF-QGIS-09C au 18 novembre 2026
 
 Le retrait de `prestations_fiches` **n'est pas intégré**. Les projets officiels
@@ -38,66 +44,14 @@ inertes, ses signaux sont déconnectés et l'outil précédent est restauré. Le
 annulations et le déchargement répétés sont idempotents. Aucun tracé automatique
 ni changement de disposition du formulaire n'est inclus.
 
-## Connexions et comptes
-
-Le modèle est identique pour les projets Supabase `sig-milieux-demo`
-(données fictives) et `cabbalr` (données réelles). Ouvrir le fichier QGIS de
-l'environnement souhaité :
-
-| Projet QGIS | Base Supabase |
-| --- | --- |
-| `demo/prestations_demo.qgz` | `sig-milieux-demo` |
-| `cabbalr/prestations_cabbalr.qgz` | `cabbalr` |
-
-Chaque projet contient les mêmes identifiants de couches, 25 couches
-PostgreSQL, le fond OSM et 66 relations. Les connexions et les emprises
-géographiques restent propres à chaque environnement. Le plugin utilise les connexions du projet ouvert ;
-ses caches sont invalidés lors du chargement d'un autre projet. Les actions
-des sections AH utilisent l'identifiant de la couche courante. Ne pas charger
-simultanément les deux bases dans le même projet.
-
-Les 25 couches PostgreSQL de chaque projet utilisent une chaîne de connexion
-uniforme avec l'hôte, le port, la base et TLS `require` dans le `.qgz`, sans
-mot de passe. CABBALR peut être transmis seul et ouvert sur un profil vierge.
-L'invite native PostgreSQL permet de saisir les identifiants communiqués
-séparément. Le projet CABBALR laisse le nom du compte vide. Saisir le nom
-complet Lecture, Prestations ou Patrimoine indiqué dans le registre des accès.
-Les 25 couches et le plugin utilisent ce même compte pendant la session.
-
-Les trois connexions locales facultatives **CABBALR - Lecture**, **CABBALR - Prestations**
-et **CABBALR - Patrimoine** utilisent une connexion directe, TLS `require`, leur nom
-complet et aucun mot de passe enregistré. Les anciennes entrées CABBALR des services,
-de `.pgpass` et du trousseau ont été supprimées. Les mots de passe se consultent dans
-le seul fichier privé `CABBALR_IDENTIFIANTS.local.txt` à la racine, ignoré par Git.
-Le projet autonome utilise aussi `require` sans certificat local obligatoire.
-
-Le [registre CABBALR_ACCES.md](../CABBALR_ACCES.md) décrit les droits,
-les chemins exacts, les commandes `psql`, la configuration QGIS et le transfert
-vers Windows. Il constitue la référence des accès CABBALR.
-
-Le projet CABBALR ne référence aucun service local. Le choix du compte
-dans l'invite native est conservé pour la session. Fermer complètement QGIS
-avant de rouvrir le même projet avec un autre rôle.
-Choisir une connexion dans l'Explorateur ne remplace pas les sources des couches
-chargées. La Démo utilise désormais aussi `require` sur ses deux vues consolidées.
-
-L'emprise initiale, le SCR et l'échelle restent ceux de la Démo. Pour voir
-l'ensemble des données réelles après ouverture, utiliser **Zoomer sur la
-couche** sur les communes ou les cours d'eau. La génération ne recentre pas
-silencieusement le projet CABBALR.
-
 ## Consultation des prestations et édition via le plugin
 
 Les projets ne chargent plus la couche QGIS non spatiale `prestations` qui
-pointait vers `milieux.prestations`. La table PostgreSQL, ses droits et ses
+pointait vers `gemapi.prestations`. La table PostgreSQL, ses droits et ses
 triggers restent inchangés. L'édition native depuis cette ancienne couche
 n'est plus proposée dans le panneau QGIS : la création et la modification
 passent par le plugin, qui accède directement à la table SQL selon les droits
-du compte connecté. Les projets conservent 25 fournisseurs PostgreSQL et
-66 relations QGIS. La couche technique cachée des libellés de zones est
-conservée à ce stade.
-
-Les trois couches de `milieux.prestations_carte` représentent les prestations
+du compte connecté. Les trois couches de `gemapi.prestations_carte` représentent les prestations
 par famille géométrique : points, lignes et polygones. Elles restent
 identifiables et sélectionnables. Chacune possède l'action native
 **Modifier cette prestation**, qui transmet `prestations_carte.id` (UUID métier)
@@ -125,7 +79,7 @@ consultation complet, y compris pour une prestation non cartographiable.
 Les huit mesures sont `nombre_points`, `longueur_m`, `surface_m2`,
 `surface_ha`, `type_geometrie`, `type_geometrie_postgis`,
 `possede_geometrie` et `origine_mesures`. Elles proviennent des
-valeurs stockées dans `milieux.prestations` et restent en lecture seule
+valeurs stockées dans `gemapi.prestations` et restent en lecture seule
 dans les vues. `prestations_carte` les expose en fin de vue ;
 `prestations_fiches` conserve les positions de ses six champs existants
 et ajoute `nombre_points` et `origine_mesures` à la fin. Aucun
@@ -136,7 +90,7 @@ déclarée décrit les travaux et reste distincte des dimensions géométriques.
 Après une modification, sauvegarder puis recharger la fiche pour consulter
 les valeurs enregistrées actualisées.
 
-Le gestionnaire du plugin interroge directement `milieux.prestations` et reste
+Le gestionnaire du plugin interroge directement `gemapi.prestations` et reste
 ouvert aux trois profils. Il affiche **Consulter** sous Lecture et **Modifier**
 avec le droit `UPDATE`. **Nouvelle prestation** dépend du droit `INSERT` et
 **Supprimer** du droit `DELETE`, évalués sur la connexion PostgreSQL courante.
@@ -158,7 +112,11 @@ QGIS existants. Le synchroniseur refuse toute différence de liste de
 couches entre les deux projets ; il ne réintroduit donc pas la couche
 retirée à partir d'un projet conforme.
 
-## Synchroniser les deux projets
+## Synchroniser les deux projets du socle commun
+
+Cette procédure concerne les projets du socle commun ayant les mêmes couches
+et relations. La démonstration SIRS possède son propre projet à 33 couches et
+70 relations. Sur `gemapi-app-sirs`, ouvrir directement `demo/prestations_demo.qgz`.
 
 Choisir explicitement le projet dont la configuration doit faire référence.
 La commande sans sens n'est plus autorisée ; une comparaison seule est le
@@ -268,8 +226,8 @@ Avant de supprimer ou recréer une relation, rechercher son **identifiant intern
 
 ## Sections hydrographiques AH (HYDRO-AH-05)
 
-Le projet charge `milieux.ah_sections` comme table non spatiale de consultation
-et `milieux.ah_sections_carte` comme couche cartographique en lecture seule.
+Le projet charge `gemapi.ah_sections` comme table non spatiale de consultation
+et `gemapi.ah_sections_carte` comme couche cartographique en lecture seule.
 Les deux FK de la table et les deux navigations correspondantes de la vue
 sont enregistrées, avec ces identifiants stables :
 

@@ -24,27 +24,27 @@ class FakeConnection:
     def executeSql(self, query):
         if query.startswith("SELECT has_table_privilege"):
             return ((True, True, True, True),)
-        if "FROM milieux.ah_sections" in query:
+        if "FROM gemapi.ah_sections" in query:
             return ()
         if query.startswith("SELECT DISTINCT annee"):
             return ((2026,), (2027,))
-        if query.startswith("SELECT id::text,libelle FROM milieux.statuts_prestations"):
+        if query.startswith("SELECT id::text,libelle FROM gemapi.statuts_prestations"):
             return ((STORAGE, "Terminé"),)
-        if query.startswith("SELECT id::text,nom FROM milieux.prestataires"):
+        if query.startswith("SELECT id::text,nom FROM gemapi.prestataires"):
             return ((STORAGE, "Prestataire"),)
         if query.startswith("SELECT id::text,concat_ws(' ',prenom,nom)"):
             return ((STORAGE, "Julien Dubois"),)
-        if query.startswith("SELECT id::text,nom FROM milieux.communes"):
+        if query.startswith("SELECT id::text,nom FROM gemapi.communes"):
             return ((STORAGE, "Commune"),)
-        if "FROM milieux.ah_stockage o" in query:
+        if "FROM gemapi.ah_stockage o" in query:
             return ((STORAGE, "ZEC du Bois — Stockage principal"),)
-        if "FROM milieux.ah_ouvrage o" in query:
+        if "FROM gemapi.ah_ouvrage o" in query:
             return ((WORKS, "ZEC du Bois — Ouvrage de régulation"),)
-        if "FROM milieux.sites_terrestres ORDER BY" in query:
+        if "FROM gemapi.sites_terrestres ORDER BY" in query:
             return ((ZONE, "Marais des Saules"),)
-        if "FROM milieux.cours_eau" in query:
+        if "FROM gemapi.cours_eau" in query:
             return ((RIVER, "La Clarence"),)
-        if "FROM milieux.digues" in query:
+        if "FROM gemapi.digues" in query:
             return ((DIKE, "Digue des Prés"),)
         if "SELECT id,titre FROM" in query:
             return ((STORAGE, "Prestation de contrôle"),)

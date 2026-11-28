@@ -58,12 +58,12 @@ def main():
             geom = (f"ST_GeomFromWKB(decode('{geometry.ExportToWkb().hex()}','hex'),3950)"
                     if geometry is not None else "NULL")
             literals = [quoted(value) if value is not None else "NULL" for value in values]
-            literals += [f"(SELECT id FROM milieux.statuts_prestations WHERE code={quoted(code)})", geom]
-            rows.append((feature.GetField("id"), f"INSERT INTO milieux.prestations ({','.join((*fields, 'statut_id', 'geom'))}) VALUES ({','.join(literals)});"))
+            literals += [f"(SELECT id FROM gemapi.statuts_prestations WHERE code={quoted(code)})", geom]
+            rows.append((feature.GetField("id"), f"INSERT INTO gemapi.prestations ({','.join((*fields, 'statut_id', 'geom'))}) VALUES ({','.join(literals)});"))
     if len(rows) != 100 or len({uid for uid, _ in rows}) != 100:
         raise ValueError("100 UUID de démonstration distincts requis")
     header = ["-- Prestations courantes, coordonnées exactes conservées depuis le GeoPackage.", "BEGIN;",
-              "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'milieux'), true) FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='postgis';"]
+              "SELECT pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'gemapi'), true) FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='postgis';"]
     SQL.write_text("\n".join([*header, *(statement for _, statement in sorted(rows)), "COMMIT;", ""]), encoding="utf-8")
     print("100 prestations exportées sans recalcul des géométries ni attributs")
 

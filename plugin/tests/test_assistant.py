@@ -450,7 +450,7 @@ class AssistantTests(unittest.TestCase):
         self.assertIsNone(drawing.resolve(CATALOG)["values"])
 
     def test_uuid_injection_rejected_and_local_choice_membership(self):
-        for fields in ({"patrimoine": uid(999)}, {"prestataire_id": uid(999)}, {"famille": "milieux.ah_ouvrage; DROP TABLE"}):
+        for fields in ({"patrimoine": uid(999)}, {"prestataire_id": uid(999)}, {"famille": "gemapi.ah_ouvrage; DROP TABLE"}):
             with self.assertRaises(ValueError):
                 self.full(**fields)
         draft = self.full(prestataire="Veollia")

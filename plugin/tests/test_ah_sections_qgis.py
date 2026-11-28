@@ -42,26 +42,26 @@ def database():
         sql(name,'CREATE SCHEMA extensions;CREATE EXTENSION postgis WITH SCHEMA extensions;')
         sql(name,(ROOT/'model/schema.sql').read_text())
         load_demo_rows(name)
-        sql(name,'ALTER DATABASE postgres SET search_path=pg_catalog,public,extensions,milieux;')
+        sql(name,'ALTER DATABASE postgres SET search_path=pg_catalog,public,extensions,gemapi;')
         port=command('docker','port',name,'5432').stdout.strip().rsplit(':',1)[-1]
         db=psycopg2.connect(host='127.0.0.1',port=port,dbname='postgres',user='postgres')
         try:
             with db.cursor() as c:
-                c.execute('SET search_path=pg_catalog,extensions,milieux')
+                c.execute('SET search_path=pg_catalog,extensions,gemapi')
                 for parent in ('A','B'):
-                    c.execute('INSERT INTO milieux.ah(id,nom) VALUES (%s,%s)',(uid(parent),'AH fictif '+parent))
+                    c.execute('INSERT INTO gemapi.ah(id,nom) VALUES (%s,%s)',(uid(parent),'AH fictif '+parent))
                 for river,y,direction in [('R1',0,True),('R2',20,True),('NON_QUALIFIE',10,None)]:
-                    c.execute("INSERT INTO milieux.cours_eau(id,nom,source,direction,geom) VALUES (%s,%s,'TEST AH05',%s,"
+                    c.execute("INSERT INTO gemapi.cours_eau(id,nom,source,direction,geom) VALUES (%s,%s,'TEST AH05',%s,"
                               "ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000))",
                               (uid(river),'Cours d’eau fictif '+river,direction,f'MULTILINESTRING((0 {y},1000 {y}))'))
                 for parent,wkt in [('A','POLYGON((100 -10,200 -10,200 40,400 40,400 -10,500 -10,500 60,100 60,100 -10))'),
                                    ('B','POLYGON((150 -10,450 -10,450 50,150 50,150 -10))')]:
-                    c.execute('INSERT INTO milieux.ah_stockage(ah_id,nom,geom) VALUES (%s,%s,ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000))',
+                    c.execute('INSERT INTO gemapi.ah_stockage(ah_id,nom,geom) VALUES (%s,%s,ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000))',
                               (uid(parent),'Stockage fictif '+parent,wkt))
-                c.execute('INSERT INTO milieux.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) VALUES (%s,%s,%s,.1,.2)',
+                c.execute('INSERT INTO gemapi.ah_sections(id,ah_id,cours_eau_id,debut_fraction,fin_fraction) VALUES (%s,%s,%s,.1,.2)',
                           (uid('reference'),uid('A'),uid('R1')))
-                c.execute('CREATE ROLE ah05_reader LOGIN; GRANT USAGE ON SCHEMA milieux,extensions TO ah05_reader; '
-                          'GRANT SELECT ON ALL TABLES IN SCHEMA milieux TO ah05_reader;')
+                c.execute('CREATE ROLE ah05_reader LOGIN; GRANT USAGE ON SCHEMA gemapi,extensions TO ah05_reader; '
+                          'GRANT SELECT ON ALL TABLES IN SCHEMA gemapi TO ah05_reader;')
             db.commit()
             yield name,port,db
         finally:db.close()
@@ -115,7 +115,7 @@ def main():
             passed.append('readonly_native_candidate_table')
             candidate=next(f for f in layer.getFeatures() if f['cours_eau_id']==uid('R1') and f['debut_fraction']==.4)
             def count():
-                return int(store.rows('SELECT count(*) FROM milieux.ah_sections')[0][0])
+                return int(store.rows('SELECT count(*) FROM gemapi.ah_sections')[0][0])
             before=count()
             dialog=actions.dispatch(iface,'accept',layer.id(),str(candidate.id()))
             assert dialog and dialog.isVisible()
@@ -132,10 +132,10 @@ def main():
             else:raise AssertionError('Duplicate reference accepted')
             assert count()==before+1
             passed.append('sql_constraint_refusal_no_partial_write')
-            row=store.rows(f"SELECT id::text FROM milieux.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.4")[0][0]
-            original=store.rows(f"SELECT ST_AsText(geom_reference),geom_cours_eau_signature FROM milieux.ah_sections WHERE id='{row}'")[0]
+            row=store.rows(f"SELECT id::text FROM gemapi.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.4")[0][0]
+            original=store.rows(f"SELECT ST_AsText(geom_reference),geom_cours_eau_signature FROM gemapi.ah_sections WHERE id='{row}'")[0]
             def data_snapshot():
-                return [store.rows(f"SELECT md5(string_agg(to_jsonb(t)::text,'' ORDER BY id)) FROM milieux.{table} t")[0][0]
+                return [store.rows(f"SELECT md5(string_agg(to_jsonb(t)::text,'' ORDER BY id)) FROM gemapi.{table} t")[0][0]
                         for table in ('ah','ah_stockage','cours_eau','ah_sections','prestations')]
             unchanged=data_snapshot()
             for _ in range(6):
@@ -155,16 +155,16 @@ def main():
             dialog.save();QApplication.processEvents()
             assert store.reference(row)[3]==.45 and store.reference(row)[5]==2
             passed.append('fraction_change_explicit_revision')
-            with db.cursor() as c:c.execute('UPDATE milieux.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s',(uid('R1'),))
+            with db.cursor() as c:c.execute('UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s',(uid('R1'),))
             db.commit()
             assert store.reference(row)[6]=='REFERENTIEL_MODIFIE'
-            frozen=store.rows(f"SELECT ST_AsText(geom_reference) FROM milieux.ah_sections WHERE id='{row}'")[0][0]
+            frozen=store.rows(f"SELECT ST_AsText(geom_reference) FROM gemapi.ah_sections WHERE id='{row}'")[0][0]
             dialog=actions.dispatch(iface,'edit',spatial.id(),row)
             dialog.preview();assert dialog.signature is None
             dialog.reject();QApplication.processEvents()
-            assert store.rows(f"SELECT ST_AsText(geom_reference) FROM milieux.ah_sections WHERE id='{row}'")[0][0]==frozen
+            assert store.rows(f"SELECT ST_AsText(geom_reference) FROM gemapi.ah_sections WHERE id='{row}'")[0][0]==frozen
             passed.append('unqualified_revalidation_refused_frozen_geometry')
-            with db.cursor() as c:c.execute('UPDATE milieux.cours_eau SET direction=TRUE WHERE id=%s',(uid('R1'),))
+            with db.cursor() as c:c.execute('UPDATE gemapi.cours_eau SET direction=TRUE WHERE id=%s',(uid('R1'),))
             db.commit()
             dialog=actions.dispatch(iface,'edit',spatial.id(),row)
             dialog.preview();assert dialog.signature
@@ -172,7 +172,7 @@ def main():
             assert store.reference(row)[6]=='CONFORME' and store.reference(row)[5]==3
             passed.append('explicit_revalidation_after_human_fixture_qualification')
             preview=store.preview(uid('A'),uid('R2'),.1,.2)
-            with db.cursor() as c:c.execute('UPDATE milieux.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s',(uid('R2'),))
+            with db.cursor() as c:c.execute('UPDATE gemapi.cours_eau SET geom=ST_Translate(geom,0,1) WHERE id=%s',(uid('R2'),))
             db.commit()
             n=count()
             try:store.accept(uid('A'),uid('R2'),.1,.2,preview[1])
@@ -203,7 +203,7 @@ def main():
             dialog.courseCombo.setCurrentIndex(dialog.courseCombo.findData(uid('R1')))
             dialog.start.setValue(.05);dialog.end.setValue(.8);dialog.preview();dialog.save()
             QApplication.processEvents();assert count()==n+1
-            manual=store.rows(f"SELECT id::text FROM milieux.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.05 AND fin_fraction=.8")[0][0]
+            manual=store.rows(f"SELECT id::text FROM gemapi.ah_sections WHERE ah_id='{uid('A')}' AND debut_fraction=.05 AND fin_fraction=.8")[0][0]
             assert store.reference(manual)[6]=='CONFORME'
             store.delete(manual,1);assert count()==n
             passed.append('native_manual_create_cancel_save_outside_storage')

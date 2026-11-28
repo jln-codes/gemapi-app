@@ -1,5 +1,7 @@
 # Contrat de migration SIRS → GEMAPI-App-SIRS
 
+**Correspondance SQL SIG-FUSION-11.** Les destinations de ce contrat utilisent le schéma unique `gemapi`. Les noms qualifiés des sources désignent leur espace d’origine. [Schéma courant](schema.mmd) · [Projection historique v0.6.1](schema_development_v0.6.1.mmd)
+
 Version v0.6.1 · SIG-FUSION-08.
 
 Ce contrat décrit une **future** adaptation du migrateur. La cible d’installation neuve est décrite dans `schema_development_v0.6.1.mmd` et implémentée dans `schema.sql`. Les ambiguïtés doivent produire un diagnostic nominatif d'objet (UUID, table/colonne, valeurs sources, cause, décision attendue), sans publication d'objet partiellement converti. Le support de diagnostic d'une exécution ne constitue ni une table d'archive métier ni un nouveau journal permanent.
@@ -11,7 +13,7 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 ## 1. Zones CABBALR → cheminements
 
 1. **Source** : `cabbalr/gpkg/sites_zones.gpkg:sites_zones`, `cabbalr/data/sites_zones.gpkg` et SQL dérivés. 41 UUID, 41 MultiLineString valides/non vides, 2D, EPSG:3950. Il n'existe pas de production sites_zones à préserver selon la décision métier.
-2. **Destination** : `public.cheminements`, parent `site_terrestre_id` ; suppression de `milieux.sites_zones` et des FK zone des prestations/désordres, sans table générique de remplacement.
+2. **Destination** : `gemapi.cheminements`, parent `site_terrestre_id` ; suppression de `milieux.sites_zones` et des FK zone des prestations/désordres, sans table générique de remplacement.
 3. **Conversion** : id → id ; site_terrestre_id (ou sites_terrestres_id dans la source brute) → site_terrestre_id ; nom → designation ; geom → geometry **à coordonnées identiques**. Les quatre autres FK de parent restent NULL. Escalier → ESC proposé ; sentiers → AUT proposé, en conservant leur appellation exacte. La sélection de type doit être validée, pas devinée. Le même UUID peut remplacer site_zone_id par cheminement_id dans les objets référents après validation de la correspondance.
 4. **Échec** : parent manquant/inconnu, UUID conflictuel, désignation vide, géométrie invalide/vide/SRID inconnu. Un objet nommé « Grillage » parmi les 41 nécessite une qualification explicite avant attribution de son type de cheminement ; aucun basculement silencieux vers mobilier. Le GPKG séparé de six polygones n'est pas une correspondance prouvée et ne doit pas être fusionné avec les 41 lignes.
 5. **Information** : aucun attribut métier réel à perdre silencieusement. type/type_site, niveau, longueur déclarée, entretien, gestionnaire et surface_ha n'ont pas tous de colonne dédiée cible : les préserver dans un commentaire déterministe à clés nommées, sans réinterpréter longueur/surface comme mesure calculée. Conserver l'ordre des clés et distinguer NULL et vide. Un commentaire existant est conservé avant ce complément. Dates métier absentes → NULL. Création et dernière écriture suivent la règle 3, jamais une date inventée.
@@ -47,7 +49,7 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 ## 5. Parents exclusifs des ouvrages hydrauliques
 
 1. **Source** : troncon_id, amenagement_hydraulique_id, zone_stockage_id ; éventuels objets multi-parents ou orphelins.
-2. **Destination** — Chaque ouvrage a exactement un parent parmi `public.troncons`, `milieux.ah_ouvrage` et `milieux.ah_stockage`. La règle est `ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1)`. Les trois FK portent `ON DELETE RESTRICT`.
+2. **Destination** — Chaque ouvrage a exactement un parent parmi `gemapi.troncons`, `gemapi.ah_ouvrage` et `gemapi.ah_stockage`. La règle est `ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1)`. Les trois FK portent `ON DELETE RESTRICT`.
 3. **Conversion** — Résoudre chaque référence par une correspondance explicite et vérifiable (famille et identifiant source, famille et UUID cible, preuve de correspondance). Préserver l’UUID de l’ouvrage. Une seule identité de parent résolue et aucune référence contradictoire permettent la conversion.
 4. **Absence** — Zéro parent identifiable bloque la conversion. Consigner les identifiants absents ou non résolus et conserver l’objet source. Aucun parent fictif.
 5. **Conflit** — Plusieurs parents candidats bloquent la conversion. Présenter toutes les références et preuves pour décision explicite. Ni proximité géométrique ni ressemblance des noms ne justifient une affectation. Une référence non résolue à côté d’un candidat doit aussi être instruite.
@@ -65,7 +67,7 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 ## 7. Convergence des observations vers troncon_id
 
 1. **Source** : troncon_id, berge_id et structure_digue_id, avec discriminants composites historiques.
-2. **Destination** : une FK simple troncon_id vers public.troncons(id), tous types physiques autorisés.
+2. **Destination** : une FK simple troncon_id vers gemapi.troncons(id), tous types physiques autorisés.
 3. **Conversion** : après résolution explicite des identités, former l'ensemble des UUID non NULL. Un UUID distinct → troncon_id. Plusieurs pointeurs identiques → un pointeur, avec diagnostic de doublon. Aucun UUID → examiner les autres cibles autorisées. Supprimer les discriminants BERGE et true des observations seulement.
 4. **Échec** : plusieurs UUID distincts ou coexistence avec une autre cible métier. Aucun écrasement même si géométries ou noms sont proches.
 5. **Information** : qualification du type portée par le tronçon ; chaque objet garde son identité et ses géométries. La non-reprise des supports suit la règle 13. Les rôles historiques des pointeurs restent dans le diagnostic de conversion si nécessaire, pas comme plusieurs cibles actives.
@@ -110,7 +112,7 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 ## 12. Objets liés, référentiels et attributs non repris
 
 1. **Source** : objets liés vers familles absentes ; référentiels et attributs SIRS déjà écartés par v0.1 à v0.4.
-2. **Destination** : six cibles internes d'objets liés et 22 référentiels v0.6. digue_id technique → milieux.digues sur correspondance explicite. Les trois associations désordre/équipement ou ouvrage conservées ne sont pas remplacées par de nouveaux N:N.
+2. **Destination** : six cibles internes d'objets liés et 22 référentiels v0.6. digue_id technique → gemapi.digues sur correspondance explicite. Les trois associations désordre/équipement ou ouvrage conservées ne sont pas remplacées par de nouveaux N:N.
 3. **Conversion** : retirer les termes voirie/réseaux/télécom de la contrainte d'objet lié ; conserver exactement une des six cibles restantes. Pour les catalogues, préserver les codes déjà retenus ; les quatre types mobilier ajoutés en v0.4 restent BAR/POR/BOR/OBS. Échelles, piézomètres, repères et stations suivent les correspondances d'équipements décidées en v0.2. Urgences v0.2 : RefUrgence:2 rejoint RefUrgence:1 (Faible), sans nouvelle classification.
 4. **Échec** : ligne liée devenue sans cible, cible inconnue, code absent du référentiel, plusieurs objets candidats. Diagnostic, pas de table fictive. Les types Gabarit, Parking, Grille avaloir et Bouchure ne sont pas ajoutés automatiquement.
 5. **Information** : suppression des familles/colonnes projetées ne vaut pas acceptation de toute perte métier source. Signaler notamment les mesures de tronçons et caractéristiques hydrauliques retirées en v0.4, les spécialités de cheminements/végétation non reprises et les relations externes non convertibles. Conserver les valeurs originales dans la source tant que leur sort n'est pas validé. La désignation remplace libelle : reprendre si destination vide, garder si égal, conflit bloquant sinon.

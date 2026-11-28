@@ -22,6 +22,8 @@ bash demo/data/importer_base_neuve.sh demo_sirs_locale
 
 Le nom explicite et le socket local sont obligatoires pour sélectionner la destination (socket par défaut `/var/run/postgresql`). L’import refuse une base occupée. Une transaction unique installe le modèle, ses 22 catalogues et leurs 298 valeurs, les données du socle, les enfants patrimoniaux, les prestations puis le suivi. Un échec annule le chargement. L’emplacement d’une extension PostGIS déjà installée est détecté automatiquement.
 
+Le modèle, les exports et les couches PostgreSQL du projet utilisent le schéma fixe `gemapi`. Appliquer `model/roles_milieux.sql` sur la base de démonstration pour utiliser les profils métier. Si PostGIS est installé dans `extensions`, le fournisseur natif QGIS peut résoudre ses fonctions avec `options=-csearch_path=pg_catalog,extensions,pg_temp` dans le service `gemapi_demo`. [Droits et comptes](../model/role.md)
+
 ## Sources et scénarios
 
 - `gpkg/sites_terrestres.gpkg` contient les 12 sites et trois couches enfants, toutes directement rattachées à un site. Les 25 emprises sont conservées. Elles décrivent 19 objets de végétation, 4 mobiliers et 2 cheminements. `data/generer_sites.py` réexporte ces couches.
@@ -41,7 +43,7 @@ PostgreSQL et configurée comme contrainte forte dans le projet QGIS.
 
 ### Sections hydrographiques des AH
 
-`milieux.ah_sections` référence le **parent AH**. L'utilisateur choisit un cours
+`gemapi.ah_sections` référence le **parent AH**. L'utilisateur choisit un cours
 d'eau qualifié et ses fractions de début/fin. Plusieurs sections et plusieurs
 rivières sont possibles, y compris sans stockage ou au-delà de son emprise.
 La géométrie est exclusivement calculée côté serveur avec `ST_LineSubstring`.
@@ -87,14 +89,14 @@ géométrie propre. Rapport global : 100 UUID distincts.
 Le contrôle QGIS compare les appartenances du rapport et de la gestion à celles de la vue PostgreSQL. Le site témoin compte huit prestations, enfants directs compris. Voir [la qualification du plugin](../audits/SIG-FUSION-10-qgis-compatibility.md).
 
 Pour obtenir des **propositions sans écriture**, utiliser
-`SELECT * FROM milieux.ah_sections_candidates(:ah_id)`. L’intersection de
+`SELECT * FROM gemapi.ah_sections_candidates(:ah_id)`. L’intersection de
 l’unique stockage facultatif avec les cours d’eau admissibles produit des
 fractions calculées par le serveur ; les parties disjointes restent séparées,
 les contacts ponctuels sont exclus. Sans stockage, aucune proposition spatiale
 n’est retournée. Cela n'empêche pas de créer une section manuelle.
 
 Une décision explicite s’enregistre par
-`INSERT INTO milieux.ah_sections(ah_id,cours_eau_id,debut_fraction,fin_fraction)
+`INSERT INTO gemapi.ah_sections(ah_id,cours_eau_id,debut_fraction,fin_fraction)
 VALUES (:ah,:cours_eau,:debut,:fin)`. Le serveur calcule la sous-ligne avec
 `ST_LineSubstring`, en respectant `0 <= début < fin <= 1`,
 l'empreinte MD5 de l'EWKB du cours d'eau, l’auteur
@@ -109,7 +111,7 @@ topologique. Un changement ou une suppression du stockage n'a aucun effet sur
 la conformité de la section. Aucune signature du stockage n'est enregistrée.
 
 Après examen métier, revalider explicitement par
-`UPDATE milieux.ah_sections SET revision_validation=revision_validation+1
+`UPDATE gemapi.ah_sections SET revision_validation=revision_validation+1
 WHERE id=:section`, avec les fractions manuelles examinées. Les changements
 de parent, de cours d’eau ou de fractions exigent ce même incrément. Les simples
 commentaires ne recalculent pas la référence. La révision et les dates/auteurs
@@ -199,7 +201,7 @@ aucun mode de contournement n’est ajouté au serveur. La seule qualification
 fictive DEMO-AH-01 ne concerne aucun des trois supports des digues existantes.
 
 Le projet `prestations_demo.qgz` contient la vue de consultation
-`milieux.digues_carte` au-dessus des cours d'eau. La couche est en
+`gemapi.digues_carte` au-dessus des cours d'eau. La couche est en
 lecture seule et sa visibilité se commande dans le groupe **Milieux**. Elle est disponible après une installation neuve de la base.
 
 La rivière conserve son style bleu. Les sections en rive gauche sont vertes
