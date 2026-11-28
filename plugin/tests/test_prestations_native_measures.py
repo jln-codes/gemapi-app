@@ -82,9 +82,9 @@ BEGIN
       OR p.surface_ha IS DISTINCT FROM v.a/10000.0 OR p.quantite<>123.45 OR p.unite<>'déclarée'
    THEN RAISE EXCEPTION 'Mesure propre complète incorrecte pour %',v.wkt; END IF;
  END LOOP;
- SELECT * INTO p FROM milieux.prestations WHERE site_zone_id IS NOT NULL LIMIT 1;
- zone:=p.site_zone_id;old_trace:=p.date_modification;
- UPDATE milieux.sites_zones SET geom=ST_GeomFromText('MULTIPOINT((0 0),(100 100))',3950) WHERE id=zone;
+ SELECT * INTO p FROM milieux.prestations WHERE vegetation_id IS NOT NULL LIMIT 1;
+ zone:=p.vegetation_id;old_trace:=p.date_modification;
+ UPDATE public.vegetation SET geometry=ST_GeomFromText('MULTIPOINT((0 0),(100 100))',3950) WHERE id=zone;
  SELECT * INTO p FROM milieux.prestations WHERE id=p.id;
  IF p.nombre_points<>2 OR p.origine_mesures<>'Patrimoine de rattachement'
     OR p.date_modification IS DISTINCT FROM old_trace OR p.geom IS NOT NULL
@@ -94,10 +94,10 @@ BEGIN
  IF p.nombre_points<>2 OR p.surface_m2 IS NOT NULL OR p.origine_mesures<>'Patrimoine de rattachement'
     OR p.date_modification IS DISTINCT FROM old_trace
  THEN RAISE EXCEPTION 'Mesures modifiables manuellement'; END IF;
- UPDATE milieux.sites_zones SET geom=ST_GeomFromText('MULTILINESTRING((0 0,3 4),(20 20,20 30))',3950) WHERE id=zone;
+ UPDATE public.vegetation SET geometry=ST_GeomFromText('MULTILINESTRING((0 0,3 4),(20 20,20 30))',3950) WHERE id=zone;
  SELECT * INTO p FROM milieux.prestations WHERE id=p.id;
  IF p.longueur_m<>15 OR p.nombre_points IS NOT NULL THEN RAISE EXCEPTION 'Longueur parentale'; END IF;
- UPDATE milieux.sites_zones SET geom=ST_GeomFromText('MULTIPOLYGON(((0 0,2 0,2 3,0 3,0 0)),((10 0,12 0,12 3,10 3,10 0)))',3950) WHERE id=zone;
+ UPDATE public.vegetation SET geometry=ST_GeomFromText('MULTIPOLYGON(((0 0,2 0,2 3,0 3,0 0)),((10 0,12 0,12 3,10 3,10 0)))',3950) WHERE id=zone;
  SELECT * INTO p FROM milieux.prestations WHERE id=p.id;
  IF p.surface_m2<>12 OR p.surface_ha<>0.0012 OR p.longueur_m IS NOT NULL THEN RAISE EXCEPTION 'Surface parentale'; END IF;
 END $test$;

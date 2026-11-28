@@ -1,36 +1,27 @@
-# SIG Milieux — démonstrateur
+# Démonstration patrimoniale GEMAPI-App-SIRS v0.6.1
 
-Ce répertoire contient les données de démonstration du modèle canonique actuel. La définition est conservée dans `../model/`. Les UUID existants sont conservés et les géométries utilisent EPSG:3950.
+Le jeu fictif se reconstruit sur une base PostgreSQL/PostGIS locale neuve avec le schéma de la branche SIRS. Le projet QGIS livré et le plugin ciblent encore les anciennes zones. Leur adaptation relève de SIG-FUSION-10.
 
-Les quatre catégories sont initialisées par le schéma canonique. Les neuf types
-de `gpkg/referentiels.gpkg` et `data/05_types_prestations.sql` conservent leurs UUID.
-Le classement de Suivi de milieu et Étude dans Génie écologique est provisoire ;
-les rattachements restent modifiables dans PostgreSQL sans modifier les prestations.
+## Reconstruction
 
-Les catégories sont créées une seule fois par `model/schema.sql` ; le script
-`data/05_types_prestations.sql` initialise les types et peut être réexécuté
-sans doublon, changement d’UUID ni mise à jour des lignes déjà identiques.
-L’importeur complet reste réservé à une base neuve : ne pas rejouer
-`schema.sql` sur une base existante.
-
-Pour importer directement le GeoPackage dans une base neuve après
-`schema.sql`, les catégories sont déjà présentes. Importer seulement la couche
-`types_prestations` dans la table vide, en conservant les colonnes UUID et en
-écartant le FID SQLite :
+Depuis la racine du dépôt, sur une instance PostgreSQL 16+ locale équipée de PostGIS, créer une base vide dédiée, puis lancer l’import. Le compte utilisé doit pouvoir installer PostGIS et créer les objets applicatifs. Choisir le socket avec `PGHOST` et le port avec `PGPORT` si les valeurs locales par défaut ne conviennent pas.
 
 ```sh
-ogr2ogr -f PostgreSQL "PG:service=demo_local" gpkg/referentiels.gpkg \
-  -append -nln milieux.types_prestations \
-  -sql "SELECT id,code,libelle,actif,categorie_id FROM types_prestations" -unsetFid
+createdb demo_sirs_locale
+bash demo/data/importer_base_neuve.sh demo_sirs_locale
 ```
 
-Adapter le service libpq à une connexion locale vérifiée. Pour réinitialiser
-le référentiel déjà chargé, utiliser le SQL ci-dessus plutôt que refaire un
-append OGR. Le test `plugin/tests/test_categories_postgres.py` vérifie cet import,
-la concordance des quatre catégories et des neuf types, puis deux passages SQL.
-Les tests PostgreSQL automatisés créent leurs propres bases jetables ; ils
-ne migrent pas la base de démonstration permanente.
+Le nom explicite et le socket local sont obligatoires pour sélectionner la destination (socket par défaut `/var/run/postgresql`). L’import refuse une base occupée. Une transaction unique installe le modèle, ses 22 catalogues et leurs 298 valeurs, les données du socle, les enfants patrimoniaux, les prestations puis le suivi. Un échec annule le chargement. L’emplacement d’une extension PostGIS déjà installée est détecté automatiquement.
 
+## Sources et scénarios
+
+- `gpkg/sites_terrestres.gpkg` contient les 12 sites et trois couches enfants, toutes directement rattachées à un site. Les 25 emprises sont conservées. Elles décrivent 19 objets de végétation, 4 mobiliers et 2 cheminements. `data/generer_sites.py` réexporte ces couches.
+- `gpkg/prestations.gpkg` contient les 100 interventions, avec leurs dix colonnes de cible possibles. `data/generer_prestations.py` exporte les attributs et les coordonnées enregistrées. Les quantités décimales sont conservées dans leur représentation texte source jusqu’au chargement en NUMERIC. Les 12 débroussaillages sur enfant empruntent la géométrie de la végétation. Les 88 autres prestations gardent leur forme propre.
+- `data/14_patrimoine.sql` est la source des sept tronçons fictifs et des trois objets techniques. Leurs formes sont définies sur le repère figé de la Digue des Prés. `data/16_suivi.sql` fournit deux désordres, quatre observations et trois références photographiques. Les clés des photos patrimoniales sont relatives à `demo/`. Deux désignent des illustrations locales existantes et une représente un fichier manquant.
+- Les photos des prestations conservent leurs deux champs directs et leurs commentaires. 25 interventions utilisent les JPEG locaux, 25 les références réseau de `photos/photos_serveur.csv`, 50 n’ont aucune photographie. L’accès au lecteur distant dépend du poste.
+- Exécuter les générateurs avec Python et les liaisons GDAL/OGR. La qualification des sources se lance avec `/usr/bin/python3 plugin/tests/test_demo_topologie.py`, celle des deux reconstructions avec `/usr/bin/python3 plugin/tests/test_demo_import.py` (Docker). L’audit spatial `data/auditer_prestations_spatial.py` prend sa connexion via libpq. En lecture seule, il distingue forme propre, type de localisation effective et origine des mesures.
+
+Les identités, les scénarios de remplacement et les résultats des contrôles sont détaillés dans le [rapport SIG-FUSION-09](../audits/SIG-FUSION-09-demo.md).
 
 ## Contenu
 
@@ -84,12 +75,7 @@ déclarée 96 m²). Rapport stockage : 8 directes. Rapport Remblai1 : 1 directe
 Rapport Ruisseau du Pré Neuf : 1 prestation, conservant sa FK rivière et sa
 géométrie propre. Rapport global : 100 UUID distincts.
 
-Contrôles reproductibles sur PostGIS jetable :
-`/usr/bin/python3 plugin/tests/test_demo_import.py` pour l'installation neuve
-et les générateurs ; `QT_QPA_PLATFORM=offscreen DEMO_AH_PDFS=1 /usr/bin/python3
-plugin/tests/test_demo_ah_reports.py` pour les appartenances, les cartes et les
-six PDF de contrôle dans `audits/demo_ah_01/`. Ces tests ne se connectent pas à
-Supabase et ne modifient aucun GeoPackage source.
+Les appartenances attendues pour les futurs rapports QGIS servent de témoins fonctionnels pour SIG-FUSION-10. La qualification de cette version porte sur l’import, les géométries et les relations PostgreSQL.
 
 Pour obtenir des **propositions sans écriture**, utiliser
 `SELECT * FROM milieux.ah_sections_candidates(:ah_id)`. L’intersection de
@@ -176,120 +162,12 @@ politique NOT NULL ON CONFLICT REPLACE (elle ne remplace aucune entité).
 Ne jamais utiliser les GPKG
 CABBALR pour générer les imports fictifs. Les sauvegardes restent hors Git.
 
-- `../model/schema.sql` : création d'une base PostgreSQL/PostGIS neuve dans le schéma métier `milieux`.
-- `../model/schema.mmd` : diagramme relationnel correspondant au schéma SQL.
-- Les fichiers SQL numérotés jusqu'à `data/15_prestations.sql` et `data/digues.sql` : imports fictifs dans l'ordre de `importer_base_neuve.sh`.
-- `data/generer_cours_eau.py` : reconstruit les imports SQL hydrographiques depuis `gpkg/cours_eau.gpkg`, source fictive unique.
-- `data/generer_digues.py` : réexporte `data/digues.sql` depuis `gpkg/digues.gpkg`, sans recalculer les géométries synchronisées depuis QGIS.
-- `data/generer_prestations.py` : réexporte les 100 prestations courantes du GeoPackage vers le SQL, sans recalculer leurs géométries ni modifier leurs attributs.
-- `data/auditer_prestations_spatial.py` : audite en lecture seule les distances aux patrimoines et les concentrations spatiales ; la connexion est fournie par les variables libpq `PG*` et les livrables sont écrits dans `audits/`.
-- `data/importer_base_neuve.sh` : exécution du schéma puis des imports conservés avec `psql`.
-- `gpkg/ah.gpkg` et `gpkg/sites_terrestres.gpkg` contiennent 10 AH, 13 ouvrages, 12 sites MultiPolygon et 25 zones fictives (17 MultiPolygon, 4 MultiPoint et 4 MultiLineString). Les ouvrages sont des segments déterministes des contours de stockage, sans valeur de terrain.
-- `data/generer_sites.py` réexporte les sites et zones dans `data/10_sites_terrestres.sql` à partir de leur GeoPackage.
-- `gpkg/cours_eau.gpkg` : 58 cours d’eau fictifs (53 monosections, cinq multiparties), une direction TRUE par convention fictive DEMO-AH-01, 57 directions NULL.
-- `gpkg/ah.gpkg`, couche `ah_sections` : une référence hydrographique acceptée pour RC du Pré des Saules, calculée par le serveur.
-- `gpkg/digues.gpkg` : couche spatiale fictive `digues`, trois repères rattachés chacun à une digue.
-- `gpkg/prestations.gpkg` : 100 prestations fictives, réparties sur les six types géométriques autorisés.
-
-Le jeu conserve une répartition déterministe des photographies de `photos/` :
-25 prestations utilisent les cinq JPEG locaux,
-25 utilisent chacune une ou deux des 40 références de `photos/photos_serveur.csv`,
-et 50 ne portent aucune photographie dans les sources reproductibles. Les quatre
-champs photo sont identiques dans le SQL et le GeoPackage. Les références locales
-ont la forme portable `photos/nom.jpg` et sont résolues depuis le dossier de
-`prestations_demo.qgz`. Les références distantes `J:\\` sont conservées telles
-quelles et nécessitent le lecteur réseau concerné ; elles ne désignent aucun
-des cinq fichiers de démonstration locaux.
-
-Les champs décimaux `prestations.quantite`, `ah_stockage.surface_ha` et
-`sites_zones.surface_ha` sont stockés en texte dans les GeoPackages : le type
-GeoPackage `REAL` arrondit les valeurs décimales de haute précision. Lors d'un
-import, convertir explicitement ces textes en `NUMERIC` après validation de leur
-syntaxe. Le champ `prestations.statut` contient un code ; résoudre
-`statut_id` par `statuts_prestations.code` et refuser tout code inconnu.
-Les six FK patrimoniales sont présentes dans le GeoPackage des prestations.
-Le référentiel des statuts et ses quatre UUID canoniques sont initialisés par
-`model/schema.sql` ; les imports résolvent les codes sans recréer ces lignes.
-Les colonnes de traçabilité sont renseignées
-par les triggers PostgreSQL. Pour un chargement intermédiaire avec `ogr2ogr`,
-utiliser `-unsetDefault` afin de ne pas recopier le défaut SQLite entier `0`
-des booléens dans une colonne PostgreSQL. Pour `cours_eau`, omettre `section`
-et `valide` des INSERT/UPDATE PostgreSQL : ces colonnes sont générées.
-Le fichier SQL 15 conserve explicitement les 100 rattachements fictifs du
-modèle actuel au moyen des six clés étrangères directes.
-
-Les 10 stockages et les 12 zones polygonales historiques conservent leurs UUID. Les 13 nouvelles zones ont des UUID déterministes. Chaque parent fictif conserve son UUID. Le modèle autorise zéro ou un stockage et zéro à plusieurs ouvrages par AH ; les données fictives actuelles ont un stockage par parent et trois AH ont deux ouvrages. Les zones polygonales sont des sous-emprises localisées à l'intérieur des sites, avec cinq sites possédant deux polygones distincts.
-
-Un site terrestre peut posséder zéro à plusieurs zones. Chaque zone doit
-référencer exactement un site existant par `site_terrestre_id NOT NULL`.
-La FK `ON DELETE RESTRICT` interdit de supprimer un site tant qu'une zone le
-référence ; un site sans zone est valide. Aucune contenance géométrique n'est
-imposée par cette relation.
-La table `ah` n'a pas de géométrie : pour le contrôle topologique du jeu fictif,
-l'emprise de chaque AH est celle de son stockage unique. Les emprises AH et
-sites terrestres ne se chevauchent plus en surface ; les ouvrages suivent les
-limites de leur stockage. Les prestations conservent leurs géométries et liens.
-
-Le schéma et les imports détectent automatiquement le schéma d'installation de l'extension PostGIS. La même version fonctionne donc avec PostGIS dans `public`, `extensions` (Supabase) ou un autre schéma, sans variante concurrente.
-
-## Installation neuve
-
-1. Installer l'extension PostGIS dans la base cible, dans le schéma souhaité.
-2. Depuis `demo/`, exécuter `bash data/importer_base_neuve.sh [nom_base]`. Le fichier `15_prestations.sql` contient les prestations et leurs six FK patrimoniales.
-3. Vérifier les effectifs et les contraintes avant de configurer les relations QGIS.
-
-Le script de création est réservé à une base neuve et s'arrête à la première erreur. Les prestations d'entretien végétal restent présentes comme types de prestations ; aucune association patrimoniale de remplacement n'est déduite.
-
-## Rattachements, géométrie et reconstruction
-
-Chaque prestation choisit exactement un mode : cours d'eau, digue, stockage,
-ouvrage, site terrestre parent ou une zone terrestre enfant (six FK nullables dans prestations). Le site parent
-et ses zones ne peuvent pas être rattachés simultanément.
-
-La géométrie propre est obligatoire pour cours d'eau, digue et site parent.
-Pour un site parent, elle est enregistrée en MultiPoint, MultiLineString ou
-MultiPolygon, y compris si elle comporte une seule partie.
-Elle est recommandée mais facultative pour les AH ; elle est interdite pour les
-zones enfants. Les prestations sur zone conservent `geom = NULL` ; la vue
-`milieux.prestations_carte` utilise directement `sites_zones.geom`, sans copie.
-Les trois couches de prestations du projet lisent cette vue cartographique,
-en lecture seule. L'édition métier reste effectuée par le plugin sur la table
-`prestations`. Les mesures de `prestations_fiches` portent sur toute la géométrie
-propre. Les filtres communaux utilisent la géométrie cartographique effective.
-Les prestations sur zone conservent leur quantité et leur unité déclarées.
-
-Position et rive restent déclaratives, applicables uniquement aux cours d'eau,
-digues et ouvrages ; leurs défauts sont Indéfini et Indéfinie.
-
-La source SQL 15 installe les prestations et leurs rattachements
-dans une transaction. generer_prestations.py réexporte les 100 objets du
-GeoPackage courant, sans translation, copie de géométrie ou recalage historique.
-Les coordonnées modifiées manuellement restent donc conservées.
-
-Les 100 prestations conservent leurs UUID, attributs et rattachements. Les 12
-prestations sur zone n'ont aucune géométrie propre ; celles des autres modes
-restent conservées. Leurs 100 rattachements sont
-répartis en 62 cours d'eau, 1 digue, 13 stockages, 6 ouvrages, 6 sites parents et
-12 zones. Les six FK figurent dans `15_prestations.sql`.
-
-## Politique de consolidation des données fictives
-
-Supabase est la référence pour les modifications manuelles apportées au jeu de
-démonstration. Après une modification validée, les GeoPackages et les imports
-SQL canoniques du dépôt sont resynchronisés afin qu'une installation neuve
-reproduise directement l'état courant, sans rejouer une chaîne de migrations.
-
-Les scripts génériques d'import, d'export et d'audit sont conservés lorsqu'ils
-rendent un service permanent. Les migrations et correctifs ponctuels sont
-supprimés après application et validation de leur résultat dans les sources
-canoniques. L'historique Git suffit à retrouver ces opérations passées.
-
 ## Traçabilité
 
 Chaque table métier conserve automatiquement `modifie_par` (compte PostgreSQL `session_user`) et `date_modification`. Chaque prestation porte un `technicien_id` obligatoire, indépendant du compte auteur.
 
 
-## Digues dans QGIS (DIG-02)
+## Repères de digues et projet QGIS à adapter (DIG-02)
 
 La création d’un repère ou un changement de rivière/fractions exige le même
 contrôle de qualification que les sections AH. Les changements attributaires

@@ -3,6 +3,7 @@
 Run explicitly with Docker. No host port is published and no real data is read.
 """
 
+import json
 import csv
 import time
 import hashlib
@@ -25,13 +26,13 @@ def source_spatial_expectations():
     prestations = ogr.Open(str(ROOT / 'demo/gpkg/prestations.gpkg'))
     zones_source = ogr.Open(str(ROOT / 'demo/gpkg/sites_terrestres.gpkg'))
     zones = {f.GetField('id'):f.GetGeometryRef().Clone()
-             for f in zones_source.GetLayerByName('sites_zones')}
+             for family in ('mobilier','cheminements','vegetation') for f in zones_source.GetLayerByName(family)}
     pairs, groups, multipart = [], set(), 0
     for layer in prestations:
         for feature in layer:
             geom = feature.GetGeometryRef()
             multipart += int(geom is not None and geom.GetGeometryName().startswith('MULTI'))
-            zone = feature.GetField('site_zone_id')
+            zone = feature['vegetation_id'] or feature['mobilier_id'] or feature['cheminement_id']
             if zone:
                 assert geom is None
                 geom = zones[zone]
@@ -43,8 +44,81 @@ def source_spatial_expectations():
     return multipart, f'{len(set(pairs))}|{len(pairs)}', f'{len(groups)}|{len(pairs)}'
 
 
+def check_patrimony(query):
+    from test_sirs_postgis import projection
+    tables, columns, _, catalogs = projection()
+    assert query("SELECT to_regclass('milieux.sites_zones') IS NULL") == "t"
+    for table, expected in catalogs.items():
+        keys = ", ".join(expected[0])
+        rows = json.loads(query(f"SELECT json_agg(r ORDER BY id) FROM (SELECT {keys} FROM {table}) r"))
+        assert rows == sorted(expected, key=lambda row: row["id"]), table
+    assert query("SELECT count(DISTINCT type_troncon_id) FROM public.troncons WHERE digue_id IS NOT NULL") == "7"
+    for table,num in (("troncons",7),("ouvrages_particuliers",1),("ouvrages_hydrauliques",1),
+                      ("equipements_mesure",1),("desordres",2),("observations",4),("photos",3)):
+        assert int(query(f"SELECT count(*) FROM public.{table}")) == num
+    assert query("SELECT count(*) FROM public.desordres WHERE date_fin IS NULL") == "1"
+    assert query("SELECT max(n) FROM (SELECT count(DISTINCT date_observation) n FROM public.observations GROUP BY desordre_id) h") == "2"
+    assert query("SELECT count(*) FROM public.observations WHERE equipement_mesure_id IS NOT NULL AND desordre_id IS NULL") == "1"
+    assert query("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='photos' AND udt_name='geometry'") == "0"
+    assert query("SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='photos' AND column_name='observation_id'") == "NO"
+    assert query("SELECT max(n) FROM (SELECT count(*) n FROM public.photos GROUP BY observation_id) g") == "2"
+    assert query("SELECT count(*) FROM public.photos p JOIN public.observations o ON o.id=p.observation_id "
+                 "WHERE p.date_photo=o.date_observation AND p.designation IS NOT NULL") == "3"
+    keys = query("SELECT storage_key FROM public.photos ORDER BY id").splitlines()
+    assert sorted((ROOT/'demo'/key).is_file() for key in keys) == [False, True, True]
+    assert query("BEGIN; UPDATE public.desordres SET date_fin='2026-06-30' WHERE date_fin IS NULL; "
+                 "SELECT count(*) FROM public.photos p JOIN public.observations o ON o.id=p.observation_id "
+                 "JOIN public.desordres d ON d.id=o.desordre_id WHERE d.date_fin IS NOT NULL; ROLLBACK;").splitlines()[-2] == "3"
+    src = ogr.Open(str(ROOT/'demo/gpkg/sites_terrestres.gpkg'))
+    for family, fk in (("mobilier","mobilier_id"),("cheminements","cheminement_id"),("vegetation","vegetation_id")):
+        expected = {f["id"]:(f["site_terrestre_id"],f.GetGeometryRef().ExportToWkb().hex())
+                    for f in src.GetLayerByName(family)}
+        data = query(f"SELECT id,site_terrestre_id,encode(ST_AsBinary(geometry),'hex') FROM public.{family} "
+                     "WHERE num_nonnulls(ah_stockage_id,ah_section_id,ah_ouvrage_id,troncon_id)=0")
+        assert {uid:(site,wkb) for uid,site,wkb in (line.split('|') for line in data.splitlines())} == expected
+        # Exercise fallback for all three families without adding a historical prestation.
+        clear = "vegetation_id=NULL, " if fk != "vegetation_id" else ""
+        result = query(f"BEGIN; UPDATE milieux.prestations SET {clear}{fk}=(SELECT id FROM public.{family} ORDER BY id LIMIT 1) "
+                       "WHERE vegetation_id IS NOT NULL; "
+                       f"SELECT count(*) FROM milieux.prestations p JOIN public.{family} f ON p.{fk}=f.id "
+                       "JOIN milieux.prestations_carte c ON c.id=p.id WHERE p.geom IS NULL "
+                       "AND p.origine_mesures='Patrimoine de rattachement' AND ST_OrderingEquals(c.geom,f.geometry); ROLLBACK;"
+                       )
+        assert "12" in result.splitlines()
+    package = ogr.Open(str(ROOT/'demo/gpkg/prestations.gpkg'))
+    rows = json.loads(query("""
+        SELECT json_agg(to_jsonb(p) || jsonb_build_object('statut', s.code, 'quantite', p.quantite::text,
+                                                          'wkb', encode(ST_AsBinary(p.geom),'hex')))
+        FROM milieux.prestations p JOIN milieux.statuts_prestations s ON s.id=p.statut_id
+    """))
+    imported = {row["id"]: row for row in rows}
+    assert len(imported) == 100
+    for layer in package:
+        for feature in layer:
+            row = imported[feature["id"]]
+            for field in feature.keys():
+                assert row[field] == feature[field], (feature["id"], field)
+            geom = feature.GetGeometryRef()
+            assert row["wkb"] == (geom.ExportToWkb().hex() if geom is not None else None)
+    # Independent digests for every business identity and geometry, including the frozen axes.
+    digests = []
+    for table in sorted(tables):
+        value = "(to_jsonb(t)-ARRAY['cree_le','modifie_par','date_modification','date_validation'])::text"
+        for (owner, col), (typ, _, _) in columns.items():
+            if owner == table and typ == "geometry":
+                value += f" || coalesce(encode(ST_AsEWKB({col}),'hex'),'NULL')"
+        digests.append(f"SELECT '{table}' AS name, md5(string_agg(value,'|' ORDER BY value)) AS digest "
+                       f"FROM (SELECT {value} AS value FROM {table} t) x")
+    return query("SELECT * FROM (" + " UNION ALL ".join(digests) + ") hashes ORDER BY name")
+
+
 def main():
     ogr.UseExceptions()
+    from test_demo_topologie import main as check_sources
+    check_sources()
+    refused = command("bash", str(ROOT/"demo/data/importer_base_neuve.sh"), check=False)
+    assert refused.returncode == 2
+    snapshots = []
     with TemporaryDirectory(dir=ROOT / 'audits') as temporary:
         from pathlib import Path
         demo = Path(temporary) / 'demo'
@@ -223,7 +297,7 @@ def main():
                          "table_schema='milieux' AND table_name='prestations__techniciens'") == "0"
             for column, expected in (("ah_stockage_id","13"),("ah_ouvrage_id","6"),("cours_eau_id","62"),("digue_id","1"),("site_terrestre_id","6")):
                 assert query(f"SELECT count({column}) FROM milieux.prestations") == expected
-            assert query("SELECT count(site_zone_id) FROM milieux.prestations") == "12"
+            assert query("SELECT count(vegetation_id) FROM milieux.prestations") == "12"
             assert query("SELECT to_regclass('milieux.prestations__sites_zones') IS NULL") == "t"
             assert query("SELECT count(*) FROM milieux.digues;") == "3"
             assert query("SELECT count(*) FROM milieux.digues_reperes;") == "3"
@@ -249,12 +323,12 @@ def main():
                 )
                 assert distance and float(distance) < 1e-6, (uid, distance)
             assert query("SELECT count(*) FROM milieux.prestations WHERE geom IS NOT NULL;") == "88"
-            assert query("SELECT count(*) FROM milieux.prestations WHERE site_zone_id IS NOT NULL AND geom IS NULL") == "12"
+            assert query("SELECT count(*) FROM milieux.prestations WHERE vegetation_id IS NOT NULL AND geom IS NULL") == "12"
             assert query("SELECT count(*) FROM milieux.prestations_carte WHERE geom IS NOT NULL") == "100"
-            assert query("SELECT count(*) FROM milieux.prestations p JOIN milieux.sites_zones z ON z.id=p.site_zone_id JOIN milieux.prestations_carte c ON c.id=p.id WHERE ST_OrderingEquals(c.geom,z.geom)") == "12"
+            assert query("SELECT count(*) FROM milieux.prestations p JOIN public.vegetation z ON z.id=p.vegetation_id JOIN milieux.prestations_carte c ON c.id=p.id WHERE ST_OrderingEquals(c.geom,z.geometry)") == "12"
             assert query("SELECT count(*) FROM milieux.prestations WHERE position='Indéfini';") == "100"
             assert query("SELECT count(*) FROM milieux.prestations p WHERE "
-                         "num_nonnulls(cours_eau_id,digue_id,ah_stockage_id,ah_ouvrage_id,site_terrestre_id,site_zone_id)=1") == "100"
+                         "num_nonnulls(cours_eau_id,digue_id,ah_stockage_id,ah_ouvrage_id,site_terrestre_id,troncon_id,ah_section_id,vegetation_id,cheminement_id,mobilier_id)=1") == "100"
             assert query("SELECT count(DISTINCT ST_GeometryType(geom)) "
                          "FROM milieux.prestations;") == "6"
             assert query("SELECT count(*) FROM milieux.prestations WHERE "
@@ -291,7 +365,7 @@ def main():
                 "techniciens": 4, "communes": 100, "prestataires": 6,
                 "types_prestations": 9, "ah": 10, "ah_stockage": 10,
                 "ah_ouvrage": 13, "sites_terrestres": 12,
-                "sites_zones": 25,
+
                 "cours_eau": 58,
             }
             for table, expected in expected_counts.items():
@@ -311,15 +385,17 @@ def main():
             assert query("SELECT count(*) FROM (SELECT ah_id FROM milieux.ah_ouvrage "
                          "GROUP BY ah_id HAVING count(*)>1) parents;") == "3"
             assert query("SELECT count(*) FROM milieux.sites_terrestres s WHERE "
-                         "NOT EXISTS (SELECT 1 FROM milieux.sites_zones z WHERE z.site_terrestre_id=s.id);") == "0"
+                         "NOT EXISTS (SELECT site_terrestre_id FROM public.vegetation WHERE site_terrestre_id=s.id UNION ALL SELECT site_terrestre_id FROM public.cheminements WHERE site_terrestre_id=s.id UNION ALL SELECT site_terrestre_id FROM public.mobilier WHERE site_terrestre_id=s.id);") == "0"
             assert query("SELECT count(*) FROM milieux.ah_stockage WHERE ST_IsEmpty(geom) "
                          "OR NOT ST_IsValid(geom) OR ST_GeometryType(geom)<>'ST_Polygon';") == "0"
             assert query("SELECT count(*) FROM milieux.ah_ouvrage WHERE ST_IsEmpty(geom) "
                          "OR NOT ST_IsValid(geom) OR ST_GeometryType(geom)<>'ST_LineString';") == "0"
-            assert query("SELECT count(*) FROM milieux.sites_zones WHERE ST_IsEmpty(geom) "
-                         "OR NOT ST_IsValid(geom) OR ST_GeometryType(geom) "
-                         "NOT IN ('ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon');") == "0"
+            snapshots.append(check_patrimony(query))
+            rerun = command("docker", "exec", "-e", "PGUSER=postgres", container, "bash",
+                            "/repo/demo/data/importer_base_neuve.sh", database, check=False)
+            assert rerun.returncode and "Base locale vide requise" in rerun.stderr
             print(f"Import complet depuis model/schema.sql : PostGIS dans {extension_schema}, OK")
+        assert snapshots[0] == snapshots[1], "Reconstructions divergentes"
     finally:
         command("docker", "stop", container, check=False)
 

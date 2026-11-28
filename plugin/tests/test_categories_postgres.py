@@ -8,7 +8,7 @@ from test_postgres_integration import ROOT, command, sql
 def main():
     container = "sig-categories-" + uuid4().hex[:8]
     command("docker", "run", "--rm", "-d", "--name", container,
-            "-p", "127.0.0.1::5432", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "postgis/postgis:16-3.4")
+            "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "postgis/postgis:16-3.4")
     try:
         for _ in range(60):
             if command("docker", "exec", container, "pg_isready", "-h", "127.0.0.1",
@@ -17,12 +17,7 @@ def main():
             time.sleep(.5)
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text())
-        port = command("docker", "port", container, "5432").stdout.strip().rsplit(":", 1)[-1]
-        command("ogr2ogr", "-f", "PostgreSQL",
-                f"PG:host=127.0.0.1 port={port} dbname=postgres user=postgres",
-                str(ROOT / "demo/gpkg/referentiels.gpkg"),
-                "-append", "-nln", "milieux.types_prestations",
-                "-sql", "SELECT id,code,libelle,actif,categorie_id FROM types_prestations", "-unsetFid")
+        # Les types sont déjà installés. Comparer directement au témoin GeoPackage.
         imported = sql(container, "SELECT id,code,libelle,categorie_id FROM "
                        "milieux.types_prestations ORDER BY code").stdout
         # Reinitializing the reference twice must neither duplicate nor renumber it.
@@ -60,7 +55,7 @@ def main():
         assert sql(container, "SET ROLE milieux_consultation; "
                    "SELECT count(*) FROM milieux.prestations_categorie").stdout.strip().endswith("4")
         print("PostGIS neuf : catégories, classement 3/2/3/1, UUID/libellés SQL-GPKG, "
-              "NOT NULL, clés étrangères, droits, import OGR et réinitialisation sans doublon OK")
+              "NOT NULL, clés étrangères, droits et réinitialisation sans doublon OK")
     finally:
         command("docker", "stop", container, check=False)
 

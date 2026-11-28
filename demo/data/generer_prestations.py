@@ -11,6 +11,11 @@ SQL = ROOT / "data" / "15_prestations.sql"
 PHOTO_FIELDS = ("photo_1", "photo_1_commentaire", "photo_2", "photo_2_commentaire")
 
 
+TARGETS = ("cours_eau_id", "digue_id", "ah_stockage_id", "ah_ouvrage_id", "ah_section_id",
+           "site_terrestre_id", "troncon_id", "mobilier_id", "cheminement_id", "vegetation_id")
+OWN = {"cours_eau_id", "digue_id", "troncon_id", "site_terrestre_id", "ah_section_id"}
+
+
 def quoted(value):
     return "'" + str(value).replace("'", "''") + "'"
 
@@ -28,16 +33,24 @@ def main():
     fields = ("id", "intitule", "type_prestation_id", "prestataire_id",
               "technicien_id", "date_debut", "date_fin", "quantite", "unite",
               "description", "position", "rive", *PHOTO_FIELDS,
-              "cours_eau_id", "digue_id", "ah_stockage_id", "ah_ouvrage_id", "site_terrestre_id", "site_zone_id", "ah_section_id")
+              *TARGETS)
     for layer in source:
+        if layer.GetSpatialRef().GetAuthorityCode(None) != "3950":
+            raise ValueError(f"SRID incorrect pour {layer.GetName()}")
         for feature in layer:
             values = [feature.GetField(name) for name in fields]
             code = feature.GetField("statut")
             geometry = feature.GetGeometryRef()
-            if feature.GetField("ah_section_id") and geometry is None:
-                raise ValueError(f"La prestation {feature.GetField('id')} sur section AH doit avoir sa géométrie propre")
-            if feature.GetField("site_zone_id") and geometry is not None:
-                raise ValueError(f"La prestation {feature.GetField('id')} sur zone doit avoir une géométrie NULL")
+            targets = [key for key in TARGETS if feature[key]]
+            if len(targets) != 1 or (targets[0] in OWN and geometry is None):
+                raise ValueError(f"Cible ou géométrie propre incorrecte pour {feature['id']}")
+            if geometry is not None and (geometry.IsEmpty() or not geometry.IsValid()
+                    or geometry.Is3D() or geometry.IsMeasured() or geometry.GetGeometryName() not in
+                    {"POINT","MULTIPOINT","LINESTRING","MULTILINESTRING","POLYGON","MULTIPOLYGON"}):
+                raise ValueError(f"Géométrie incompatible pour {feature['id']}")
+            required = ("id", "type_prestation_id", "prestataire_id", "technicien_id", "date_debut", "date_fin")
+            if not all(feature[key] for key in required) or not code:
+                raise ValueError(f"Attribut obligatoire absent pour {feature['id']}")
             if feature.GetField("site_terrestre_id") and (
                     geometry is None or geometry.GetGeometryName() not in
                     ("MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON")):

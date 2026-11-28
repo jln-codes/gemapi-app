@@ -49,10 +49,17 @@ WITH references_patrimoniales AS (
       FROM milieux.prestations p
       JOIN milieux.sites_terrestres s ON s.id=p.site_terrestre_id
     UNION ALL
-    SELECT p.id, 'site_zone', z.id, z.nom, s.id, s.nom, z.geom
-      FROM milieux.prestations p
-      JOIN milieux.sites_zones z ON z.id=p.site_zone_id
-      JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    SELECT p.id, 'troncon', z.id, z.designation, d.id, d.nom, z.geometry FROM milieux.prestations p JOIN public.troncons z ON z.id=p.troncon_id
+    JOIN milieux.digues d ON d.id=z.digue_id
+    UNION ALL
+    SELECT p.id, 'mobilier', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
+    FROM milieux.prestations p JOIN public.mobilier z ON z.id=p.mobilier_id LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    UNION ALL
+    SELECT p.id, 'cheminement', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
+    FROM milieux.prestations p JOIN public.cheminements z ON z.id=p.cheminement_id LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    UNION ALL
+    SELECT p.id, 'vegetation', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
+    FROM milieux.prestations p JOIN public.vegetation z ON z.id=p.vegetation_id LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
 ),
 candidats AS (
     SELECT 'cours_eau'::text famille, id patrimoine_id, nom patrimoine_nom,
@@ -75,8 +82,17 @@ candidats AS (
     SELECT 'site_terrestre', id, nom, NULL::uuid, NULL::text, geom
       FROM milieux.sites_terrestres
     UNION ALL
-    SELECT 'site_zone', z.id, z.nom, s.id, s.nom, z.geom
-      FROM milieux.sites_zones z JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    SELECT 'troncon', z.id, z.designation, d.id, d.nom, z.geometry FROM public.troncons z
+    JOIN milieux.digues d ON d.id=z.digue_id
+    UNION ALL
+    SELECT 'mobilier', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
+    FROM public.mobilier z LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    UNION ALL
+    SELECT 'cheminement', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
+    FROM public.cheminements z LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
+    UNION ALL
+    SELECT 'vegetation', z.id, z.designation, coalesce(z.site_terrestre_id,z.troncon_id,z.ah_ouvrage_id,z.ah_stockage_id,z.ah_section_id), s.nom, z.geometry
+    FROM public.vegetation z LEFT JOIN milieux.sites_terrestres s ON s.id=z.site_terrestre_id
 ),
 base AS (
     SELECT p.*, tp.libelle AS type_prestation, r.famille,
@@ -86,7 +102,7 @@ base AS (
       JOIN milieux.types_prestations tp ON tp.id=p.type_prestation_id
       LEFT JOIN references_patrimoniales r ON r.prestation_id=p.id
 )
-SELECT b.id, b.intitule, b.type_prestation, b.famille,
+SELECT b.origine_mesures, ST_GeometryType(carte.geom) AS type_effectif, b.id, b.intitule, b.type_prestation, b.famille,
        b.patrimoine_id, b.patrimoine_nom, b.parent_id, b.parent_nom,
        CASE WHEN b.geom IS NULL THEN NULL ELSE ST_GeometryType(b.geom) END AS type_geometrie,
        b.geom IS NOT NULL AS geometrie_presente,
@@ -114,7 +130,7 @@ SELECT b.id, b.intitule, b.type_prestation, b.famille,
        CASE WHEN b.geom IS NULL OR b.patrimoine_geom IS NULL THEN NULL
             ELSE ST_AsBinary(ST_ShortestLine(b.geom,b.patrimoine_geom)) END AS liaison_wkb,
        alt.liaison_wkb AS alternative_liaison_wkb
-  FROM base b
+  FROM base b JOIN milieux.prestations_carte carte ON carte.id=b.id
   LEFT JOIN LATERAL (
       SELECT c.famille, c.patrimoine_id, c.patrimoine_nom, c.parent_nom,
              ST_Distance(b.geom,c.geom) AS distance_m,
@@ -139,9 +155,12 @@ affectations AS (
                 WHEN p.ah_stockage_id IS NOT NULL THEN 'ah_stockage'
                 WHEN p.ah_ouvrage_id IS NOT NULL THEN 'ah_ouvrage'
                 WHEN p.site_terrestre_id IS NOT NULL THEN 'site_terrestre'
-                WHEN p.site_zone_id IS NOT NULL THEN 'site_zone' END AS famille,
+                WHEN p.troncon_id IS NOT NULL THEN 'troncon'
+                WHEN p.mobilier_id IS NOT NULL THEN 'mobilier'
+                WHEN p.cheminement_id IS NOT NULL THEN 'cheminement'
+                WHEN p.vegetation_id IS NOT NULL THEN 'vegetation' END AS famille,
            coalesce(p.cours_eau_id,p.digue_id,p.ah_stockage_id,p.ah_ouvrage_id,
-                    p.site_terrestre_id,p.site_zone_id,p.ah_section_id) AS patrimoine_id,
+                    p.site_terrestre_id,p.troncon_id,p.mobilier_id,p.cheminement_id,p.vegetation_id,p.ah_section_id) AS patrimoine_id,
            p.geom,
            ST_ClusterDBSCAN(p.geom, eps := r.rayon_m, minpoints := 2)
                OVER (PARTITION BY r.rayon_m) AS cluster_id
@@ -171,7 +190,7 @@ def severity(row):
     distance = row["distance_patrimoine_m"]
     family = row["famille"]
     if not row["geometrie_presente"]:
-        if family in {"ah_stockage", "ah_ouvrage", "site_zone"}:
+        if family in {"ah_stockage", "ah_ouvrage", "vegetation", "mobilier", "cheminement"}:
             return 0, "sans_geometrie_autorisee", "Géométrie propre facultative pour ce rattachement"
         return 4, "critique", "Géométrie obligatoire absente"
     if distance is None:
@@ -229,6 +248,9 @@ def main():
     try:
         with connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout='5min'")
+            cursor.execute("""SELECT set_config('search_path',format('pg_catalog,%I,milieux',n.nspname),true)
+                              FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
+                              WHERE e.extname='postgis'""")
             cursor.execute(INVENTORY_SQL)
             columns = [item.name for item in cursor.description]
             inventory = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -262,7 +284,7 @@ def main():
     anomaly_fields = [
         "id", "intitule", "type_prestation", "famille", "patrimoine_id",
         "patrimoine_nom", "parent_id", "parent_nom", "type_geometrie",
-        "geometrie_presente", "distance_patrimoine_m", "intersecte_patrimoine",
+        "origine_mesures", "type_effectif", "geometrie_presente", "distance_patrimoine_m", "intersecte_patrimoine",
         "patrimoines_dans_25m", "patrimoines_dans_50m",
         "alternative_famille", "alternative_id", "alternative_nom",
         "alternative_parent_nom", "alternative_distance_m",
@@ -389,6 +411,8 @@ def main():
         }
     summary = {
         "prestations": len(inventory),
+        "origines_mesures": dict(Counter(row["origine_mesures"] for row in inventory)),
+        "types_effectifs": dict(Counter(row["type_effectif"] or "NULL" for row in inventory)),
         "geometries_presentes": sum(row["geometrie_presente"] for row in inventory),
         "types_geometrie": dict(Counter(row["type_geometrie"] or "NULL" for row in inventory)),
         "familles": dict(Counter(row["famille"] for row in inventory)),
