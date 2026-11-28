@@ -4,17 +4,39 @@ from uuid import uuid4
 
 import psycopg2
 
-from test_postgres_integration import ROOT, command, sql
-
 
 PROFILES = {'roles_reader': 'milieux_consultation',
             'roles_editor': 'milieux_prestations',
             'roles_manager': 'milieux_patrimoine'}
 PATRIMONY = {'ah', 'ah_stockage', 'ah_ouvrage', 'ah_sections', 'cours_eau',
-             'digues', 'digues_reperes', 'sites_terrestres', 'sites_zones'}
+             'digues', 'digues_reperes', 'sites_terrestres'}
+
+
+def check_hydrography(connect, login, ids):
+    with connect(login) as db, db.cursor() as c:
+        c.execute("INSERT INTO milieux.digues(nom) VALUES ('Digue fictive') RETURNING id");digue=c.fetchone()[0]
+        c.execute("INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) VALUES (%s,%s,'G',0.1,0.9) RETURNING id,modifie_par",(digue,ids['river']))
+        repere, author=c.fetchone();assert author==login
+        c.execute('INSERT INTO milieux.ah_sections(ah_id,cours_eau_id,debut_fraction,fin_fraction) VALUES (%s,%s,0.2,0.8) RETURNING id,valide_par,modifie_par',(ids['ah'],ids['river']))
+        section,validator,author=c.fetchone();assert validator==author==login
+        c.execute('UPDATE milieux.ah_sections SET fin_fraction=0.7,revision_validation=revision_validation+1 WHERE id=%s',(section,))
+        c.execute('UPDATE milieux.digues_reperes SET fin_fraction=0.8,revision_validation=revision_validation+1 WHERE id=%s',(repere,))
+        c.execute('SET CONSTRAINTS ALL IMMEDIATE')
+    with connect(login) as db, db.cursor() as c:
+        try:
+            c.execute("UPDATE milieux.ah_sections SET geom_reference=ST_GeomFromText('LINESTRING(0 0,1 1)',3950) WHERE id=%s",(section,))
+        except psycopg2.Error as error:
+            assert error.pgcode=='23514';db.rollback()
+        else:raise AssertionError('Une référence figée a été modifiée librement')
+    with connect(login) as db, db.cursor() as c:
+        c.execute('DELETE FROM milieux.ah_sections WHERE id=%s',(section,))
+        c.execute('DELETE FROM milieux.digues_reperes WHERE id=%s',(repere,))
+        c.execute('DELETE FROM milieux.digues WHERE id=%s',(digue,))
 
 
 def main():
+    from test_postgres_integration import ROOT, command, sql
+
     container = 'sig-roles-' + uuid4().hex[:10]
     command('docker', 'run', '--rm', '-d', '--name', container,
             '-p', '127.0.0.1::5432', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', 'postgis/postgis:16-3.4')
@@ -42,7 +64,7 @@ def main():
                     c.execute(f'ALTER ROLE {login} IN DATABASE {database} SET search_path=pg_catalog,{extension},milieux')
                 c.execute("SELECT relname,relkind FROM pg_class WHERE relnamespace='milieux'::regnamespace AND relkind IN ('r','v')")
                 tables = c.fetchall()
-                ids = {name: str(uuid4()) for name in ('type','provider','technician','ah','river','site','zone')}
+                ids = {name: str(uuid4()) for name in ('type','provider','technician','ah','river','site','mobilier')}
                 c.execute('SET search_path=pg_catalog,'+extension+',milieux')
                 c.execute("INSERT INTO milieux.types_prestations(id,code,libelle,categorie_id) VALUES (%s,'TEST','Test','cf2572fb-9365-5ac5-bdf4-0d66581d9aaa')", (ids['type'],))
                 c.execute("INSERT INTO milieux.prestataires(id,nom) VALUES (%s,'Test')", (ids['provider'],))
@@ -51,7 +73,7 @@ def main():
                 c.execute("INSERT INTO milieux.ah_stockage(ah_id,nom,geom) VALUES (%s,'Stockage fictif',ST_GeomFromText('POLYGON((2 -2,8 -2,8 2,2 2,2 -2))',3950))", (ids['ah'],))
                 c.execute("INSERT INTO milieux.cours_eau(id,nom,source,direction,geom) VALUES (%s,'Support fictif','TEST',true,ST_Multi(ST_GeomFromText('LINESTRING(0 0,10 0)',3950)))", (ids['river'],))
                 c.execute("INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES (%s,'Site fictif',ST_GeomFromText('MULTIPOLYGON(((0 0,2 0,2 2,0 0)))',3950))", (ids['site'],))
-                c.execute("INSERT INTO milieux.sites_zones(id,site_terrestre_id,nom,geom) VALUES (%s,%s,'Zone fictive',ST_GeomFromText('MULTIPOINT((1 1))',3950))", (ids['zone'],ids['site']))
+                c.execute("INSERT INTO public.mobilier(id,site_terrestre_id,designation,type_id,geometry) VALUES (%s,%s,'Panneau fictif','PAN',ST_GeomFromText('MULTIPOINT((1 1))',3950))", (ids['mobilier'],ids['site']))
                 c.execute("SELECT id FROM milieux.statuts_prestations WHERE code='PLANIFIE'")
                 status = c.fetchone()[0]
             for login in PROFILES:
@@ -71,29 +93,11 @@ def main():
             # Native sessions verify session_user stamping, not SET ROLE impersonation.
             for login in ('roles_editor','roles_manager'):
                 with connect(login) as db, db.cursor() as c:
-                    c.execute("INSERT INTO milieux.prestations(type_prestation_id,prestataire_id,technicien_id,statut_id,date_debut,date_fin,site_zone_id) VALUES (%s,%s,%s,%s,'2026-01-01','2026-01-01',%s) RETURNING id,modifie_par", (ids['type'],ids['provider'],ids['technician'],status,ids['zone']))
+                    c.execute("INSERT INTO milieux.prestations(type_prestation_id,prestataire_id,technicien_id,statut_id,date_debut,date_fin,mobilier_id) VALUES (%s,%s,%s,%s,'2026-01-01','2026-01-01',%s) RETURNING id,modifie_par", (ids['type'],ids['provider'],ids['technician'],status,ids['mobilier']))
                     uid, author = c.fetchone();assert author==login
                     c.execute('UPDATE milieux.prestations SET description=%s WHERE id=%s',('Test',uid))
                     c.execute('DELETE FROM milieux.prestations WHERE id=%s',(uid,))
-            with connect('roles_manager') as db, db.cursor() as c:
-                c.execute("INSERT INTO milieux.digues(nom) VALUES ('Digue fictive') RETURNING id");digue=c.fetchone()[0]
-                c.execute("INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) VALUES (%s,%s,'G',0.1,0.9) RETURNING id,modifie_par",(digue,ids['river']))
-                repere, author=c.fetchone();assert author=='roles_manager'
-                c.execute('INSERT INTO milieux.ah_sections(ah_id,cours_eau_id,debut_fraction,fin_fraction) VALUES (%s,%s,0.2,0.8) RETURNING id,valide_par,modifie_par',(ids['ah'],ids['river']))
-                section,validator,author=c.fetchone();assert validator==author=='roles_manager'
-                c.execute('UPDATE milieux.ah_sections SET fin_fraction=0.7,revision_validation=revision_validation+1 WHERE id=%s',(section,))
-                c.execute('UPDATE milieux.digues_reperes SET fin_fraction=0.8,revision_validation=revision_validation+1 WHERE id=%s',(repere,))
-                c.execute('SET CONSTRAINTS ALL IMMEDIATE')
-            with connect('roles_manager') as db, db.cursor() as c:
-                try:
-                    c.execute("UPDATE milieux.ah_sections SET geom_reference=ST_GeomFromText('LINESTRING(0 0,1 1)',3950) WHERE id=%s",(section,))
-                except psycopg2.Error as error:
-                    assert error.pgcode=='23514';db.rollback()
-                else:raise AssertionError('Une référence figée a été modifiée librement')
-            with connect('roles_manager') as db, db.cursor() as c:
-                c.execute('DELETE FROM milieux.ah_sections WHERE id=%s',(section,))
-                c.execute('DELETE FROM milieux.digues_reperes WHERE id=%s',(repere,))
-                c.execute('DELETE FROM milieux.digues WHERE id=%s',(digue,))
+            check_hydrography(connect, 'roles_manager', ids)
             print(extension+': lecture de toutes les vues, matrice des trois profils, refus des droits supplémentaires, préparation/modification/suppression des références et traçabilité LOGIN : OK',flush=True)
     finally:
         command('docker','stop',container,check=False)

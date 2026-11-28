@@ -1,45 +1,962 @@
 -- SIG Prestations / PostgreSQL 16+ et PostGIS 3.3+ / installation NEUVE
--- Requiert l'extension postgis, quel que soit son schema d'installation.
+-- Utilise l’extension PostGIS existante, ou l’installe dans public.
 -- Ne pas executer sur une base existante avec ces objets.
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 CREATE SCHEMA IF NOT EXISTS milieux;
+CREATE SCHEMA IF NOT EXISTS referentiel;
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'postgis') THEN
-    RAISE EXCEPTION 'Extension PostGIS absente : installer postgis avant schema.sql';
+  IF EXISTS (SELECT FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+             WHERE n.nspname IN ('public','milieux','referentiel') AND c.relkind IN ('r','p','v','m','S','f')
+               AND NOT EXISTS (SELECT FROM pg_catalog.pg_depend dep
+                               WHERE dep.classid='pg_catalog.pg_class'::regclass
+                                 AND dep.objid=c.oid AND dep.deptype='e')) THEN
+    RAISE EXCEPTION 'Installation neuve requise : objets préexistants dans un des schémas du modèle';
   END IF;
 END $$;
 SELECT pg_catalog.set_config(
   'search_path',
-  pg_catalog.format('pg_catalog,%I,%I', n.nspname, 'milieux'),
+  pg_catalog.format('pg_catalog,%I,%I,pg_temp', n.nspname, 'milieux'),
   true
 )
 FROM pg_catalog.pg_extension AS e
 JOIN pg_catalog.pg_namespace AS n ON n.oid = e.extnamespace
 WHERE e.extname = 'postgis';
-CREATE TABLE milieux.techniciens (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), nom text NOT NULL, prenom text, login text UNIQUE, actif boolean NOT NULL DEFAULT true, modifie_par text, date_modification timestamptz);
-CREATE TABLE milieux.communes (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), insee text NOT NULL UNIQUE, nom text NOT NULL, geom geometry(MultiPolygon,3950) NOT NULL, modifie_par text, date_modification timestamptz, CHECK(ST_IsValid(geom) AND NOT ST_IsEmpty(geom) AND ST_NDims(geom)=2));
-CREATE TABLE milieux.prestataires (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), nom text NOT NULL, actif boolean NOT NULL DEFAULT true, modifie_par text, date_modification timestamptz);
-CREATE TABLE milieux.prestations_categorie (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), libelle text NOT NULL UNIQUE, ordre integer NOT NULL);
+CREATE TABLE milieux.prestations_categorie (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    libelle text NOT NULL UNIQUE,
+    ordre integer NOT NULL
+);
+CREATE TABLE milieux.types_prestations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    categorie_id uuid NOT NULL REFERENCES milieux.prestations_categorie(id) ON DELETE RESTRICT,
+    code text NOT NULL UNIQUE,
+    libelle text NOT NULL,
+    actif boolean NOT NULL DEFAULT true,
+    modifie_par text,
+    date_modification timestamptz
+);
+CREATE TABLE milieux.statuts_prestations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    code text NOT NULL UNIQUE CHECK (code IN ('PLANIFIE','EN_COURS','TERMINE','ANNULE')),
+    libelle text NOT NULL UNIQUE,
+    modifie_par text,
+    date_modification timestamptz
+);
+
+CREATE TABLE referentiel.categories_desordre (
+    id text PRIMARY KEY,
+    libelle text,
+    abrege text,
+    designation text
+);
+
+CREATE TABLE referentiel.cotes (
+    id text PRIMARY KEY,
+    designation text,
+    abrege text,
+    libelle text
+);
+
+CREATE TABLE referentiel.fonctions_structure (
+    id text PRIMARY KEY,
+    code text UNIQUE,
+    libelle text NOT NULL,
+    designation text
+);
+
+CREATE TABLE referentiel.materiaux_structure (
+    id text PRIMARY KEY,
+    code text UNIQUE,
+    libelle text NOT NULL,
+    designation text
+);
+
+CREATE TABLE referentiel.natures_structure (
+    id text PRIMARY KEY,
+    code text UNIQUE,
+    libelle text NOT NULL,
+    designation text
+);
+
+CREATE TABLE referentiel.positions (
+    id text PRIMARY KEY,
+    designation text,
+    abrege text,
+    libelle text
+);
+
+CREATE TABLE referentiel.rives (
+    id text PRIMARY KEY,
+    designation text,
+    abrege text,
+    libelle text
+);
+
+CREATE TABLE referentiel.sources_information (
+    id text PRIMARY KEY,
+    designation text,
+    abrege text,
+    libelle text
+);
+
+CREATE TABLE referentiel.suites_apporter (
+    id text PRIMARY KEY,
+    designation text,
+    abrege text,
+    libelle text
+);
+
+CREATE TABLE referentiel.types_desordre (
+    id text PRIMARY KEY,
+    categorie_id text REFERENCES referentiel.categories_desordre(id) ON DELETE RESTRICT,
+    libelle text,
+    abrege text,
+    designation text
+);
+
+CREATE TABLE referentiel.types_equipement_mesure (
+    id text PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    abrege text NOT NULL UNIQUE,
+    libelle text NOT NULL
+);
+
+CREATE TABLE referentiel.types_ouvrage_hydraulique (
+    id text PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    abrege text NOT NULL UNIQUE,
+    libelle text NOT NULL
+);
+
+CREATE TABLE referentiel.types_ouvrage_particulier (
+    id text PRIMARY KEY,
+    code text UNIQUE,
+    libelle text NOT NULL,
+    designation text
+);
+
+CREATE TABLE referentiel.types_troncon (
+    id text PRIMARY KEY,
+    code text UNIQUE,
+    libelle text NOT NULL,
+    designation text
+);
+
+CREATE TABLE referentiel.typologies_troncon (
+    id text PRIMARY KEY,
+    designation text,
+    abrege text,
+    libelle text
+);
+
+CREATE TABLE referentiel.urgences (
+    id text PRIMARY KEY,
+    libelle text,
+    abrege text,
+    designation text
+);
+
+CREATE TABLE referentiel.types_mobilier (
+    id text PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    abrege text NOT NULL UNIQUE,
+    libelle text NOT NULL
+);
+
+CREATE TABLE referentiel.types_cheminement (
+    id text PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    abrege text NOT NULL UNIQUE,
+    libelle text NOT NULL
+);
+
+CREATE TABLE referentiel.familles_vegetation (
+    id text PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    libelle text NOT NULL,
+    designation text
+);
+
 INSERT INTO milieux.prestations_categorie (id, libelle, ordre) VALUES
-('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', 'Entretien mécanique', 1),
-('4946680e-3547-5f25-8508-2929a7f7a79e', 'Entretien manuel', 2),
-('60410105-fbdd-5890-9d20-a331b4e61e88', 'Génie écologique', 3),
-('ae1b972a-e127-5216-9660-7c66583eb893', 'Plantations', 4);
-CREATE TABLE milieux.types_prestations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), categorie_id uuid NOT NULL REFERENCES milieux.prestations_categorie(id) ON DELETE RESTRICT, code text NOT NULL UNIQUE, libelle text NOT NULL, actif boolean NOT NULL DEFAULT true, modifie_par text, date_modification timestamptz);
-CREATE TABLE milieux.statuts_prestations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text NOT NULL UNIQUE CHECK (code IN ('PLANIFIE','EN_COURS','TERMINE','ANNULE')), libelle text NOT NULL UNIQUE, modifie_par text, date_modification timestamptz);
+    ('4946680e-3547-5f25-8508-2929a7f7a79e', 'Entretien manuel', 2),
+    ('60410105-fbdd-5890-9d20-a331b4e61e88', 'Génie écologique', 3),
+    ('ae1b972a-e127-5216-9660-7c66583eb893', 'Plantations', 4),
+    ('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', 'Entretien mécanique', 1);
+
+INSERT INTO milieux.types_prestations (categorie_id, id, code, libelle, actif) VALUES
+    ('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', '272003ca-7006-5f4b-b5ac-f6d84281a3e2', 'CURAGE', 'Curage', true),
+    ('4946680e-3547-5f25-8508-2929a7f7a79e', '6d6fa494-e36e-5ba5-bc50-dbf256d4fc7d', 'ELAGAGE', 'Élagage', true),
+    ('60410105-fbdd-5890-9d20-a331b4e61e88', 'aae7d72e-377e-5cd8-a0fb-326d7bd03c5a', 'SUIVI', 'Suivi de milieu', true),
+    ('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', 'b6ea0cbd-54ef-5bb8-9cc4-42af05fe876e', 'FAUCHE', 'Fauche', true),
+    ('4946680e-3547-5f25-8508-2929a7f7a79e', 'cf98e704-4949-54b9-aa02-b65b55e8b83d', 'EMBACLES', 'Retrait d’embâcles', true),
+    ('60410105-fbdd-5890-9d20-a331b4e61e88', 'd2fa2842-9125-5f4a-ad3f-0adffead207c', 'ETUDE', 'Étude', true),
+    ('cf2572fb-9365-5ac5-bdf4-0d66581d9aaa', 'd8737de6-7a5e-5892-afc4-b51f5e882e26', 'DEBROUSSAILLAGE', 'Débroussaillage', true),
+    ('60410105-fbdd-5890-9d20-a331b4e61e88', 'da65d85b-ecf1-5481-bd2a-a47cf9b14544', 'RESTAURATION', 'Restauration écologique', true),
+    ('ae1b972a-e127-5216-9660-7c66583eb893', 'e2659d31-52c3-5f87-884e-56eedd7e1ee9', 'PLANTATION', 'Plantation', true);
+
 INSERT INTO milieux.statuts_prestations (id, code, libelle) VALUES
- ('58554fd0-fcc2-45b6-aa19-cc4a897af3fb','PLANIFIE','Planifié'),
- ('9ee713ca-13a1-4358-b5d8-fa79627fc256','EN_COURS','En cours'),
- ('421801d8-30be-4a5a-8e18-cb2b9ac0ea37','TERMINE','Terminé'),
- ('fdd48590-aace-4693-946e-80c1f4d8693f','ANNULE','Annulé');
-CREATE TABLE milieux.ah (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), nom text NOT NULL, modifie_par text, date_modification timestamptz);
-CREATE TABLE milieux.ah_stockage (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ah_id uuid NOT NULL UNIQUE REFERENCES milieux.ah(id) ON DELETE RESTRICT, nom text NOT NULL, categorie text, surface_ha numeric, geom geometry(Polygon,3950) NOT NULL, modifie_par text, date_modification timestamptz, CONSTRAINT ah_stockage_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2));
-CREATE TABLE milieux.ah_ouvrage (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ah_id uuid NOT NULL REFERENCES milieux.ah(id) ON DELETE RESTRICT, nom text, geom geometry(LineString,3950) NOT NULL, modifie_par text, date_modification timestamptz, CONSTRAINT ah_ouvrage_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2));
+    ('58554fd0-fcc2-45b6-aa19-cc4a897af3fb', 'PLANIFIE', 'Planifié'),
+    ('9ee713ca-13a1-4358-b5d8-fa79627fc256', 'EN_COURS', 'En cours'),
+    ('421801d8-30be-4a5a-8e18-cb2b9ac0ea37', 'TERMINE', 'Terminé'),
+    ('fdd48590-aace-4693-946e-80c1f4d8693f', 'ANNULE', 'Annulé');
+
+INSERT INTO referentiel.categories_desordre (id, libelle, abrege, designation) VALUES
+    ('RefCategorieDesordre:1', 'Érosion externe', 'ERX', '1'),
+    ('RefCategorieDesordre:2', 'Érosion interne', 'ERI', '2'),
+    ('RefCategorieDesordre:3', 'Désordre affectant la structure', 'DAF', '3'),
+    ('RefCategorieDesordre:4', 'Brèche', 'BRE', '4'),
+    ('RefCategorieDesordre:5', 'Conditions d''entretien de la digue, détérioration des équipements, activités illégales, gêne à la gestion', 'ENT', '5'),
+    ('RefCategorieDesordre:6', 'Autre', 'AUT', '6'),
+    ('RefCategorieDesordre:7', 'Défaut sur dispositif de protection', 'DDP', '7');
+
+INSERT INTO referentiel.cotes (id, designation, abrege, libelle) VALUES
+    ('RefCote:1', '1', 'RIV', 'Rivière'),
+    ('RefCote:2', '2', 'TER', 'Terre'),
+    ('RefCote:3', '3', 'E/C', 'Etang/Canal'),
+    ('RefCote:4', '4', 'MER', 'Mer'),
+    ('RefCote:5', '5', 'DEU', 'Deux côtés de la digue'),
+    ('RefCote:6', '6', 'CRE', 'Crête'),
+    ('RefCote:7', '7', 'AMT', 'Amont'),
+    ('RefCote:8', '8', 'AVL', 'Aval'),
+    ('RefCote:99', '99', 'IND', 'Indéfini');
+
+INSERT INTO referentiel.fonctions_structure (id, code, libelle, designation) VALUES
+    ('RefFonction:1', NULL, 'Drainage', '1'),
+    ('RefFonction:2', NULL, 'Protection', '2'),
+    ('RefFonction:3', NULL, 'Etanchéité', '3'),
+    ('RefFonction:4', NULL, 'Protection contre l''érosion interne', '4'),
+    ('RefFonction:5', NULL, 'Anti-fouisseur', '5'),
+    ('RefFonction:6', NULL, 'Stabilité d''ensemble', '6'),
+    ('RefFonction:7', NULL, 'Dispositif de revanche', '7'),
+    ('RefFonction:8', NULL, 'Fondation', '8'),
+    ('RefFonction:9', NULL, 'Parafouille', '9'),
+    ('RefFonction:10', NULL, 'Filtration', '10'),
+    ('RefFonction:11', NULL, 'Accès/gestion', '11'),
+    ('RefFonction:99', NULL, 'Indéfini', '99');
+
+INSERT INTO referentiel.materiaux_structure (id, code, libelle, designation) VALUES
+    ('RefMateriau:1', 'TEV', 'Terre végétale', '1'),
+    ('RefMateriau:2', 'GRA', 'Graviers (concassé 0.33 mm)', '2'),
+    ('RefMateriau:3', 'PMA', 'Pierres Maçonnées', '3'),
+    ('RefMateriau:4', 'PSE', 'Pierres Sèches', '4'),
+    ('RefMateriau:5', 'BET', 'Béton', '5'),
+    ('RefMateriau:6', 'BOI', 'Bois', '6'),
+    ('RefMateriau:7', 'VET', 'Revêtement végétalisé', '7'),
+    ('RefMateriau:8', 'ACI', 'Acier', '8'),
+    ('RefMateriau:9', 'ENB', 'Enrobé', '9'),
+    ('RefMateriau:10', 'REM', 'Remblais', '10'),
+    ('RefMateriau:11', 'ROD', 'Roche déversée', '11'),
+    ('RefMateriau:12', 'ROA', 'Roche appareillée', '12'),
+    ('RefMateriau:13', 'ROB', 'Roche bétonnée', '13'),
+    ('RefMateriau:14', 'NAT', 'Lit naturel du fossé', '14'),
+    ('RefMateriau:15', 'TVB', 'Tout Venant Brut', '15'),
+    ('RefMateriau:16', 'CON', 'Concassé 0.80 mm', '16'),
+    ('RefMateriau:17', 'DEC', 'Déchets de carrière en 0/400mm', '17'),
+    ('RefMateriau:18', 'MOE', 'Moellons', '18'),
+    ('RefMateriau:19', 'PBJ', 'Plaques de béton jointives', '19'),
+    ('RefMateriau:21', 'PAV', 'Pavés', '21'),
+    ('RefMateriau:22', 'SAB', 'Sables', '22'),
+    ('RefMateriau:23', 'LIM', 'Limons', '23'),
+    ('RefMateriau:24', 'LSB', 'Limons et sables', '24'),
+    ('RefMateriau:25', 'SIL', 'Silts', '25'),
+    ('RefMateriau:26', 'GOM', 'Géomembrane', '26'),
+    ('RefMateriau:27', 'GEO', 'Géotextile', '27'),
+    ('RefMateriau:28', 'DEB', 'Dé bétonné', '28'),
+    ('RefMateriau:29', 'GAL', 'Galets 0/100 mm', '29'),
+    ('RefMateriau:30', 'PJK', 'Panneaux JK', '30'),
+    ('RefMateriau:31', 'FRA', 'Fraisat recyclé', '31'),
+    ('RefMateriau:32', 'GRI', 'Grillage', '32'),
+    ('RefMateriau:33', 'TUY', 'Tuyau drain', '33'),
+    ('RefMateriau:34', 'SCH', 'Schiste 0/100 mm', '34'),
+    ('RefMateriau:35', 'BEC', 'Bentonite-ciment', '35'),
+    ('RefMateriau:36', 'VGE', 'Végétalisé, enherbé', '36'),
+    ('RefMateriau:37', 'VGA', 'Végétalisé, arbustif', '37'),
+    ('RefMateriau:38', 'VGB', 'Végétalisé, boisé', '38'),
+    ('RefMateriau:39', 'ARG', 'Argile', '39'),
+    ('RefMateriau:40', 'MAD', 'Matériau drainant', '40'),
+    ('RefMateriau:99', 'IND', 'Indéfini', '99');
+
+INSERT INTO referentiel.natures_structure (id, code, libelle, designation) VALUES
+    ('RefNature:1', 'ABR', 'Absence de revêtement', '1'),
+    ('RefNature:2', 'RVT', 'Revêtement', '2'),
+    ('RefNature:3', 'PAL', 'Palplanche', '3'),
+    ('RefNature:4', 'PIX', 'Pieux', '4'),
+    ('RefNature:5', 'RVH', 'Ouvrage de revanche', '5'),
+    ('RefNature:6', 'MUR', 'Mur de soutènement', '6'),
+    ('RefNature:7', 'DEV', 'Déversoir', '7'),
+    ('RefNature:8', 'GAB', 'Gabion', '8'),
+    ('RefNature:9', 'ENR', 'Enrochement', '9'),
+    ('RefNature:10', 'OUP', 'Ouvrage parafouille', '10'),
+    ('RefNature:11', 'FOS', 'Fossé (ou contre-fossé) côté terre en pied de digue', '11'),
+    ('RefNature:12', 'FOM', 'Fondation meuble', '12'),
+    ('RefNature:13', 'FOR', 'Fondation rocheuse', '13'),
+    ('RefNature:14', 'ZUR', 'Zone urbanisée', '14'),
+    ('RefNature:15', 'CDD', 'Corps de digue', '15'),
+    ('RefNature:16', 'PER', 'Perré', '16'),
+    ('RefNature:17', 'REM', 'Remblai', '17'),
+    ('RefNature:18', 'PAR', 'Paroi étanche', '18'),
+    ('RefNature:19', 'ZDP', 'Zone de dissipation (déversoir)', '19'),
+    ('RefNature:20', 'SEU', 'Seuil (déversoir)', '20'),
+    ('RefNature:21', 'DIF', 'Dispositif fusible (déversoir)', '21'),
+    ('RefNature:99', 'IND', 'Indéfini', '99');
+
+INSERT INTO referentiel.positions (id, designation, abrege, libelle) VALUES
+    ('RefPosition:3', '3', 'PDI', 'Pied de digue'),
+    ('RefPosition:4', '4', 'TAR', 'Talus risberme'),
+    ('RefPosition:5', '5', 'SOR', 'Sommet risberme'),
+    ('RefPosition:6', '6', 'TAD', 'Talus digue'),
+    ('RefPosition:7', '7', 'PLU', 'Plusieurs parties de la digue'),
+    ('RefPosition:8', '8', 'CRE', 'Crête'),
+    ('RefPosition:9', '9', 'HOR', 'Hors de la digue'),
+    ('RefPosition:10', '10', 'FRB', 'Franc-bord'),
+    ('RefPosition:11', '11', 'BER', 'Berge'),
+    ('RefPosition:12', '12', 'TRP', 'Talus/Risberme/Pied de digue'),
+    ('RefPosition:13', '13', 'COR', 'Coursier'),
+    ('RefPosition:14', '14', 'PCO', 'Pied de Coursier'),
+    ('RefPosition:15', '15', 'FOS', 'Fossé'),
+    ('RefPosition:99', '99', 'IND', 'Indéfini');
+
+INSERT INTO referentiel.rives (id, designation, abrege, libelle) VALUES
+    ('RefRive:1', '1', NULL, 'Gauche'),
+    ('RefRive:2', '2', NULL, 'Droite'),
+    ('RefRive:3', '3', NULL, 'Les deux'),
+    ('RefRive:99', '99', NULL, 'Indéfini');
+
+INSERT INTO referentiel.sources_information (id, designation, abrege, libelle) VALUES
+    ('RefSource:0', '0', 'NOB', 'Non observable'),
+    ('RefSource:1', '1', 'DED', 'Déduction de l''observateur sur le terrain'),
+    ('RefSource:2', '2', 'DOC', 'Document externe - archives'),
+    ('RefSource:3', '3', 'TEM', 'Témoignage externe'),
+    ('RefSource:4', '4', 'VUO', 'Vu sur le terrain par l''observateur'),
+    ('RefSource:99', '99', 'IND', 'Indéfini');
+
+INSERT INTO referentiel.suites_apporter (id, designation, abrege, libelle) VALUES
+    ('RefSuiteApporter:1', '1', 'AUC', 'Aucune'),
+    ('RefSuiteApporter:2', '2', 'SUR', 'Surveillance'),
+    ('RefSuiteApporter:3', '3', 'ENT', 'Entretien'),
+    ('RefSuiteApporter:4', '4', 'ETU', 'Etudes'),
+    ('RefSuiteApporter:5', '5', 'TRA', 'Travaux'),
+    ('RefSuiteApporter:6', '6', 'ARH', 'Archivé'),
+    ('RefSuiteApporter:7', '7', 'PRI', 'Prioritaire'),
+    ('RefSuiteApporter:8', '8', 'CST', 'Constat');
+
+INSERT INTO referentiel.types_desordre (id, categorie_id, libelle, abrege, designation) VALUES
+    ('RefTypeDesordre:1', 'RefCategorieDesordre:1', 'Erosion longitudinale diverse, autre que celle due au cours d''eau', 'ERD', '1'),
+    ('RefTypeDesordre:2', 'RefCategorieDesordre:3', 'Fissure dans le terrain ou sur une structure rigide', 'FIS', '2'),
+    ('RefTypeDesordre:3', 'RefCategorieDesordre:2', 'Fontis, indice d''activité karstique (infiltration)', 'FON', '3'),
+    ('RefTypeDesordre:4', 'RefCategorieDesordre:3', 'Affaissement, glissement, tassement, tout indice de mouvement du terrain ou d''une structure rigide', 'MVT', '4'),
+    ('RefTypeDesordre:5', 'RefCategorieDesordre:1', 'Piétinements d''animaux sur la digue', 'PIE', '5'),
+    ('RefTypeDesordre:6', 'RefCategorieDesordre:1', 'Indice de ravinement sur talus ou plateforme (a priori dans le sens transversal)', 'RAV', '6'),
+    ('RefTypeDesordre:7', 'RefCategorieDesordre:3', 'Débouché de TERrier ou galerie d''animaux fouisseurs', 'TRR', '7'),
+    ('RefTypeDesordre:8', 'RefCategorieDesordre:3', 'Présence de Végétation dangereuse (arbustive et/ou arborescente, ou de souches) ', 'VED', '8'),
+    ('RefTypeDesordre:9', 'RefCategorieDesordre:6', 'Dépression, étang, zone d''emprunt (au delà du pied de digue)', 'DEP', '9'),
+    ('RefTypeDesordre:10', 'RefCategorieDesordre:2', 'Indice de fuite (ex: zone humide, laisse de fuite)', 'IFU', '10'),
+    ('RefTypeDesordre:11', 'RefCategorieDesordre:1', 'Erosion (longitudinale) due au fleuve', 'ERF', '11'),
+    ('RefTypeDesordre:12', 'RefCategorieDesordre:3', 'Rupture de réseaux', 'RUP', '12'),
+    ('RefTypeDesordre:13', 'RefCategorieDesordre:3', 'Crête bombée (redant)', 'CEB', '13'),
+    ('RefTypeDesordre:14', 'RefCategorieDesordre:3', 'Point bas', 'PTB', '14'),
+    ('RefTypeDesordre:15', 'RefCategorieDesordre:7', 'Altération des pierres ou du béton d''un ouvrage de maçonnerie, corrosion d''un ouvrage métallique', 'ALT', '15'),
+    ('RefTypeDesordre:16', 'RefCategorieDesordre:7', 'Décollement, dissociation, mauvais contact entre deux éléments d''ouvrage de nature différente', 'DEC', '16'),
+    ('RefTypeDesordre:17', 'RefCategorieDesordre:7', 'Déjointement, pierres enlevées sur maçonnerie', 'DEJ', '17'),
+    ('RefTypeDesordre:18', 'RefCategorieDesordre:3', 'Déstructuration d''un ouvrage (effondrement, démantèlement...)', 'DES', '18'),
+    ('RefTypeDesordre:19', 'RefCategorieDesordre:5', 'Prélèvement de matériau de la digue', 'PRV', '19'),
+    ('RefTypeDesordre:20', 'RefCategorieDesordre:5', 'Tête de piézomètre découverte ou observée lors de la visite', 'PZO', '20'),
+    ('RefTypeDesordre:21', 'RefCategorieDesordre:6', 'Sondage (en principe à la tarière manuelle) effectué dans la digue au cours de la visite', 'SDG', '21'),
+    ('RefTypeDesordre:22', 'RefCategorieDesordre:1', 'Surverse directe', 'SUD', '22'),
+    ('RefTypeDesordre:23', 'RefCategorieDesordre:1', 'Surverse par retour', 'SUR', '23'),
+    ('RefTypeDesordre:24', 'RefCategorieDesordre:4', 'Brèche par renard direct', 'BRD', '24'),
+    ('RefTypeDesordre:25', 'RefCategorieDesordre:4', 'Brèche par renard en retour', 'BRR', '25'),
+    ('RefTypeDesordre:26', 'RefCategorieDesordre:4', 'Brèche par surverse directe', 'BSD', '26'),
+    ('RefTypeDesordre:27', 'RefCategorieDesordre:4', 'Brèche par surverse en retour', 'BSR', '27'),
+    ('RefTypeDesordre:28', 'RefCategorieDesordre:5', 'Dépôt sauvage', 'DSA', '28'),
+    ('RefTypeDesordre:29', 'RefCategorieDesordre:3', 'Renard Hydraulique', 'RDH', '29'),
+    ('RefTypeDesordre:30', 'RefCategorieDesordre:3', 'Canalisation hors service', 'CHS', '30'),
+    ('RefTypeDesordre:31', 'RefCategorieDesordre:4', 'Brèche par cause indéterminée', 'BRE', '31'),
+    ('RefTypeDesordre:32', 'RefCategorieDesordre:3', 'Corps étranger affectant l''intégrité de la structure', 'COR', '32'),
+    ('RefTypeDesordre:33', 'RefCategorieDesordre:4', 'Brèche provoquée', 'BPR', '33'),
+    ('RefTypeDesordre:34', 'RefCategorieDesordre:4', 'Brèche par affouillement', 'BAF', '34'),
+    ('RefTypeDesordre:35', 'RefCategorieDesordre:3', 'Arrachement d''une partie de la digue lié à une chute d''arbre', 'ARR', '35'),
+    ('RefTypeDesordre:36', 'RefCategorieDesordre:5', 'Passage sauvage d''engins motorisés', 'PAS', '36'),
+    ('RefTypeDesordre:37', 'RefCategorieDesordre:2', 'Fossé en pied de digue', 'FOS', '37'),
+    ('RefTypeDesordre:38', 'RefCategorieDesordre:5', 'Vandalisme sur ouvrage de voirie', 'VAN', '38'),
+    ('RefTypeDesordre:39', 'RefCategorieDesordre:5', 'Borne manquante', 'BMQ', '39'),
+    ('RefTypeDesordre:40', 'RefCategorieDesordre:5', 'Borne détériorée', 'BDT', '40'),
+    ('RefTypeDesordre:41', 'RefCategorieDesordre:6', 'Inondation par refoulement', 'INR', '41'),
+    ('RefTypeDesordre:42', 'RefCategorieDesordre:5', 'Clôture "sauvage"sur la digue', 'CLO', '42'),
+    ('RefTypeDesordre:43', 'RefCategorieDesordre:5', 'Bâtiment encastré dans la digue', 'BAT', '43'),
+    ('RefTypeDesordre:44', 'RefCategorieDesordre:3', 'Vide important entre blocs d''enrochement', 'VID', '44'),
+    ('RefTypeDesordre:45', 'RefCategorieDesordre:3', 'Nid de poule', 'NID', '45'),
+    ('RefTypeDesordre:46', 'RefCategorieDesordre:6', 'Canalisation traversante', 'CAT', '46'),
+    ('RefTypeDesordre:47', 'RefCategorieDesordre:6', 'Canalisation longitudinale', 'CAL', '47'),
+    ('RefTypeDesordre:48', 'RefCategorieDesordre:5', 'Labour', 'LAB', '48'),
+    ('RefTypeDesordre:49', 'RefCategorieDesordre:5', 'Remblais non autorisé contre la digue', 'REM', '49'),
+    ('RefTypeDesordre:50', 'RefCategorieDesordre:5', 'Présence de végétation gênante', 'VEG', '50'),
+    ('RefTypeDesordre:51', 'RefCategorieDesordre:1', 'Piétinements anthropiques', 'PIT', '51'),
+    ('RefTypeDesordre:52', 'RefCategorieDesordre:5', 'Escalier sauvage', 'ESS', '52'),
+    ('RefTypeDesordre:53', 'RefCategorieDesordre:3', 'Souches', 'SOU', '53'),
+    ('RefTypeDesordre:54', 'RefCategorieDesordre:5', 'Escalier maçonné dans la digue', 'ESC', '54'),
+    ('RefTypeDesordre:55', 'RefCategorieDesordre:5', 'Mur de soutènement', 'MUR', '55'),
+    ('RefTypeDesordre:56', 'RefCategorieDesordre:4', 'En limite de surverse', 'ELS', '56'),
+    ('RefTypeDesordre:57', 'RefCategorieDesordre:1', 'Affouillement', 'AFF', '57'),
+    ('RefTypeDesordre:58', 'RefCategorieDesordre:7', 'Anomalie sur matelas de gabions', 'AMG', '58'),
+    ('RefTypeDesordre:59', 'RefCategorieDesordre:7', 'Enrochement gélif', 'ERG', '59'),
+    ('RefTypeDesordre:60', 'RefCategorieDesordre:7', 'Anomalie sur géo-grille', 'AGG', '60'),
+    ('RefTypeDesordre:61', 'RefCategorieDesordre:7', 'Anomalie sur matériaux drainant', 'AMD', '61'),
+    ('RefTypeDesordre:62', 'RefCategorieDesordre:7', 'Anomalie sur couvert végétal', 'ACV', '62'),
+    ('RefTypeDesordre:63', 'RefCategorieDesordre:4', 'Défaut de bouclage de la digue (lien avec structure adjacente inexistant...)', 'DBD', '63'),
+    ('RefTypeDesordre:64', 'RefCategorieDesordre:5', 'Défaut d''entretien de la végétation', 'DEV', '64'),
+    ('RefTypeDesordre:65', 'RefCategorieDesordre:6', 'Ouvrage hydraulique privé (morceaux de digues, merlon...)', 'OHP', '65'),
+    ('RefTypeDesordre:66', 'RefCategorieDesordre:5', 'Absence/désorganisation sucres bétons', 'SUC', '66'),
+    ('RefTypeDesordre:67', 'RefCategorieDesordre:6', 'Dysfonctionnement d’ouvrage hydraulique', 'DOH', '67'),
+    ('RefTypeDesordre:68', 'RefCategorieDesordre:6', 'Géométrie de la digue non adaptée', 'GDA', '68'),
+    ('RefTypeDesordre:69', 'RefCategorieDesordre:5', 'Occupation sauvage de l’ouvrage', 'OSO', '69'),
+    ('RefTypeDesordre:70', 'RefCategorieDesordre:5', 'Végétation invasive', 'VEI', '70'),
+    ('RefTypeDesordre:71', 'RefCategorieDesordre:1', 'Détérioration/dégradation de surface (trous, bauges etc.)', 'DTS', '71'),
+    ('RefTypeDesordre:72', 'RefCategorieDesordre:7', 'Anomalie sur Grillage Anti-fouisseur', 'AGA', '72'),
+    ('RefTypeDesordre:73', 'RefCategorieDesordre:5', 'Défaut sur batardeau et/ou glissière (manquant, dégradé, cassé etc.)', 'DFB', '73'),
+    ('RefTypeDesordre:99', 'RefCategorieDesordre:6', 'Indéfini', 'IND', '99');
+
+INSERT INTO referentiel.types_equipement_mesure (id, code, abrege, libelle) VALUES
+    ('PIE', 'piezometre', 'PIE', 'Piézomètre'),
+    ('ECH', 'echelle_limnimetrique', 'ECH', 'Échelle limnimétrique'),
+    ('STA', 'station_mesure', 'STA', 'Station de mesure'),
+    ('RDN', 'repere_nivellement', 'RDN', 'Repère de nivellement'),
+    ('AUT', 'autre', 'AUT', 'Autre équipement de mesure'),
+    ('IND', 'indefini', 'IND', 'Équipement de mesure indéfini');
+
+INSERT INTO referentiel.types_ouvrage_hydraulique (id, code, abrege, libelle) VALUES
+    ('VAN', 'vanne', 'VAN', 'Vanne'),
+    ('CLA', 'clapet', 'CLA', 'Clapet'),
+    ('POS', 'poste_refoulement', 'POS', 'Poste de refoulement'),
+    ('STP', 'station_pompage', 'STP', 'Station de pompage'),
+    ('SIH', 'siphon', 'SIH', 'Siphon'),
+    ('EXR', 'exutoire', 'EXR', 'Exutoire'),
+    ('DEV', 'deversoir', 'DEV', 'Déversoir'),
+    ('DVS', 'deversoir_securite', 'DVS', 'Déversoir de sécurité'),
+    ('VBT', 'ouverture_batardable', 'VBT', 'Ouverture batardable'),
+    ('PAF', 'porte_a_flot', 'PAF', 'Porte à flot'),
+    ('BBN', 'barbacane', 'BBN', 'Barbacane'),
+    ('TTB', 'tete_buse', 'TTB', 'Tête de buse'),
+    ('TVI', 'tour_vidange', 'TVI', 'Tour de vidange'),
+    ('FOD', 'fosse_decantation', 'FOD', 'Fosse de décantation'),
+    ('PAS', 'passe_poissons', 'PAS', 'Passe à poissons'),
+    ('SLT', 'seuil_lit', 'SLT', 'Seuil de lit'),
+    ('PDL', 'plage_depot_lit', 'PDL', 'Plage de dépôt'),
+    ('AUT', 'autre', 'AUT', 'Autre ouvrage hydraulique'),
+    ('IND', 'indefini', 'IND', 'Ouvrage hydraulique indéfini'),
+    ('PRISE_D_EAU', 'prise_d_eau', 'PDE', 'Prise d''eau'),
+    ('OUVRAGE_HYDRAULIQUE', 'ouvrage_hydraulique', 'OHY', 'Ouvrage hydraulique');
+
+INSERT INTO referentiel.types_ouvrage_particulier (id, code, libelle, designation) VALUES
+    ('RefOuvrageParticulier:2', 'BAT', 'Bâtiment encastré ou très proche de la digue', '2'),
+    ('RefOuvrageParticulier:3', 'ESC', 'Escalier', '3'),
+    ('RefOuvrageParticulier:4', 'CAV', 'Cave encastrée dans la digue', '4'),
+    ('RefOuvrageParticulier:6', 'CLO', 'Clôture privée (mur barbelé, grillage) encastrée dans la digue', '6'),
+    ('RefOuvrageParticulier:7', 'PON', 'Ponton pour embarcation', '7'),
+    ('RefOuvrageParticulier:8', 'PAN', 'Panneau d''information divers (EDF...)', '8'),
+    ('RefOuvrageParticulier:10', 'OUI', 'Ouvrage indéfini', '10'),
+    ('RefOuvrageParticulier:11', 'MOU', 'Monument (calvaire, monument aux morts, statue, ...)', '11'),
+    ('RefOuvrageParticulier:12', 'BOK', 'Borne PK', '12'),
+    ('RefOuvrageParticulier:14', 'SOB', 'Socle en béton', '14'),
+    ('RefOuvrageParticulier:15', 'BRE', 'Borne réseau d''eau', '15'),
+    ('RefOuvrageParticulier:17', 'PAS', 'Passe à poissons', '17'),
+    ('RefOuvrageParticulier:19', 'OUA', 'Ouvrage d''alimentation de CIC', '19'),
+    ('RefOuvrageParticulier:20', 'MRE', 'Mobilier à usage récréatif', '20'),
+    ('RefOuvrageParticulier:21', 'PAA', 'Panneau d''alerte', '21'),
+    ('RefOuvrageParticulier:99', 'IND', 'Indéfini', '99');
+
+INSERT INTO referentiel.types_troncon (id, code, libelle, designation) VALUES
+    ('BERGE', 'BERGE', 'Berge', NULL),
+    ('TALUS', 'TALUS', 'Talus', NULL),
+    ('TALUS_RISBERME', 'TALUS_RISBERME', 'Talus de risberme', NULL),
+    ('RISBERME', 'RISBERME', 'Risberme', NULL),
+    ('CRETE', 'CRETE', 'Crête', NULL),
+    ('FRANC_BORD', 'FRANC_BORD', 'Franc-bord', NULL),
+    ('INDETERMINE', 'INDETERMINE', 'Indéterminé', NULL);
+
+INSERT INTO referentiel.typologies_troncon (id, designation, abrege, libelle) VALUES
+    ('RefTypologieTroncon:1', '1', 'TER', 'Terre'),
+    ('RefTypologieTroncon:2', '2', 'TEN', 'Terre – enrochement'),
+    ('RefTypologieTroncon:3', '3', 'PAL', 'Palplanche'),
+    ('RefTypologieTroncon:4', '4', 'GCI', 'Génie-Civil'),
+    ('RefTypologieTroncon:99', '99', 'AUT', 'Autre');
+
+INSERT INTO referentiel.urgences (id, libelle, abrege, designation) VALUES
+    ('RefUrgence:1', 'Faible', '0', '1'),
+    ('RefUrgence:3', 'Intermédiaire', '2', '3'),
+    ('RefUrgence:4', 'Élevée', '3', '4'),
+    ('RefUrgence:99', 'Indéfini', 'IND', '99');
+
+INSERT INTO referentiel.types_mobilier (id, code, abrege, libelle) VALUES
+    ('MRE', 'mobilier_recreatif', 'MRE', 'Mobilier récréatif'),
+    ('PAN', 'panneau', 'PAN', 'Panneau'),
+    ('CLO', 'cloture', 'CLO', 'Clôture'),
+    ('MOU', 'monument', 'MOU', 'Monument'),
+    ('SOB', 'socle', 'SOB', 'Socle'),
+    ('PON', 'ponton', 'PON', 'Ponton'),
+    ('AUT', 'autre', 'AUT', 'Autre mobilier'),
+    ('IND', 'indefini', 'IND', 'Mobilier indéfini'),
+    ('BAR', 'barriere_chaine', 'BAR', 'Barrière / chaîne'),
+    ('POR', 'portail', 'POR', 'Portail'),
+    ('BOR', 'borne_voirie', 'BOR', 'Borne de voirie'),
+    ('OBS', 'obstruction_passage', 'OBS', 'Ouvrage d’obstruction du passage');
+
+INSERT INTO referentiel.types_cheminement (id, code, abrege, libelle) VALUES
+    ('PNT', 'pont', 'PNT', 'Pont'),
+    ('RAM', 'rampe', 'RAM', 'Rampe'),
+    ('TUN', 'tunnel', 'TUN', 'Tunnel'),
+    ('PAS', 'passage_gue', 'PAS', 'Passage à gué'),
+    ('ESC', 'escalier_acces', 'ESC', 'Escalier d''accès'),
+    ('CAL', 'cale', 'CAL', 'Cale'),
+    ('VAC', 'voie_acces', 'VAC', 'Voie d''accès'),
+    ('CAC', 'chemin_acces_technique', 'CAC', 'Chemin d''accès technique'),
+    ('CHE', 'voie_sur_digue', 'CHE', 'Voie sur digue'),
+    ('AUT', 'autre', 'AUT', 'Autre cheminement'),
+    ('IND', 'indefini', 'IND', 'Cheminement indéfini');
+
+INSERT INTO referentiel.familles_vegetation (id, code, libelle, designation) VALUES
+    ('HERBACEES', 'HERBACEES', 'Herbacées', NULL),
+    ('BUISSONS_ARBUSTES', 'BUISSONS_ARBUSTES', 'Buissons et arbustes', NULL),
+    ('ARBRES', 'ARBRES', 'Arbres', NULL);
+
+CREATE TABLE milieux.techniciens (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom text NOT NULL,
+    prenom text,
+    login text UNIQUE,
+    actif boolean NOT NULL DEFAULT true,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz
+);
+CREATE TABLE milieux.communes (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    insee text NOT NULL UNIQUE,
+    nom text NOT NULL,
+    geom geometry(MultiPolygon,3950) NOT NULL,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK(ST_IsValid(geom) AND NOT ST_IsEmpty(geom) AND ST_NDims(geom)=2)
+);
+CREATE TABLE milieux.prestataires (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom text NOT NULL,
+    actif boolean NOT NULL DEFAULT true,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz
+);
+CREATE TABLE milieux.ah (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom text NOT NULL,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz
+);
+CREATE TABLE milieux.ah_stockage (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ah_id uuid NOT NULL UNIQUE REFERENCES milieux.ah(id) ON DELETE RESTRICT,
+    nom text NOT NULL,
+    categorie text,
+    surface_ha numeric,
+    geom geometry(Polygon,3950) NOT NULL,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CONSTRAINT ah_stockage_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2)
+);
+CREATE TABLE milieux.ah_ouvrage (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ah_id uuid NOT NULL REFERENCES milieux.ah(id) ON DELETE RESTRICT,
+    nom text,
+    geom geometry(LineString,3950) NOT NULL,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CONSTRAINT ah_ouvrage_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2)
+);
 -- Contrôle de type explicite : le typmod MultiPolygon convertirait un Polygon à l'écriture.
-CREATE TABLE milieux.sites_terrestres (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), nom text NOT NULL, geom geometry(Geometry,3950) NOT NULL, modifie_par text, date_modification timestamptz, CONSTRAINT sites_terrestres_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2 AND ST_GeometryType(geom)='ST_MultiPolygon'));
-CREATE TABLE milieux.sites_zones (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), site_terrestre_id uuid NOT NULL REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT, nom text NOT NULL, type_site text, surface_ha numeric, geom geometry(Geometry,3950) NOT NULL, modifie_par text, date_modification timestamptz, CONSTRAINT sites_zones_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2 AND ST_GeometryType(geom) IN ('ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon')));
-CREATE TABLE milieux.cours_eau (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), nom text NOT NULL CONSTRAINT cours_eau_nom_non_vide CHECK (nom ~ '[^[:space:]]'), type_ecoulement text, direction boolean, section integer GENERATED ALWAYS AS (ST_NumGeometries(geom)) STORED, valide boolean GENERATED ALWAYS AS (direction IS TRUE AND ST_NumGeometries(geom)=1) STORED NOT NULL, source text NOT NULL, geom geometry(MultiLineString,3950) NOT NULL, modifie_par text, date_modification timestamptz, CHECK(ST_IsValid(geom) AND NOT ST_IsEmpty(geom) AND ST_NDims(geom)=2));
+CREATE TABLE milieux.sites_terrestres (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom text NOT NULL,
+    geom geometry(Geometry,3950) NOT NULL,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CONSTRAINT sites_terrestres_geom_contract CHECK (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_NDims(geom)=2 AND ST_GeometryType(geom)='ST_MultiPolygon')
+);
+CREATE TABLE milieux.cours_eau (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom text NOT NULL CONSTRAINT cours_eau_nom_non_vide CHECK (nom ~ '[^[:space:]]'),
+    type_ecoulement text,
+    direction boolean,
+    section integer GENERATED ALWAYS AS (ST_NumGeometries(geom)) STORED,
+    valide boolean GENERATED ALWAYS AS (direction IS TRUE AND ST_NumGeometries(geom)=1) STORED NOT NULL,
+    source text NOT NULL,
+    geom geometry(MultiLineString,3950) NOT NULL,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK(ST_IsValid(geom) AND NOT ST_IsEmpty(geom) AND ST_NDims(geom)=2)
+);
+-- Digues et repères du modèle courant.
+CREATE TABLE milieux.digues (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom text NOT NULL CHECK (btrim(nom) <> ''),
+    identifiant_externe text,
+    commentaire text,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz
+);
+
+-- Les fractions portent sur l'orientation actuelle de la rivière. La
+-- géométrie copiée demeure inchangée si le référentiel est redessiné.
+CREATE TABLE milieux.digues_reperes (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    digue_id uuid NOT NULL REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    riviere_id uuid NOT NULL REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
+    rive text NOT NULL CHECK (rive IN ('G', 'D')),
+    debut_fraction double precision NOT NULL CHECK (debut_fraction BETWEEN 0 AND 1),
+    fin_fraction double precision NOT NULL CHECK (fin_fraction BETWEEN 0 AND 1),
+    geom_reference geometry(LineString, 3950) NOT NULL,
+    geom_riviere_signature text NOT NULL,
+    revision_validation integer NOT NULL DEFAULT 1 CHECK (revision_validation > 0),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CONSTRAINT digues_reperes_digue_unique UNIQUE (digue_id) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT digues_reperes_ordre CHECK (debut_fraction < fin_fraction),
+    CONSTRAINT digues_reperes_geom_valide CHECK (
+        ST_IsValid(geom_reference) AND NOT ST_IsEmpty(geom_reference)
+        AND ST_Length(geom_reference) > 0
+    )
+);
+-- Référencement hydrographique AH : décisions explicites, instantanés figés.
+CREATE TABLE milieux.ah_sections (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ah_id uuid NOT NULL REFERENCES milieux.ah(id) ON DELETE RESTRICT,
+    cours_eau_id uuid NOT NULL REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
+    debut_fraction double precision NOT NULL,
+    fin_fraction double precision NOT NULL,
+    geom_reference geometry(LineString,3950) NOT NULL,
+    geom_cours_eau_signature text NOT NULL,
+    revision_validation integer NOT NULL DEFAULT 1 CHECK (revision_validation > 0),
+    valide_par text NOT NULL,
+    date_validation timestamptz NOT NULL,
+    commentaire text,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CONSTRAINT ah_sections_intervalle CHECK (
+        debut_fraction >= 0 AND debut_fraction < fin_fraction AND fin_fraction <= 1),
+    CONSTRAINT ah_sections_intervalle_unique UNIQUE (ah_id,cours_eau_id,debut_fraction,fin_fraction),
+    CONSTRAINT ah_sections_geom_contract CHECK (
+        NOT ST_IsEmpty(geom_reference) AND ST_IsValid(geom_reference)
+        AND ST_NDims(geom_reference)=2 AND ST_Length(geom_reference)>0)
+);
+CREATE TABLE public.troncons (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    type_troncon_id text NOT NULL REFERENCES referentiel.types_troncon(id) ON DELETE RESTRICT,
+    digue_id uuid NOT NULL REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    date_debut date,
+    date_fin date,
+    commentaire text,
+    designation text,
+    type_rive_id text REFERENCES referentiel.rives(id) ON DELETE RESTRICT,
+    typologie_troncon_id text REFERENCES referentiel.typologies_troncon(id) ON DELETE RESTRICT,
+    geometry geometry(Geometry,3950),
+    geometry_reperage geometry(LineString,3950),
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    source_id text REFERENCES referentiel.sources_information(id) ON DELETE RESTRICT,
+    cote_id text REFERENCES referentiel.cotes(id) ON DELETE RESTRICT,
+    position_id text REFERENCES referentiel.positions(id) ON DELETE RESTRICT,
+    fonction_id text REFERENCES referentiel.fonctions_structure(id) ON DELETE RESTRICT,
+    fonction_haut_id text REFERENCES referentiel.fonctions_structure(id) ON DELETE RESTRICT,
+    fonction_bas_id text REFERENCES referentiel.fonctions_structure(id) ON DELETE RESTRICT,
+    nature_id text REFERENCES referentiel.natures_structure(id) ON DELETE RESTRICT,
+    nature_haut_id text REFERENCES referentiel.natures_structure(id) ON DELETE RESTRICT,
+    nature_bas_id text REFERENCES referentiel.natures_structure(id) ON DELETE RESTRICT,
+    materiau_id text REFERENCES referentiel.materiaux_structure(id) ON DELETE RESTRICT,
+    materiau_haut_id text REFERENCES referentiel.materiaux_structure(id) ON DELETE RESTRICT,
+    materiau_bas_id text REFERENCES referentiel.materiaux_structure(id) ON DELETE RESTRICT,
+    num_couche integer,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut),
+    CONSTRAINT uq_troncons_type UNIQUE (id, type_troncon_id),
+    CONSTRAINT ck_troncons_type CHECK (type_troncon_id IN
+        ('BERGE','TALUS','TALUS_RISBERME','RISBERME','CRETE','FRANC_BORD','INDETERMINE')),
+    CONSTRAINT ck_troncons_geometry_b4 CHECK (
+        NOT valid OR type_troncon_id NOT IN ('RISBERME','FRANC_BORD') OR
+        (geometry IS NOT NULL AND ST_GeometryType(geometry) IN ('ST_LineString','ST_Polygon')
+         AND ST_IsValid(geometry) AND NOT ST_IsEmpty(geometry))),
+    CONSTRAINT ck_troncons_axe_reperage CHECK (geometry_reperage IS NULL OR
+        (ST_IsValid(geometry_reperage) AND NOT ST_IsEmpty(geometry_reperage) AND ST_Length(geometry_reperage)>0)),
+    CONSTRAINT ck_troncons_crete_fields CHECK (type_troncon_id <> 'CRETE' OR num_nonnulls(
+        cote_id, position_id, fonction_haut_id, fonction_bas_id, nature_haut_id, nature_bas_id,
+        materiau_haut_id, materiau_bas_id) = 0)
+);
+
+CREATE TABLE public.mobilier (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    designation text NOT NULL,
+    type_id text NOT NULL REFERENCES referentiel.types_mobilier(id) ON DELETE RESTRICT,
+    commentaire text,
+    date_debut date,
+    date_fin date,
+    geometry geometry(Geometry,3950) NOT NULL,
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut),
+    CONSTRAINT mobilier_parent_unique CHECK (num_nonnulls(
+        site_terrestre_id, troncon_id, ah_ouvrage_id, ah_stockage_id, ah_section_id) = 1),
+    CONSTRAINT mobilier_geom_contract CHECK (NOT ST_IsEmpty(geometry) AND ST_IsValid(geometry) AND ST_GeometryType(geometry) IN
+        ('ST_Point','ST_LineString','ST_Polygon','ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon')),
+    CHECK (designation ~ '[^[:space:]]')
+);
+
+CREATE TABLE public.cheminements (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    designation text NOT NULL,
+    type_cheminement_id text NOT NULL REFERENCES referentiel.types_cheminement(id) ON DELETE RESTRICT,
+    commentaire text,
+    date_debut date,
+    date_fin date,
+    geometry geometry(Geometry,3950) NOT NULL,
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut),
+    CONSTRAINT cheminements_parent_unique CHECK (num_nonnulls(
+        site_terrestre_id, troncon_id, ah_ouvrage_id, ah_stockage_id, ah_section_id) = 1),
+    CONSTRAINT cheminements_geom_contract CHECK (NOT ST_IsEmpty(geometry) AND ST_IsValid(geometry) AND ST_GeometryType(geometry) IN
+        ('ST_Point','ST_LineString','ST_Polygon','ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon')),
+    CHECK (designation ~ '[^[:space:]]')
+);
+
+CREATE TABLE public.vegetation (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    designation text NOT NULL,
+    famille_vegetation text NOT NULL REFERENCES referentiel.familles_vegetation(id) ON DELETE RESTRICT,
+    commentaire text,
+    date_debut date,
+    date_fin date,
+    geometry geometry(Geometry,3950) NOT NULL,
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut),
+    CONSTRAINT vegetation_parent_unique CHECK (num_nonnulls(
+        site_terrestre_id, troncon_id, ah_ouvrage_id, ah_stockage_id, ah_section_id) = 1),
+    CONSTRAINT vegetation_geom_contract CHECK (NOT ST_IsEmpty(geometry) AND ST_IsValid(geometry) AND ST_GeometryType(geometry) IN
+        ('ST_Point','ST_LineString','ST_Polygon','ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon')),
+    CHECK (designation ~ '[^[:space:]]')
+);
+
+CREATE TABLE public.ouvrages_particuliers (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    designation text,
+    commentaire text,
+    date_debut date,
+    date_fin date,
+    geometry geometry(Geometry,3950),
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    type_id text REFERENCES referentiel.types_ouvrage_particulier(id) ON DELETE RESTRICT,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut)
+);
+
+CREATE TABLE public.equipements_mesure (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    type_id text NOT NULL REFERENCES referentiel.types_equipement_mesure(id) ON DELETE RESTRICT,
+    designation text,
+    commentaire text,
+    date_debut date,
+    date_fin date,
+    cote_id text REFERENCES referentiel.cotes(id) ON DELETE RESTRICT,
+    position_id text REFERENCES referentiel.positions(id) ON DELETE RESTRICT,
+    source_id text REFERENCES referentiel.sources_information(id) ON DELETE RESTRICT,
+    dimension_horizontale double precision,
+    dimension_verticale double precision,
+    geometry geometry(Geometry,3950),
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    valid boolean,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut)
+);
+
+CREATE TABLE public.ouvrages_hydrauliques (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    type_id text REFERENCES referentiel.types_ouvrage_hydraulique(id) ON DELETE RESTRICT,
+    designation text,
+    commentaire text,
+    date_debut date,
+    date_fin date,
+    geometry geometry(Geometry,3950),
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    valid boolean,
+    longueur double precision,
+    largeur_max double precision,
+    hauteur double precision,
+    annee_construction integer,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut),
+    CONSTRAINT ck_ouvrage_parent_unique CHECK (num_nonnulls(troncon_id, ah_ouvrage_id, ah_stockage_id) = 1)
+);
+
+CREATE TABLE public.desordres (
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    digue_id uuid REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    type_desordre_id text REFERENCES referentiel.types_desordre(id) ON DELETE RESTRICT,
+    categorie_desordre_id text REFERENCES referentiel.categories_desordre(id) ON DELETE RESTRICT,
+    designation text,
+    commentaire text,
+    lieu_dit text,
+    cote_id text REFERENCES referentiel.cotes(id) ON DELETE RESTRICT,
+    position_id text REFERENCES referentiel.positions(id) ON DELETE RESTRICT,
+    source_id text REFERENCES referentiel.sources_information(id) ON DELETE RESTRICT,
+    date_debut date,
+    date_fin date,
+    geometry geometry(Geometry,3950),
+    valid boolean,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    mobilier_id uuid REFERENCES public.mobilier(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
+    vegetation_id uuid REFERENCES public.vegetation(id) ON DELETE RESTRICT,
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK (date_fin >= date_debut),
+    CONSTRAINT ck_desordre_cible_directe CHECK (num_nonnulls(
+        troncon_id, digue_id, ah_ouvrage_id, ah_section_id, ah_stockage_id, site_terrestre_id,
+        mobilier_id, cheminement_id, vegetation_id) <= 1)
+);
+
+CREATE TABLE public.observations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    desordre_id uuid REFERENCES public.desordres(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    ouvrage_hydraulique_id uuid REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    equipement_mesure_id uuid REFERENCES public.equipements_mesure(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
+    mobilier_id uuid REFERENCES public.mobilier(id) ON DELETE RESTRICT,
+    vegetation_id uuid REFERENCES public.vegetation(id) ON DELETE RESTRICT,
+    ouvrage_particulier_id uuid REFERENCES public.ouvrages_particuliers(id) ON DELETE RESTRICT,
+    urgence_id text REFERENCES referentiel.urgences(id) ON DELETE RESTRICT,
+    designation text,
+    date_observation date NOT NULL,
+    evolution text,
+    suite text,
+    suite_apporter_id text REFERENCES referentiel.suites_apporter(id) ON DELETE RESTRICT,
+    nombre_desordres integer,
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    observateur text,
+    CONSTRAINT ck_cible_unique CHECK (num_nonnulls(
+        desordre_id, troncon_id, ah_ouvrage_id, ah_stockage_id, ah_section_id, site_terrestre_id,
+        mobilier_id, cheminement_id, vegetation_id, ouvrage_hydraulique_id, ouvrage_particulier_id, equipement_mesure_id) = 1)
+);
+
+CREATE TABLE public.photos (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    observation_id uuid NOT NULL REFERENCES public.observations(id) ON DELETE RESTRICT,
+    date_photo date,
+    designation text,
+    commentaire text,
+    valid boolean NOT NULL DEFAULT false,
+    version bigint NOT NULL DEFAULT 1 CONSTRAINT ck_version_bornee CHECK (version BETWEEN 1 AND 9007199254740991),
+    storage_key text UNIQUE,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    photographe text
+);
+
+CREATE TABLE public.equipements_mesure__desordres (
+    equipement_mesure_id uuid NOT NULL REFERENCES public.equipements_mesure(id) ON DELETE RESTRICT,
+    desordre_id uuid NOT NULL REFERENCES public.desordres(id) ON DELETE RESTRICT,
+    PRIMARY KEY (equipement_mesure_id, desordre_id)
+);
+
+CREATE TABLE public.ouvrages_hydrauliques__desordres (
+    ouvrage_hydraulique_id uuid NOT NULL REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    desordre_id uuid NOT NULL REFERENCES public.desordres(id) ON DELETE RESTRICT,
+    PRIMARY KEY (ouvrage_hydraulique_id, desordre_id)
+);
+
+CREATE TABLE public.ouvrages_particuliers__desordres (
+    ouvrage_particulier_id uuid NOT NULL REFERENCES public.ouvrages_particuliers(id) ON DELETE RESTRICT,
+    desordre_id uuid NOT NULL REFERENCES public.desordres(id) ON DELETE RESTRICT,
+    PRIMARY KEY (ouvrage_particulier_id, desordre_id)
+);
+
+CREATE TABLE public.ouvrages_hydrauliques__objets_lies (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ouvrage_hydraulique_id uuid NOT NULL REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
+    autre_ouvrage_hydraulique_id uuid REFERENCES public.ouvrages_hydrauliques(id) ON DELETE RESTRICT,
+    ouvrage_particulier_id uuid REFERENCES public.ouvrages_particuliers(id) ON DELETE RESTRICT,
+    equipement_mesure_id uuid REFERENCES public.equipements_mesure(id) ON DELETE RESTRICT,
+    berge_id uuid,
+    berge_id_type text GENERATED ALWAYS AS ('BERGE'::text) STORED,
+    digue_id uuid REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_ouvrage_lie_berge FOREIGN KEY (berge_id, berge_id_type)
+        REFERENCES public.troncons(id, type_troncon_id) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT ck_cible_ouvrage_hydraulique_liee CHECK (num_nonnulls(
+        cheminement_id, autre_ouvrage_hydraulique_id, ouvrage_particulier_id, equipement_mesure_id, berge_id, digue_id) = 1)
+);
+
 CREATE FUNCTION milieux.cours_eau_qualification() RETURNS trigger
 LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 BEGIN
@@ -50,7 +967,40 @@ BEGIN
 END $$;
 CREATE TRIGGER hydro_qual_direction BEFORE UPDATE OF geom ON milieux.cours_eau
 FOR EACH ROW EXECUTE FUNCTION milieux.cours_eau_qualification();
-CREATE TABLE milieux.prestations (cours_eau_id uuid REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT, digue_id uuid, ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT, ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT, site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT, site_zone_id uuid REFERENCES milieux.sites_zones(id) ON DELETE RESTRICT, id uuid PRIMARY KEY DEFAULT gen_random_uuid(), intitule text, type_prestation_id uuid NOT NULL REFERENCES milieux.types_prestations(id) ON DELETE RESTRICT, prestataire_id uuid NOT NULL REFERENCES milieux.prestataires(id) ON DELETE RESTRICT, statut_id uuid NOT NULL REFERENCES milieux.statuts_prestations(id) ON DELETE RESTRICT, date_debut date NOT NULL, date_fin date NOT NULL, quantite numeric, unite text, description text, position text NOT NULL DEFAULT 'Indéfini' CONSTRAINT prestations_position_values CHECK (position IN ('Berge','Talus côté rivière / stockage','Crête','Talus côté terre','Indéfini')), rive text NOT NULL DEFAULT 'Indéfinie' CONSTRAINT prestations_rive_values CHECK (rive IN ('Gauche','Droite','Les deux','Indéfinie')), photo_1 text, photo_1_commentaire text, photo_2 text, photo_2_commentaire text, geom geometry(Geometry,3950), technicien_id uuid NOT NULL REFERENCES milieux.techniciens(id) ON DELETE RESTRICT, modifie_par text, date_modification timestamptz, CHECK(date_fin >= date_debut), CONSTRAINT prestations_geom_contract CHECK(geom IS NULL OR (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_SRID(geom)=3950 AND ST_NDims(geom)=2 AND ST_GeometryType(geom) IN ('ST_Point','ST_LineString','ST_Polygon','ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon'))));
+CREATE TABLE milieux.prestations (
+    cours_eau_id uuid REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
+    digue_id uuid REFERENCES milieux.digues(id) ON DELETE RESTRICT,
+    ah_stockage_id uuid REFERENCES milieux.ah_stockage(id) ON DELETE RESTRICT,
+    ah_ouvrage_id uuid REFERENCES milieux.ah_ouvrage(id) ON DELETE RESTRICT,
+    site_terrestre_id uuid REFERENCES milieux.sites_terrestres(id) ON DELETE RESTRICT,
+    troncon_id uuid REFERENCES public.troncons(id) ON DELETE RESTRICT,
+    mobilier_id uuid REFERENCES public.mobilier(id) ON DELETE RESTRICT,
+    cheminement_id uuid REFERENCES public.cheminements(id) ON DELETE RESTRICT,
+    vegetation_id uuid REFERENCES public.vegetation(id) ON DELETE RESTRICT,
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    intitule text,
+    type_prestation_id uuid NOT NULL REFERENCES milieux.types_prestations(id) ON DELETE RESTRICT,
+    prestataire_id uuid NOT NULL REFERENCES milieux.prestataires(id) ON DELETE RESTRICT,
+    statut_id uuid NOT NULL REFERENCES milieux.statuts_prestations(id) ON DELETE RESTRICT,
+    date_debut date NOT NULL,
+    date_fin date NOT NULL,
+    quantite numeric,
+    unite text,
+    description text,
+    position text NOT NULL DEFAULT 'Indéfini' CONSTRAINT prestations_position_values CHECK (position IN ('Berge','Talus côté rivière / stockage','Crête','Talus côté terre','Indéfini')),
+    rive text NOT NULL DEFAULT 'Indéfinie' CONSTRAINT prestations_rive_values CHECK (rive IN ('Gauche','Droite','Les deux','Indéfinie')),
+    photo_1 text,
+    photo_1_commentaire text,
+    photo_2 text,
+    photo_2_commentaire text,
+    geom geometry(Geometry,3950),
+    technicien_id uuid NOT NULL REFERENCES milieux.techniciens(id) ON DELETE RESTRICT,
+    cree_le timestamptz NOT NULL DEFAULT clock_timestamp(),
+    modifie_par text,
+    date_modification timestamptz,
+    CHECK(date_fin >= date_debut),
+    CONSTRAINT prestations_geom_contract CHECK(geom IS NULL OR (NOT ST_IsEmpty(geom) AND ST_IsValid(geom) AND ST_SRID(geom)=3950 AND ST_NDims(geom)=2 AND ST_GeometryType(geom) IN ('ST_Point','ST_LineString','ST_Polygon','ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon')))
+);
 -- L'ensemble des rattachements et la position sont contrôlés sur l'état final
 -- de la transaction, sans ordre de saisie imposé au formulaire QGIS.
 ALTER TABLE milieux.prestations ADD COLUMN nombre_points integer,
@@ -60,18 +1010,15 @@ ADD COLUMN surface_ha double precision GENERATED ALWAYS AS(surface_m2/10000.0) S
 ADD COLUMN type_geometrie text,
 ADD COLUMN type_geometrie_postgis text,
 ADD COLUMN possede_geometrie boolean NOT NULL DEFAULT false,
-ADD COLUMN origine_mesures text NOT NULL DEFAULT 'Aucune géométrie';
--- Sept modes directs ; la FK section AH est ajoutée après sa table cible.
-ALTER TABLE milieux.prestations ADD COLUMN ah_section_id uuid;
+ADD COLUMN origine_mesures text NOT NULL DEFAULT 'Aucune géométrie',
+ADD COLUMN ah_section_id uuid REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT;
 COMMENT ON COLUMN milieux.prestations.ah_section_id IS
 'Section AH directement rattachée ; géométrie propre de la prestation obligatoire, aucun héritage de geom_reference.';
 
 ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_direct_modes
-CHECK (num_nonnulls(cours_eau_id,digue_id,ah_stockage_id,ah_ouvrage_id,site_terrestre_id,site_zone_id,ah_section_id)<=1);
+CHECK (num_nonnulls(cours_eau_id, digue_id, troncon_id, ah_stockage_id, ah_ouvrage_id, ah_section_id, site_terrestre_id, mobilier_id, cheminement_id, vegetation_id)<=1);
 ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_direct_geometry
-CHECK ((cours_eau_id IS NULL AND digue_id IS NULL AND site_terrestre_id IS NULL AND ah_section_id IS NULL) OR geom IS NOT NULL);
-ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_zone_geometry
-CHECK (site_zone_id IS NULL OR geom IS NULL);
+CHECK ((cours_eau_id IS NULL AND digue_id IS NULL AND troncon_id IS NULL AND site_terrestre_id IS NULL AND ah_section_id IS NULL) OR geom IS NOT NULL);
 ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_site_multi_geometry
 CHECK (site_terrestre_id IS NULL OR ST_GeometryType(geom) IN
        ('ST_MultiPoint','ST_MultiLineString','ST_MultiPolygon'));
@@ -81,7 +1028,7 @@ DECLARE p milieux.prestations%ROWTYPE;
 BEGIN
     SELECT * INTO p FROM milieux.prestations WHERE id=prestation_uuid FOR UPDATE;
     IF NOT FOUND THEN RETURN; END IF;
-    IF num_nonnulls(p.cours_eau_id,p.digue_id,p.ah_stockage_id,p.ah_ouvrage_id,p.site_terrestre_id,p.site_zone_id,p.ah_section_id)<>1 THEN
+    IF num_nonnulls(p.cours_eau_id, p.digue_id, p.troncon_id, p.ah_stockage_id, p.ah_ouvrage_id, p.ah_section_id, p.site_terrestre_id, p.mobilier_id, p.cheminement_id, p.vegetation_id)<>1 THEN
         RAISE EXCEPTION 'Exactement un mode de rattachement patrimonial est obligatoire pour %',p.id USING ERRCODE='23514';
     END IF;
     IF (p.position<>'Indéfini' OR p.rive<>'Indéfinie') AND p.cours_eau_id IS NULL AND p.digue_id IS NULL AND p.ah_ouvrage_id IS NULL AND p.ah_section_id IS NULL THEN
@@ -94,43 +1041,181 @@ BEGIN
     IF TG_OP <> 'DELETE' THEN PERFORM milieux.assert_prestation_relations(NEW.id); END IF;
     RETURN NULL;
 END $relations_trigger$;
+REVOKE ALL ON FUNCTION milieux.assert_prestation_relations(uuid), milieux.prestation_relations_complete() FROM PUBLIC;
 CREATE CONSTRAINT TRIGGER prestation_relations_parent AFTER INSERT OR UPDATE ON milieux.prestations
 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION milieux.prestation_relations_complete();
--- Un site peut n'avoir aucune zone ; chaque zone conserve son parent obligatoire
--- et la FK ON DELETE RESTRICT protège un site encore référencé.
 -- session_user conserve le role de connexion individuel meme apres SET ROLE.
 CREATE OR REPLACE FUNCTION milieux.stamp_modification() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 BEGIN
+ IF TG_OP='UPDATE' AND TG_ARGV[0]='metier' THEN
+     IF NEW.cree_le IS DISTINCT FROM OLD.cree_le THEN
+         RAISE EXCEPTION 'cree_le est immuable' USING ERRCODE='23514';
+     END IF;
+ END IF;
  NEW.modifie_par := session_user;
  NEW.date_modification := clock_timestamp();
  RETURN NEW;
 END $$;
 DO $$ DECLARE t text; BEGIN
- FOREACH t IN ARRAY ARRAY['techniciens','communes','prestataires','types_prestations','statuts_prestations','ah','ah_stockage','ah_ouvrage','sites_terrestres','sites_zones','cours_eau','prestations'] LOOP
-   EXECUTE format('CREATE TRIGGER tr_stamp_%I BEFORE INSERT OR UPDATE ON milieux.%I FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification()',t,t);
+ FOREACH t IN ARRAY ARRAY['techniciens','communes','prestataires','ah','ah_stockage','ah_ouvrage','sites_terrestres','cours_eau','prestations'] LOOP
+   EXECUTE format('CREATE TRIGGER tr_stamp_%I BEFORE INSERT OR UPDATE ON milieux.%I FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification(''metier'')',t,t);
  END LOOP;
 END $$;
 DO $$ DECLARE t text; BEGIN
- FOREACH t IN ARRAY ARRAY['communes','ah_stockage','ah_ouvrage','sites_terrestres','sites_zones','cours_eau','prestations'] LOOP
+ FOREACH t IN ARRAY ARRAY['communes','ah_stockage','ah_ouvrage','sites_terrestres','cours_eau','prestations'] LOOP
    EXECUTE format('CREATE INDEX %I ON milieux.%I USING gist(geom)',t||'_geom_idx',t);
  END LOOP;
 END $$;
+CREATE TRIGGER tr_stamp_types_prestations BEFORE INSERT OR UPDATE ON milieux.types_prestations
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
+CREATE TRIGGER tr_stamp_statuts_prestations BEFORE INSERT OR UPDATE ON milieux.statuts_prestations
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
+
+CREATE FUNCTION milieux.avancer_version_ressource() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+BEGIN
+    NEW.version := OLD.version + 1;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.troncons
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.troncons
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.mobilier
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.mobilier
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.cheminements
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.cheminements
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.vegetation
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.vegetation
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.ouvrages_particuliers
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.ouvrages_particuliers
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.equipements_mesure
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.equipements_mesure
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.ouvrages_hydrauliques
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.desordres
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.desordres
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.observations
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.observations
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+CREATE TRIGGER tr_stamp BEFORE INSERT OR UPDATE ON public.photos
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
+CREATE TRIGGER tr_version BEFORE UPDATE ON public.photos
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_ressource();
+
+-- Les deux extrémités d'une réaffectation portent la nouvelle version.
+CREATE FUNCTION milieux.avancer_version_desordre_lie() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+DECLARE ancien uuid; nouveau uuid; cible uuid;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN ancien := OLD.desordre_id; END IF;
+    IF TG_OP <> 'DELETE' THEN nouveau := NEW.desordre_id; END IF;
+    FOR cible IN SELECT DISTINCT id FROM unnest(ARRAY[ancien, nouveau]) AS d(id)
+                 WHERE id IS NOT NULL ORDER BY id LOOP
+        UPDATE public.desordres SET version=version WHERE id=cible;
+    END LOOP;
+    RETURN NULL;
+END $$;
+CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON public.equipements_mesure__desordres
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_desordre_lie();
+CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON public.ouvrages_hydrauliques__desordres
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_desordre_lie();
+CREATE TRIGGER tr_version_desordre AFTER INSERT OR UPDATE OR DELETE ON public.ouvrages_particuliers__desordres
+FOR EACH ROW EXECUTE FUNCTION milieux.avancer_version_desordre_lie();
+
 CREATE INDEX prestations_ah_section_id_idx ON milieux.prestations(ah_section_id);
 CREATE INDEX prestations_cours_eau_id_idx ON milieux.prestations(cours_eau_id);
 CREATE INDEX prestations_digue_id_idx ON milieux.prestations(digue_id);
 CREATE INDEX prestations_ah_stockage_id_idx ON milieux.prestations(ah_stockage_id);
 CREATE INDEX prestations_ah_ouvrage_id_idx ON milieux.prestations(ah_ouvrage_id);
 CREATE INDEX prestations_site_terrestre_id_idx ON milieux.prestations(site_terrestre_id);
-CREATE INDEX prestations_site_zone_id_idx ON milieux.prestations(site_zone_id);
+CREATE INDEX ON public.troncons (digue_id);
+CREATE INDEX ON public.troncons USING gist (geometry);
+CREATE INDEX ON public.troncons USING gist (geometry_reperage);
+CREATE INDEX ON public.mobilier USING gist (geometry);
+CREATE INDEX ON public.mobilier (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.mobilier (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON public.mobilier (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON public.mobilier (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON public.mobilier (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON public.cheminements USING gist (geometry);
+CREATE INDEX ON public.cheminements (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.cheminements (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON public.cheminements (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON public.cheminements (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON public.cheminements (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON public.vegetation USING gist (geometry);
+CREATE INDEX ON public.vegetation (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.vegetation (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON public.vegetation (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON public.vegetation (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON public.vegetation (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_particuliers USING gist (geometry);
+CREATE INDEX ON public.ouvrages_particuliers (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.equipements_mesure USING gist (geometry);
+CREATE INDEX ON public.equipements_mesure (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques USING gist (geometry);
+CREATE INDEX ON public.ouvrages_hydrauliques (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON public.desordres (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.desordres (digue_id) WHERE digue_id IS NOT NULL;
+CREATE INDEX ON public.desordres (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON public.desordres (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON public.desordres (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON public.desordres (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON public.desordres USING gist (geometry);
+CREATE INDEX ON public.desordres (mobilier_id) WHERE mobilier_id IS NOT NULL;
+CREATE INDEX ON public.desordres (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON public.desordres (vegetation_id) WHERE vegetation_id IS NOT NULL;
+CREATE INDEX ON public.observations (desordre_id) WHERE desordre_id IS NOT NULL;
+CREATE INDEX ON public.observations (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON public.observations (ouvrage_hydraulique_id) WHERE ouvrage_hydraulique_id IS NOT NULL;
+CREATE INDEX ON public.observations (equipement_mesure_id) WHERE equipement_mesure_id IS NOT NULL;
+CREATE INDEX ON public.observations (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON public.observations (mobilier_id) WHERE mobilier_id IS NOT NULL;
+CREATE INDEX ON public.observations (vegetation_id) WHERE vegetation_id IS NOT NULL;
+CREATE INDEX ON public.observations (ouvrage_particulier_id) WHERE ouvrage_particulier_id IS NOT NULL;
+CREATE INDEX ON public.observations (ah_ouvrage_id) WHERE ah_ouvrage_id IS NOT NULL;
+CREATE INDEX ON public.observations (ah_stockage_id) WHERE ah_stockage_id IS NOT NULL;
+CREATE INDEX ON public.observations (ah_section_id) WHERE ah_section_id IS NOT NULL;
+CREATE INDEX ON public.observations (site_terrestre_id) WHERE site_terrestre_id IS NOT NULL;
+CREATE INDEX ON public.photos (observation_id);
+CREATE INDEX ON public.equipements_mesure__desordres (desordre_id);
+CREATE INDEX ON public.ouvrages_hydrauliques__desordres (desordre_id);
+CREATE INDEX ON public.ouvrages_particuliers__desordres (desordre_id);
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (ouvrage_hydraulique_id);
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (autre_ouvrage_hydraulique_id) WHERE autre_ouvrage_hydraulique_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (ouvrage_particulier_id) WHERE ouvrage_particulier_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (equipement_mesure_id) WHERE equipement_mesure_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (berge_id) WHERE berge_id IS NOT NULL;
+CREATE INDEX ON public.ouvrages_hydrauliques__objets_lies (digue_id) WHERE digue_id IS NOT NULL;
+CREATE INDEX ON milieux.prestations (troncon_id) WHERE troncon_id IS NOT NULL;
+CREATE INDEX ON milieux.prestations (mobilier_id) WHERE mobilier_id IS NOT NULL;
+CREATE INDEX ON milieux.prestations (cheminement_id) WHERE cheminement_id IS NOT NULL;
+CREATE INDEX ON milieux.prestations (vegetation_id) WHERE vegetation_id IS NOT NULL;
 CREATE INDEX prestations_prestataire_idx ON milieux.prestations(prestataire_id);
 CREATE INDEX prestations_type_idx ON milieux.prestations(type_prestation_id);
 CREATE INDEX prestations_statut_idx ON milieux.prestations(statut_id);
 CREATE INDEX prestations_technicien_idx ON milieux.prestations(technicien_id);
 -- MESURES-07 : colonnes canoniques déclarées avant les vues qui les exposent.
 -- Le calcul et les triggers sont définis plus bas, après leurs dépendances.
--- Géométrie cartographique : zone imposée, géométrie propre prioritaire pour
--- les AH, sinon géométrie du stockage/ouvrage. Aucun héritage n'est recopié
--- dans prestations.geom et la quantité déclarée reste indépendante.
+-- Géométrie propre prioritaire, puis géométrie de la cible directe.
 CREATE VIEW milieux.prestations_carte
 WITH (security_invoker = true) AS
 SELECT
@@ -148,12 +1233,7 @@ SELECT
     p.photo_1_commentaire,
     p.photo_2,
     p.photo_2_commentaire,
-    CASE
-        WHEN p.site_zone_id IS NOT NULL THEN z.geom
-        WHEN p.ah_stockage_id IS NOT NULL THEN COALESCE(p.geom, s.geom)
-        WHEN p.ah_ouvrage_id IS NOT NULL THEN COALESCE(p.geom, o.geom)
-        ELSE p.geom
-    END::geometry(Geometry,3950) AS geom,
+    COALESCE(p.geom, s.geom, o.geom, m.geometry, ch.geometry, v.geometry)::geometry(Geometry,3950) AS geom,
     p.date_modification,
     p.modifie_par,
     p.technicien_id,
@@ -164,7 +1244,7 @@ SELECT
     p.ah_stockage_id,
     p.ah_ouvrage_id,
     p.site_terrestre_id,
-    p.site_zone_id,
+    p.troncon_id, p.mobilier_id, p.cheminement_id, p.vegetation_id,
     p.nombre_points,
     p.longueur_m,
     p.surface_m2,
@@ -175,7 +1255,9 @@ SELECT
     p.origine_mesures,
     p.ah_section_id
 FROM milieux.prestations p
-LEFT JOIN milieux.sites_zones z ON z.id=p.site_zone_id
+LEFT JOIN public.mobilier m ON m.id=p.mobilier_id
+LEFT JOIN public.cheminements ch ON ch.id=p.cheminement_id
+LEFT JOIN public.vegetation v ON v.id=p.vegetation_id
 LEFT JOIN milieux.ah_stockage s ON s.id=p.ah_stockage_id
 LEFT JOIN milieux.ah_ouvrage o ON o.id=p.ah_ouvrage_id;
 -- Vue tabulaire QGIS : une fiche par prestation, sans jointure N:N.
@@ -213,7 +1295,7 @@ SELECT
     p.modifie_par,
     p.position,
     p.rive,
-    p.cours_eau_id, p.digue_id, p.ah_stockage_id, p.ah_ouvrage_id, p.site_terrestre_id, p.site_zone_id,
+    p.cours_eau_id, p.digue_id, p.ah_stockage_id, p.ah_ouvrage_id, p.site_terrestre_id, p.troncon_id, p.mobilier_id, p.cheminement_id, p.vegetation_id,
     p.nombre_points,
     p.origine_mesures,
     p.ah_section_id
@@ -223,37 +1305,6 @@ JOIN milieux.prestataires AS pr ON pr.id = p.prestataire_id
 JOIN milieux.statuts_prestations AS s ON s.id = p.statut_id
 JOIN milieux.techniciens AS t ON t.id = p.technicien_id;
 
--- Digues et repères du modèle courant.
-CREATE TABLE milieux.digues (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    nom text NOT NULL CHECK (btrim(nom) <> ''),
-    identifiant_externe text,
-    commentaire text,
-    modifie_par text,
-    date_modification timestamptz
-);
-
--- Les fractions portent sur l'orientation actuelle de la rivière. La
--- géométrie copiée demeure inchangée si le référentiel est redessiné.
-CREATE TABLE milieux.digues_reperes (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    digue_id uuid NOT NULL REFERENCES milieux.digues(id) ON DELETE RESTRICT,
-    riviere_id uuid NOT NULL REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
-    rive text NOT NULL CHECK (rive IN ('G', 'D')),
-    debut_fraction double precision NOT NULL CHECK (debut_fraction BETWEEN 0 AND 1),
-    fin_fraction double precision NOT NULL CHECK (fin_fraction BETWEEN 0 AND 1),
-    geom_reference geometry(LineString, 3950) NOT NULL,
-    geom_riviere_signature text NOT NULL,
-    revision_validation integer NOT NULL DEFAULT 1 CHECK (revision_validation > 0),
-    modifie_par text,
-    date_modification timestamptz,
-    CONSTRAINT digues_reperes_digue_unique UNIQUE (digue_id) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT digues_reperes_ordre CHECK (debut_fraction < fin_fraction),
-    CONSTRAINT digues_reperes_geom_valide CHECK (
-        ST_IsValid(geom_reference) AND NOT ST_IsEmpty(geom_reference)
-        AND ST_Length(geom_reference) > 0
-    )
-);
 CREATE INDEX digues_reperes_digue_idx ON milieux.digues_reperes(digue_id);
 CREATE INDEX digues_reperes_riviere_rive_idx
     ON milieux.digues_reperes(riviere_id, rive);
@@ -282,12 +1333,12 @@ BEGIN
     END IF;
     RETURN NULL;
 END $$;
+REVOKE ALL ON FUNCTION milieux.assert_digue_repere(uuid), milieux.digue_repere_complete() FROM PUBLIC;
 CREATE CONSTRAINT TRIGGER digue_repere_parent AFTER INSERT OR UPDATE ON milieux.digues
 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION milieux.digue_repere_complete();
 CREATE CONSTRAINT TRIGGER digue_repere_child AFTER INSERT OR UPDATE OR DELETE ON milieux.digues_reperes
 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION milieux.digue_repere_complete();
 
-ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_digue_id_fkey FOREIGN KEY (digue_id) REFERENCES milieux.digues(id) ON DELETE RESTRICT;
 -- Fonction pure : aucune lecture de table, aucune qualification implicite.
 CREATE FUNCTION milieux.cours_eau_reference_admissible(p_geom geometry, p_direction boolean, p_valide boolean)
 RETURNS boolean LANGUAGE sql IMMUTABLE PARALLEL SAFE
@@ -357,10 +1408,10 @@ BEFORE INSERT OR UPDATE ON milieux.digues_reperes
 FOR EACH ROW EXECUTE FUNCTION milieux.digues_reperes_prepare();
 CREATE TRIGGER tr_stamp_digues
 BEFORE INSERT OR UPDATE ON milieux.digues
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
 CREATE TRIGGER tr_stamp_digues_reperes
 BEFORE INSERT OR UPDATE ON milieux.digues_reperes
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
 
 -- Parcours explicites : droits du compte connecté, aucune élévation.
 -- Le jeton parent évite aussi d'écraser une modification native de ses attributs.
@@ -431,6 +1482,10 @@ BEGIN
         RAISE EXCEPTION 'Suppression impossible : % prestation(s) rattachée(s) à cette digue. Aucun objet supprimé.',nombre
             USING ERRCODE='23503';
     END IF;
+    SELECT count(*) INTO nombre FROM public.troncons WHERE digue_id=d.id;
+    IF nombre>0 THEN RAISE EXCEPTION 'Digue référencée par % tronçon(s)',nombre USING ERRCODE='23503'; END IF;
+    SELECT count(*) INTO nombre FROM public.desordres WHERE digue_id=d.id;
+    IF nombre>0 THEN RAISE EXCEPTION 'Digue référencée par % désordre(s)',nombre USING ERRCODE='23503'; END IF;
     DELETE FROM milieux.digues_reperes WHERE id=p_repere;
     DELETE FROM milieux.digues WHERE id=d.id;
 END $delete$;
@@ -458,30 +1513,6 @@ JOIN milieux.digues AS d ON d.id = s.digue_id
 JOIN milieux.cours_eau AS r ON r.id = s.riviere_id;
 -- DIG-01 END
 
--- Référencement hydrographique AH : décisions explicites, instantanés figés.
-CREATE TABLE milieux.ah_sections (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ah_id uuid NOT NULL REFERENCES milieux.ah(id) ON DELETE RESTRICT,
-    cours_eau_id uuid NOT NULL REFERENCES milieux.cours_eau(id) ON DELETE RESTRICT,
-    debut_fraction double precision NOT NULL,
-    fin_fraction double precision NOT NULL,
-    geom_reference geometry(LineString,3950) NOT NULL,
-    geom_cours_eau_signature text NOT NULL,
-    revision_validation integer NOT NULL DEFAULT 1 CHECK (revision_validation > 0),
-    valide_par text NOT NULL,
-    date_validation timestamptz NOT NULL,
-    commentaire text,
-    modifie_par text,
-    date_modification timestamptz,
-    CONSTRAINT ah_sections_intervalle CHECK (
-        debut_fraction >= 0 AND debut_fraction < fin_fraction AND fin_fraction <= 1),
-    CONSTRAINT ah_sections_intervalle_unique UNIQUE (ah_id,cours_eau_id,debut_fraction,fin_fraction),
-    CONSTRAINT ah_sections_geom_contract CHECK (
-        NOT ST_IsEmpty(geom_reference) AND ST_IsValid(geom_reference)
-        AND ST_NDims(geom_reference)=2 AND ST_Length(geom_reference)>0)
-);
-ALTER TABLE milieux.prestations ADD CONSTRAINT prestations_ah_section_id_fkey
-FOREIGN KEY (ah_section_id) REFERENCES milieux.ah_sections(id) ON DELETE RESTRICT;
 
 CREATE INDEX ah_sections_cours_eau_idx ON milieux.ah_sections(cours_eau_id);
 CREATE INDEX ah_sections_geom_idx ON milieux.ah_sections USING gist(geom_reference);
@@ -542,7 +1573,7 @@ END $prepare$;
 CREATE TRIGGER ah_sections_prepare_trg BEFORE INSERT OR UPDATE ON milieux.ah_sections
 FOR EACH ROW EXECUTE FUNCTION milieux.ah_sections_prepare();
 CREATE TRIGGER tr_stamp_ah_sections BEFORE INSERT OR UPDATE ON milieux.ah_sections
-FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification();
+FOR EACH ROW EXECUTE FUNCTION milieux.stamp_modification('metier');
 
 CREATE VIEW milieux.ah_sections_carte WITH (security_invoker=true) AS
 SELECT s.id,s.ah_id,s.cours_eau_id,s.debut_fraction,s.fin_fraction,s.geom_reference,
@@ -648,10 +1679,15 @@ SELECT md5('prestations__sites_terrestres:' || links.prestation_id::text || ':' 
        links.prestation_id, links.site_terrestre_id
 FROM (
     SELECT id AS prestation_id, site_terrestre_id FROM milieux.prestations WHERE site_terrestre_id IS NOT NULL
-    UNION
-    SELECT p.id AS prestation_id, z.site_terrestre_id
-    FROM milieux.prestations AS p
-    JOIN milieux.sites_zones AS z ON z.id = p.site_zone_id
+    UNION ALL
+    SELECT p.id, enfant.site_terrestre_id FROM milieux.prestations p
+    JOIN public.mobilier enfant ON enfant.id=p.mobilier_id WHERE enfant.site_terrestre_id IS NOT NULL
+    UNION ALL
+    SELECT p.id, enfant.site_terrestre_id FROM milieux.prestations p
+    JOIN public.cheminements enfant ON enfant.id=p.cheminement_id WHERE enfant.site_terrestre_id IS NOT NULL
+    UNION ALL
+    SELECT p.id, enfant.site_terrestre_id FROM milieux.prestations p
+    JOIN public.vegetation enfant ON enfant.id=p.vegetation_id WHERE enfant.site_terrestre_id IS NOT NULL
 ) AS links;
 
 -- Mesures enregistrées : géométrie propre prioritaire, sinon patrimoine.
@@ -660,7 +1696,7 @@ SELECT pg_catalog.set_config('search_path',pg_catalog.format('pg_catalog,%I,mili
 FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace
 WHERE e.extname='postgis';
 CREATE FUNCTION milieux.mesures07_resoudre(
-    propre geometry,cours uuid,digue uuid,stockage uuid,ouvrage uuid,site uuid,zone uuid,
+    propre geometry, stockage uuid, ouvrage uuid, mobilier uuid, cheminement uuid, vegetation uuid,
     OUT nombre_points integer,OUT longueur_m double precision,
     OUT surface_m2 double precision,OUT surface_ha double precision,
     OUT type_geometrie text,OUT type_geometrie_postgis text,
@@ -670,12 +1706,11 @@ SET search_path FROM CURRENT AS $resolve$
 DECLARE g geometry;
 BEGIN
     IF propre IS NOT NULL THEN g:=propre;
-    ELSIF cours IS NOT NULL THEN SELECT geom INTO g FROM milieux.cours_eau WHERE id=cours;
-    ELSIF digue IS NOT NULL THEN SELECT geom_reference INTO g FROM milieux.digues_reperes WHERE digue_id=digue;
     ELSIF stockage IS NOT NULL THEN SELECT geom INTO g FROM milieux.ah_stockage WHERE id=stockage;
     ELSIF ouvrage IS NOT NULL THEN SELECT geom INTO g FROM milieux.ah_ouvrage WHERE id=ouvrage;
-    ELSIF site IS NOT NULL THEN SELECT geom INTO g FROM milieux.sites_terrestres WHERE id=site;
-    ELSIF zone IS NOT NULL THEN SELECT geom INTO g FROM milieux.sites_zones WHERE id=zone;
+    ELSIF mobilier IS NOT NULL THEN SELECT obj.geometry INTO g FROM public.mobilier obj WHERE obj.id=mobilier;
+    ELSIF cheminement IS NOT NULL THEN SELECT obj.geometry INTO g FROM public.cheminements obj WHERE obj.id=cheminement;
+    ELSIF vegetation IS NOT NULL THEN SELECT obj.geometry INTO g FROM public.vegetation obj WHERE obj.id=vegetation;
     END IF;
     possede_geometrie:=g IS NOT NULL AND NOT ST_IsEmpty(g);
     origine_mesures:=CASE WHEN NOT possede_geometrie THEN 'Aucune géométrie'
@@ -689,32 +1724,46 @@ BEGIN
         ELSE NULL;
     END CASE;
 END $resolve$;
-REVOKE ALL ON FUNCTION milieux.mesures07_resoudre(geometry,uuid,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION milieux.mesures07_resoudre(geometry,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
 
 CREATE FUNCTION milieux.mesures07_preparer() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $prepare$
-DECLARE m record;
+DECLARE
+    m record;
+    mesures_modifiees boolean;
+    champs_calcules CONSTANT text[] := ARRAY[
+        'nombre_points','longueur_m','surface_m2','surface_ha','type_geometrie',
+        'type_geometrie_postgis','possede_geometrie','origine_mesures','modifie_par','date_modification'];
 BEGIN
     IF TG_OP='UPDATE' THEN
-        -- Ce trigger est appelé après tr_stamp_prestations (ordre alphabétique).
-        -- Les mises à jour de seules mesures ne modifient pas la traçabilité métier.
-        IF (to_jsonb(NEW)-ARRAY['nombre_points','longueur_m','surface_m2','surface_ha','type_geometrie','type_geometrie_postgis','possede_geometrie','origine_mesures','modifie_par','date_modification']) IS NOT DISTINCT FROM (to_jsonb(OLD)-ARRAY['nombre_points','longueur_m','surface_m2','surface_ha','type_geometrie','type_geometrie_postgis','possede_geometrie','origine_mesures','modifie_par','date_modification']) AND NOT (ROW(NEW.nombre_points,NEW.longueur_m,NEW.surface_m2,NEW.type_geometrie,NEW.type_geometrie_postgis,NEW.possede_geometrie,NEW.origine_mesures) IS NOT DISTINCT FROM ROW(OLD.nombre_points,OLD.longueur_m,OLD.surface_m2,OLD.type_geometrie,OLD.type_geometrie_postgis,OLD.possede_geometrie,OLD.origine_mesures)) THEN
-            NEW.modifie_par:=OLD.modifie_par;
-            NEW.date_modification:=OLD.date_modification;
+        mesures_modifiees := ROW(NEW.nombre_points, NEW.longueur_m, NEW.surface_m2, NEW.type_geometrie,
+                                 NEW.type_geometrie_postgis, NEW.possede_geometrie, NEW.origine_mesures)
+            IS DISTINCT FROM ROW(OLD.nombre_points, OLD.longueur_m, OLD.surface_m2, OLD.type_geometrie,
+                                 OLD.type_geometrie_postgis, OLD.possede_geometrie, OLD.origine_mesures);
+        -- Le stamp précède ce trigger. Un recalcul seul conserve l'auteur et la date de la fiche.
+        IF mesures_modifiees AND (to_jsonb(NEW) - champs_calcules) = (to_jsonb(OLD) - champs_calcules) THEN
+            NEW.modifie_par := OLD.modifie_par;
+            NEW.date_modification := OLD.date_modification;
         END IF;
-        IF ST_AsEWKB(NEW.geom) IS NOT DISTINCT FROM ST_AsEWKB(OLD.geom)
-           AND ROW(NEW.cours_eau_id,NEW.digue_id,NEW.ah_stockage_id,NEW.ah_ouvrage_id,NEW.site_terrestre_id,NEW.site_zone_id,NEW.ah_section_id) IS NOT DISTINCT FROM ROW(OLD.cours_eau_id,OLD.digue_id,OLD.ah_stockage_id,OLD.ah_ouvrage_id,OLD.site_terrestre_id,OLD.site_zone_id,OLD.ah_section_id) AND ROW(NEW.nombre_points,NEW.longueur_m,NEW.surface_m2,NEW.type_geometrie,NEW.type_geometrie_postgis,NEW.possede_geometrie,NEW.origine_mesures) IS NOT DISTINCT FROM ROW(OLD.nombre_points,OLD.longueur_m,OLD.surface_m2,OLD.type_geometrie,OLD.type_geometrie_postgis,OLD.possede_geometrie,OLD.origine_mesures) THEN RETURN NEW; END IF;
+        IF NOT mesures_modifiees AND ST_AsEWKB(NEW.geom) IS NOT DISTINCT FROM ST_AsEWKB(OLD.geom)
+           AND ROW(NEW.ah_stockage_id, NEW.ah_ouvrage_id, NEW.mobilier_id, NEW.cheminement_id, NEW.vegetation_id)
+               IS NOT DISTINCT FROM
+               ROW(OLD.ah_stockage_id, OLD.ah_ouvrage_id, OLD.mobilier_id, OLD.cheminement_id, OLD.vegetation_id) THEN
+            RETURN NEW;
+        END IF;
     END IF;
     -- FOR SHARE requiert UPDATE sur le parent : le trigger seul, non appelable
     -- directement, porte cette capacité. Aucun GRANT d'édition de parent au rôle Prestations.
     IF NEW.geom IS NULL THEN
         IF NEW.ah_stockage_id IS NOT NULL THEN PERFORM 1 FROM milieux.ah_stockage WHERE id=NEW.ah_stockage_id FOR SHARE;
         ELSIF NEW.ah_ouvrage_id IS NOT NULL THEN PERFORM 1 FROM milieux.ah_ouvrage WHERE id=NEW.ah_ouvrage_id FOR SHARE;
-        ELSIF NEW.site_zone_id IS NOT NULL THEN PERFORM 1 FROM milieux.sites_zones WHERE id=NEW.site_zone_id FOR SHARE;
+        ELSIF NEW.mobilier_id IS NOT NULL THEN PERFORM 1 FROM public.mobilier WHERE id=NEW.mobilier_id FOR SHARE;
+        ELSIF NEW.cheminement_id IS NOT NULL THEN PERFORM 1 FROM public.cheminements WHERE id=NEW.cheminement_id FOR SHARE;
+        ELSIF NEW.vegetation_id IS NOT NULL THEN PERFORM 1 FROM public.vegetation WHERE id=NEW.vegetation_id FOR SHARE;
         END IF;
     END IF;
-    SELECT * INTO m FROM milieux.mesures07_resoudre(NEW.geom,NEW.cours_eau_id,NEW.digue_id,
-        NEW.ah_stockage_id,NEW.ah_ouvrage_id,NEW.site_terrestre_id,NEW.site_zone_id);
+    SELECT * INTO m FROM milieux.mesures07_resoudre(NEW.geom, NEW.ah_stockage_id, NEW.ah_ouvrage_id,
+        NEW.mobilier_id, NEW.cheminement_id, NEW.vegetation_id);
     NEW.nombre_points:=m.nombre_points;
     NEW.longueur_m:=m.longueur_m;
     NEW.surface_m2:=m.surface_m2;
@@ -728,9 +1777,7 @@ REVOKE ALL ON FUNCTION milieux.mesures07_preparer() FROM PUBLIC;
 CREATE TRIGGER zz_mesures07_preparer BEFORE INSERT OR UPDATE ON milieux.prestations
 FOR EACH ROW EXECUTE FUNCTION milieux.mesures07_preparer();
 
-
-
--- Seules ces trois familles autorisent une prestation sans géométrie propre.
+-- Recalcul des seules prestations qui empruntent cette géométrie.
 CREATE FUNCTION milieux.mesures07_parent() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
 SET search_path FROM CURRENT AS $parent$
 BEGIN
@@ -738,8 +1785,12 @@ BEGIN
         UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND ah_stockage_id=NEW.id;
     ELSIF TG_TABLE_NAME='ah_ouvrage' THEN
         UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND ah_ouvrage_id=NEW.id;
-    ELSIF TG_TABLE_NAME='sites_zones' THEN
-        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND site_zone_id=NEW.id;
+    ELSIF TG_TABLE_NAME='mobilier' THEN
+        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND mobilier_id=NEW.id;
+    ELSIF TG_TABLE_NAME='cheminements' THEN
+        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND cheminement_id=NEW.id;
+    ELSIF TG_TABLE_NAME='vegetation' THEN
+        UPDATE milieux.prestations SET origine_mesures=NULL WHERE geom IS NULL AND vegetation_id=NEW.id;
     END IF;
     RETURN NULL;
 END $parent$;
@@ -748,7 +1799,11 @@ CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON milieux.ah_stockage 
 WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION milieux.mesures07_parent();
 CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON milieux.ah_ouvrage FOR EACH ROW
 WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION milieux.mesures07_parent();
-CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geom ON milieux.sites_zones FOR EACH ROW
-WHEN(ST_AsEWKB(OLD.geom) IS DISTINCT FROM ST_AsEWKB(NEW.geom)) EXECUTE FUNCTION milieux.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON public.mobilier FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION milieux.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON public.cheminements FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION milieux.mesures07_parent();
+CREATE TRIGGER mesures07_dependants AFTER UPDATE OF geometry ON public.vegetation FOR EACH ROW
+WHEN(ST_AsEWKB(OLD.geometry) IS DISTINCT FROM ST_AsEWKB(NEW.geometry)) EXECUTE FUNCTION milieux.mesures07_parent();
 
 COMMIT;

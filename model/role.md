@@ -1,22 +1,20 @@
-# Rôles PostgreSQL du schéma `milieux`
+# Rôles PostgreSQL du modèle patrimonial GEMAPI-App-SIRS
 
 Matrice cible : chaque utilisateur PostgreSQL possède un compte individuel `LOGIN`. Les rôles collectifs `NOLOGIN` sont hiérarchiques : Consultation → Gestion des prestations → Gestion du patrimoine ; chaque rôle hérite des droits du précédent.
 
-HYDRO-ASSOC-01 ajoute le rattachement `prestations.ah_section_id` sans étendre ces
-permissions : Consultation lit les sections et leurs prestations ; Prestations
-écrit la prestation, y compris son rattachement, mais ne modifie pas la section ;
-Patrimoine conserve l'administration des sections. La FK `ON DELETE RESTRICT`
-protège les sections encore référencées. Le trigger privé d'admissibilité porte
-les verrous partagés nécessaires sans accorder UPDATE au profil Prestations.
-La géométrie propre est obligatoire pour ce septième mode ; ses huit mesures
-stockées décrivent l'intervention, jamais toute la section. Voir le
-[contrat et le déploiement](../docs/qgis_relations.md#hydro-assoc-01--septième-rattachement-direct).
+Les trois profils couvrent les schémas `milieux`, `public` et `referentiel`.
+Une prestation peut viser dix catégories de patrimoine. Le profil Prestations
+peut choisir une cible existante. Les triggers prennent les verrous nécessaires
+à la validation de la section AH et au calcul des mesures empruntées. Les
+interventions sur une section AH conservent leur géométrie propre obligatoire.
 
 | Tables du [schéma courant](schema.sql) | Consultation | Gestion des prestations | Gestion du patrimoine |
 | --- | --- | --- | --- |
 | `prestations` | S | SIUD | SIUD |
-| `ah`, `ah_stockage`, `ah_ouvrage`, `ah_sections`, `sites_terrestres`, `sites_zones`, `cours_eau`, `digues`, `digues_reperes` | S | S | SIUD |
+| `ah`, `ah_stockage`, `ah_ouvrage`, `ah_sections`, `sites_terrestres`, `cours_eau`, `digues`, `digues_reperes` | S | S | SIUD |
 | `techniciens`, `prestataires`, `communes`, `prestations_categorie`, `types_prestations`, `statuts_prestations` | S | S | S |
+| 10 tables métier et 4 associations patrimoniales de `public` | S | S | SIUD |
+| 19 catalogues de `referentiel` | S | S | S |
 | Vues `prestations_carte`, `prestations_fiches`, `digues_carte`, `ah_sections_carte`, `prestations__ah`, `prestations__sites_terrestres` | S | S | S |
 | `TRUNCATE` (toutes les tables) | — | — | — |
 
@@ -68,4 +66,4 @@ Les fonctions `digue_enregistrer` et `digue_supprimer` sont exécutables uniquem
 par Patrimoine et utilisent `SECURITY INVOKER`. Elles ne confèrent aucun droit
 supplémentaire sur les tables. La première contrôle aussi la signature du tracé
 prévisualisé, la révision du repère et la date de modification du parent. La
-seconde vérifie les prestations rattachées sous verrou avant toute suppression.
+seconde vérifie sous verrou les prestations, tronçons et désordres rattachés directement à la digue. Les FK protègent aussi les objets liés.

@@ -1,8 +1,8 @@
 # Contrat de migration SIRS → GEMAPI-App-SIRS
 
-Version documentaire v0.6 · SIG-FUSION-06 · Base v0.5 au commit `350d160eb7670611bac33b5380fb4b3cae7b94a6`.
+Version v0.6.1 · SIG-FUSION-08.
 
-Ce contrat décrit une **future** adaptation du migrateur. Aucun SQL, GPKG, jeu opérationnel, `model.json` ou code de migration n'est modifié. La projection cible est `schema_development_v0.6.mmd`. Les ambiguïtés doivent produire un diagnostic nominatif d'objet (UUID, table/colonne, valeurs sources, cause, décision attendue), sans publication d'objet partiellement converti. Le support de diagnostic d'une exécution ne constitue ni une table d'archive métier ni un nouveau journal permanent.
+Ce contrat décrit une **future** adaptation du migrateur. La cible d’installation neuve est décrite dans `schema_development_v0.6.1.mmd` et implémentée dans `schema.sql`. Les ambiguïtés doivent produire un diagnostic nominatif d'objet (UUID, table/colonne, valeurs sources, cause, décision attendue), sans publication d'objet partiellement converti. Le support de diagnostic d'une exécution ne constitue ni une table d'archive métier ni un nouveau journal permanent.
 
 ## Règles communes d'import
 
@@ -12,7 +12,7 @@ Conserver l'UUID quand l'identité ne change pas. Toute collision doit comparer 
 
 1. **Source** : `cabbalr/gpkg/sites_zones.gpkg:sites_zones`, `cabbalr/data/sites_zones.gpkg` et SQL dérivés. 41 UUID, 41 MultiLineString valides/non vides, 2D, EPSG:3950. Il n'existe pas de production sites_zones à préserver selon la décision métier.
 2. **Destination** : `public.cheminements`, parent `site_terrestre_id` ; suppression de `milieux.sites_zones` et des FK zone des prestations/désordres, sans table générique de remplacement.
-3. **Conversion** : id → id ; site_terrestre_id (ou sites_terrestres_id dans la source brute) → site_terrestre_id ; nom → designation ; geom → geometry **à coordonnées identiques**. Troncon_id et ah_ouvrage_id restent NULL. Escalier → ESC proposé ; sentiers → AUT proposé, en conservant leur appellation exacte. La sélection de type doit être validée, pas devinée. Le même UUID peut remplacer site_zone_id par cheminement_id dans les objets référents après validation de la correspondance.
+3. **Conversion** : id → id ; site_terrestre_id (ou sites_terrestres_id dans la source brute) → site_terrestre_id ; nom → designation ; geom → geometry **à coordonnées identiques**. Les quatre autres FK de parent restent NULL. Escalier → ESC proposé ; sentiers → AUT proposé, en conservant leur appellation exacte. La sélection de type doit être validée, pas devinée. Le même UUID peut remplacer site_zone_id par cheminement_id dans les objets référents après validation de la correspondance.
 4. **Échec** : parent manquant/inconnu, UUID conflictuel, désignation vide, géométrie invalide/vide/SRID inconnu. Un objet nommé « Grillage » parmi les 41 nécessite une qualification explicite avant attribution de son type de cheminement ; aucun basculement silencieux vers mobilier. Le GPKG séparé de six polygones n'est pas une correspondance prouvée et ne doit pas être fusionné avec les 41 lignes.
 5. **Information** : aucun attribut métier réel à perdre silencieusement. type/type_site, niveau, longueur déclarée, entretien, gestionnaire et surface_ha n'ont pas tous de colonne dédiée cible : les préserver dans un commentaire déterministe à clés nommées, sans réinterpréter longueur/surface comme mesure calculée. Conserver l'ordre des clés et distinguer NULL et vide. Un commentaire existant est conservé avant ce complément. Dates métier absentes → NULL. Création et dernière écriture suivent la règle 3, jamais une date inventée.
 6. **Tests futurs** : égalité des 41 UUID, parents et coordonnées ; aller-retour des attributs dans le commentaire ; type explicitement validé ; unicité des cibles ; pas de perte des prestations/désordres liés ; comptes d'import et absence de table/FK zone. Aucune transformation LineString/Polygon forcée. Si autre SRID connu, ST_Transform contrôlé ; jamais ST_SetSRID pour maquiller des coordonnées.
@@ -124,4 +124,8 @@ Pour chaque ancienne référence de support renseignée, inventorier le tronçon
 
 ## Limites et suite
 
-La v0.6 ferme les trois FK externes au niveau documentaire. Les correspondances d’identités AH, le traitement individuel des objets bloqués, la classification du Grillage CABBALR et les scénarios fictifs restent à instruire. La future implémentation devra adapter les fonctions, vues et triggers recensés dans l’audit v0.5 puis valider l’installation neuve, les contraintes et les usages QGIS, notamment sous Windows.
+La v0.6 ferme les trois FK externes au niveau documentaire. Les correspondances d’identités AH, le traitement individuel des objets bloqués, la classification du Grillage CABBALR et les scénarios fictifs restent à instruire. La qualification SQL est décrite dans SIG-FUSION-08. Les parcours QGIS, notamment sous Windows, feront l’objet d’une qualification distincte.
+
+## Parents des mobiliers, cheminements et objets de végétation
+
+Pour chaque UUID à convertir, établir la correspondance entre le parent source et exactement une destination parmi site terrestre, tronçon, ouvrage AH, stockage AH et section AH. Conserver l’identité et la géométrie propres de l’enfant. Documenter la table, l’UUID cible et la preuve de correspondance. Une référence inconnue, zéro parent ou plusieurs parents concurrents bloquent la conversion de cet objet. Une proximité spatiale seule ne prouve pas la filiation. La réaffectation explicite d’un enfant précède la suppression de son ancien parent. Les données réelles et le migrateur feront l’objet d’un chantier distinct.
