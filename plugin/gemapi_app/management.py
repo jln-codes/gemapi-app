@@ -10,7 +10,7 @@ from qgis.PyQt.QtWidgets import (QDialog, QLayout, QListWidgetItem, QSizePolicy,
                                 QComboBox, QLabel, QMessageBox)
 from qgis.core import QgsDataSourceUri, QgsMessageLog, QgsProject, QgsProviderRegistry, Qgis
 
-from .record import CATEGORIES, LINKS, build_delete
+from .record import TARGETS, CATEGORIES, LINKS, build_delete
 from .permissions import prestation_permissions
 from .watercourse_labels import label_sql, section_label_sql
 from .hydro_groups import build_options
@@ -71,11 +71,11 @@ def load_prestation(connection, prestation_id):
                 "JOIN milieux.cours_eau r ON r.id=o.cours_eau_id JOIN milieux.ah a ON a.id=o.ah_id "
                 f"WHERE {predicate}")
             continue
-        name = label_sql("o") if table == "cours_eau" else "COALESCE(NULLIF(btrim(o.nom), ''), 'Objet sans nom')"
+        name = label_sql("o") if table == "cours_eau" else f"COALESCE(NULLIF(btrim(o.{TARGETS[table].name}), ''), 'Objet sans nom')"
         parts.append(
             f"SELECT '{table}' AS famille, l.{foreign_key}::text AS objet_id, "
             f"{name} AS nom "
-            f"FROM milieux.{link_table} l JOIN milieux.{table} o "
+            f"FROM milieux.{link_table} l JOIN {TARGETS[table].schema}.{table} o "
             f"ON o.id = l.{foreign_key} WHERE {predicate}")
     links = connection.executeSql(" UNION ALL ".join(parts) + " ORDER BY famille, nom, objet_id")
     # QGIS may expose SQL NULL as a null QVariant rather than Python None.
@@ -203,12 +203,11 @@ class ManageDialog(QDialog):
                     rows.extend(((child, str(uid)), str(label)) for uid, label in options)
                 return tuple(sorted(rows, key=lambda row: (row[1].casefold(), row[0][0], row[0][1])))
         else:
-            child = "sites_zones" if family == "site_terrestre" else family
-            loader = lambda: self._family_options(child, queries[child])
+            loader = lambda: self._family_options(family, queries[family])
         rows = (self.session.get("family.hydro_options", loader, 0)
                 if self.session is not None and family == "cours_eau" and
                 self._hydro_layer() is not None else
-                self.session.get(f"filters.{child}", loader)
+                self.session.get(f"filters.{family}", loader)
                 if self.session is not None and family != "ah" else loader())
         if family == "cours_eau" and rows and hasattr(rows[0], "ids"):
             rows = tuple((option.ids, option.label) for option in rows)
@@ -306,8 +305,7 @@ class ManageDialog(QDialog):
                 if selected:
                     result[child] = selected
         elif family:
-            child = "sites_zones" if family == "site_terrestre" else family
-            result[child] = tuple(uid for value in self.objectPicker.values()
+            result[family] = tuple(uid for value in self.objectPicker.values()
                                    for uid in (value if isinstance(value, tuple) else (value,)))
         return result
 

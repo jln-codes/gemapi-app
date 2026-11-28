@@ -8,18 +8,11 @@ import json
 from uuid import UUID
 
 from .watercourse_labels import label_sql, labels_query_sql, section_label_sql
-from .record import literal
+from .record import SITE_CHILDREN, TARGETS, literal
 
 
-PATRIMONY = {
-    "ah_sections": ("Section AH", "prestations", "ah_section_id", "ah_sections"),
-    "ah_stockage": ("Stockage AH", "prestations", "ah_stockage_id", "ah_stockage"),
-    "ah_ouvrage": ("Ouvrage AH", "prestations", "ah_ouvrage_id", "ah_ouvrage"),
-    "cours_eau": ("Cours d'eau", "prestations", "cours_eau_id", "cours_eau"),
-    "digues": ("Digues", "prestations", "digue_id", "digues"),
-    "sites_terrestres": ("Site terrestre", "prestations", "site_terrestre_id", "sites_terrestres"),
-    "sites_zones": ("Zone terrestre", "prestations", "site_zone_id", "sites_zones"),
-}
+PATRIMONY = {key: (target.label, "prestations", target.fk, key)
+             for key, target in TARGETS.items()}
 MULTI_FILTERS = ("years", "technicians", "communes", "types", "statuses", "providers",
                  "ah", "site_terrestre", *PATRIMONY)
 # The report editor filters by business objects; child relations remain in the
@@ -39,7 +32,7 @@ INCOMPLETE_PREDICATE = "s.code IN ('PLANIFIE','EN_COURS','ANNULE')"
 ROW_FIELDS = (
     "id", "intitule", "date_debut", "date_fin", "type", "technician",
     "provider", "statut", "description", "quantite", "unite", "own_length",
-    "own_area", "parent_zone_length", "parent_zone_area", "has_geometry",
+    "own_area", "site_child_length", "site_child_area", "has_geometry",
     "objects", "reference_measures",
     "reference_count", "communes", "parents",
     "photo_1", "photo_1_commentaire", "photo_2", "photo_2_commentaire",
@@ -96,7 +89,7 @@ def report_context(records, filters):
             ("ah_sections", "section AH sélectionnée", "sections AH sélectionnées"),
             ("cours_eau", "cours d'eau sélectionné", "cours d'eau sélectionnés"),
             ("digues", "digue sélectionnée", "digues sélectionnées"),
-            ("sites_zones", "zone terrestre sélectionnée", "zones terrestres sélectionnées")):
+            *((key, TARGETS[key].label + " sélectionné(e)", "objets sélectionnés") for key in SITE_CHILDREN)):
         if selected[key]:
             restrictions.append(singular if len(selected[key]) == 1 else plural)
     if completion == "all" and not restrictions:
@@ -118,7 +111,6 @@ def report_context(records, filters):
 
 def resolve_report_editor(connection, configured_login=None):
     """Resolve the connection login against technicians, without using the record owner."""
-    from .record import literal
     login_rows = connection.executeSql("SELECT current_user::text")
     current_role = str(login_rows[0][0]) if login_rows and login_rows[0] else ""
     login = str(configured_login or current_role).strip()
@@ -164,8 +156,8 @@ def _relations_sql(include_indirect=False):
         if key in ("ah_stockage", "ah_ouvrage"):
             parent = "JOIN milieux.ah parent ON parent.id=o.ah_id"
             parent_cols = "'ah'::text AS parent_kind, parent.id AS parent_id, parent.nom AS parent_nom"
-        elif key == "sites_zones":
-            parent = "JOIN milieux.sites_terrestres parent ON parent.id=o.site_terrestre_id"
+        elif key in SITE_CHILDREN:
+            parent = "LEFT JOIN milieux.sites_terrestres parent ON parent.id=o.site_terrestre_id"
             parent_cols = "'site_terrestre'::text AS parent_kind, parent.id AS parent_id, parent.nom AS parent_nom"
         elif key == "sites_terrestres":
             parent = ""
@@ -176,13 +168,13 @@ def _relations_sql(include_indirect=False):
         else:
             parent = ""
             parent_cols = "NULL::text AS parent_kind, NULL::uuid AS parent_id, NULL::text AS parent_nom"
-        name = label_sql("o") if key == "cours_eau" else "o.nom"
+        name = label_sql("o") if key == "cours_eau" else f"o.{TARGETS[key].name}"
         if key == "cours_eau":
             parent_cols = f"'cours_eau'::text AS parent_kind, o.id AS parent_id, {name} AS parent_nom"
         parts.append(
             f"SELECT l.id AS prestation_id, {literal(key)} AS famille, o.id AS objet_id, "
-            f"{name} AS nom, o.geom, true AS direct, {parent_cols}, ARRAY[]::uuid[] AS section_ids FROM milieux.{link_table} l "
-            f"JOIN milieux.{object_table} o ON o.id = l.{link_id} {parent}"
+            f"{name} AS nom, o.{TARGETS[key].geometry} AS geom, true AS direct, {parent_cols}, ARRAY[]::uuid[] AS section_ids FROM milieux.{link_table} l "
+            f"JOIN {TARGETS[key].schema}.{object_table} o ON o.id = l.{link_id} {parent}"
         )
     if include_indirect:
         parts.append(
@@ -246,12 +238,12 @@ def filter_option_queries(include_statuses=False, include_providers=False):
                             "JOIN milieux.ah a ON a.id=o.ah_id ORDER BY 2,1")
         elif key == "cours_eau":
             queries[key] = labels_query_sql()
-        elif key == "sites_zones":
-            queries[key] = ("SELECT o.id::text,s.nom || ' — ' || o.nom FROM milieux.sites_zones o "
+        elif key in SITE_CHILDREN:
+            queries[key] = (f"SELECT o.id::text,s.nom || ' — ' || o.{TARGETS[key].name} FROM {TARGETS[key].schema}.{table} o "
                             "JOIN milieux.sites_terrestres s ON s.id=o.site_terrestre_id ORDER BY 2,1")
         else:
-            queries[key] = (f"SELECT id::text,COALESCE(nom,'Sans nom') "
-                            f"FROM milieux.{table} ORDER BY 2,1")
+            queries[key] = (f"SELECT id::text,COALESCE({TARGETS[key].name},'Sans nom') "
+                            f"FROM {TARGETS[key].schema}.{table} ORDER BY 2,1")
     return queries
 
 
@@ -357,8 +349,8 @@ def build_report_query(filters, include_geometry=False, count_only=False):
     ah_scope = ("x.parent_kind<>'ah' OR x.parent_id IN (" +
                 ", ".join(literal(value, "::uuid") for value in filters["ah"]) + ")"
                 if filters["ah"] else "true")
-    own_wkt = ("CASE WHEN p.site_zone_id IS NULL THEN ST_AsText(p.geom) END"
-               if include_geometry else "NULL::text")
+    child_target = "num_nonnulls(p.mobilier_id,p.cheminement_id,p.vegetation_id)>0"
+    own_wkt = "ST_AsText(p.geom)" if include_geometry else "NULL::text"
     reference_wkt = (
         "(SELECT COALESCE(json_agg(json_build_object('famille',r.famille,"
         "'objet_id',r.objet_id::text,'nom',r.nom,'direct',r.direct,"
@@ -372,17 +364,17 @@ def build_report_query(filters, include_geometry=False, count_only=False):
         "COALESCE(NULLIF(concat_ws(' ',t.prenom,t.nom),''),'Non renseigné'),"
         "COALESCE(pr.nom,'Non renseigné'),s.libelle,COALESCE(p.description,''),"
         "p.quantite::text,COALESCE(p.unite,''),"
-        "CASE WHEN p.site_zone_id IS NULL AND ST_Dimension(p.geom)=1 THEN p.longueur_m END,"
-        "CASE WHEN p.site_zone_id IS NULL AND ST_Dimension(p.geom)=2 THEN p.surface_m2 END,"
-        "CASE WHEN ST_Dimension(zone.geom)=1 THEN p.longueur_m END,"
-        "CASE WHEN ST_Dimension(zone.geom)=2 THEN p.surface_m2 END,"
-        "(p.site_zone_id IS NULL AND p.geom IS NOT NULL),"
+        "CASE WHEN ST_Dimension(p.geom)=1 THEN p.longueur_m END,"
+        "CASE WHEN ST_Dimension(p.geom)=2 THEN p.surface_m2 END,"
+        f"CASE WHEN {child_target} AND p.geom IS NULL AND p.origine_mesures='Patrimoine de rattachement' THEN p.longueur_m END,"
+        f"CASE WHEN {child_target} AND p.geom IS NULL AND p.origine_mesures='Patrimoine de rattachement' THEN p.surface_m2 END,"
+        "(p.geom IS NOT NULL),"
         + _object_names_sql() + ","
         "(SELECT string_agg(COALESCE(r.nom,'Objet') || ' : ' || "
         "CASE WHEN ST_Dimension(r.geom)=1 THEN round(ST_Length(r.geom)::numeric,1)::text || ' m' "
         "WHEN ST_Dimension(r.geom)=2 THEN round(ST_Area(r.geom)::numeric,1)::text || ' m²' END,"
         "'; ' ORDER BY r.famille,r.nom,r.objet_id) FROM relations r "
-        "WHERE r.prestation_id=p.id AND r.direct AND r.famille<>'sites_zones'),"
+        f"WHERE r.prestation_id=p.id AND r.direct AND NOT ({child_target})), "
         "(SELECT count(*) FROM relations r WHERE r.prestation_id=p.id AND r.direct),"
         "(SELECT string_agg(c.nom,'; ' ORDER BY c.nom) FROM milieux.communes c "
         "WHERE ST_Intersects(c.geom," + _effective_geometry_sql() + ")),"
@@ -399,7 +391,6 @@ def build_report_query(filters, include_geometry=False, count_only=False):
         "LEFT JOIN milieux.types_prestations tp ON tp.id=p.type_prestation_id "
         "LEFT JOIN milieux.techniciens t ON t.id=p.technicien_id "
         "LEFT JOIN milieux.prestataires pr ON pr.id=p.prestataire_id "
-        "LEFT JOIN milieux.sites_zones zone ON zone.id=p.site_zone_id "
         "WHERE " + where + " ORDER BY p.date_debut,p.intitule,p.id")
 
 
@@ -415,7 +406,7 @@ def prepare_rows(raw_rows):
         key = str(UUID(str(record["id"])))
         if key in records:
             continue
-        for field in ("own_length", "own_area", "parent_zone_length", "parent_zone_area"):
+        for field in ("own_length", "own_area", "site_child_length", "site_child_area"):
             record[field] = float(record[field]) if record[field] is not None else None
         if record["own_points"] is not None:
             record["own_points"] = int(record["own_points"])
@@ -453,7 +444,7 @@ def direct_attachment_label(record):
     family, separator, name = value.partition(" : ")
     labels = {"cours_eau": "cours d’eau", "digues": "digue",
               "ah_stockage": "stockage AH", "ah_ouvrage": "ouvrage AH", "ah_sections": "section AH",
-              "sites_terrestres": "site terrestre", "sites_zones": "zone terrestre"}
+              "sites_terrestres": "site terrestre", **{key: TARGETS[key].label.lower() for key in (*SITE_CHILDREN, "troncons")}}
     return f"{name} ({labels[family]})" if separator and family in labels else value
 
 
@@ -476,14 +467,14 @@ def format_measure(value):
     return f"{float(value):,.1f}".replace(",", " ").replace(".", ",")
 
 
-def parent_zone_measure(record):
-    """Measure the attached zone, separately from the prestation's own shape."""
-    if record.get("parent_zone_length") is not None:
-        return ("Longueur de la zone (géométrie parente) : " +
-                format_measure(record["parent_zone_length"]) + " m")
-    if record.get("parent_zone_area") is not None:
-        return ("Surface de la zone (géométrie parente) : " +
-                format_measure(record["parent_zone_area"]) + " m²")
+def site_child_measure(record):
+    """Describe measures borrowed from a direct target in a site-child family."""
+    if record.get("site_child_length") is not None:
+        return ("Longueur du patrimoine (géométrie parente) : " +
+                format_measure(record["site_child_length"]) + " m")
+    if record.get("site_child_area") is not None:
+        return ("Surface du patrimoine (géométrie parente) : " +
+                format_measure(record["site_child_area"]) + " m²")
     return None
 
 
@@ -497,17 +488,17 @@ def measure_lines(record, include_quantity=True):
         lines.append(f"Nombre de points cartographiés : {record['own_points']}")
     if record.get("has_geometry") and not lines:
         lines.append("Géométrie ponctuelle")
-    zone_measure = parent_zone_measure(record)
-    if zone_measure:
-        lines.append(zone_measure)
+    child_measure = site_child_measure(record)
+    if child_measure:
+        lines.append(child_measure)
     if not record.get("has_geometry") and record.get("reference_measures"):
         lines.append("Réf. patrimoniale : " + str(record["reference_measures"]))
-    elif not record.get("has_geometry") and not zone_measure:
+    elif not record.get("has_geometry") and not child_measure:
         zone = next((r for r in record.get("reference_geometries") or []
-                     if r.get("famille") == "sites_zones" and r.get("direct", True)), None)
+                     if r.get("famille") in SITE_CHILDREN and r.get("direct", True)), None)
         if zone:
             point = str(zone.get("wkt") or "").upper().startswith(("POINT", "MULTIPOINT"))
-            lines.append("Géométrie ponctuelle de la zone" if point else "Géométrie de la zone")
+            lines.append("Géométrie ponctuelle du patrimoine" if point else "Géométrie du patrimoine")
     if include_quantity and record.get("quantite") is not None:
         lines.append("Quantité déclarée : " + str(record["quantite"]) +
                      (" " + str(record["unite"]) if record.get("unite") else ""))

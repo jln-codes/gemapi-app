@@ -212,7 +212,7 @@ class AssistantTests(unittest.TestCase):
         catalog = copy.deepcopy(CATALOG)
         catalog['technicien'] = [(uid(30), 'Benoît Quentin', '')]
         catalog['patrimoine'] = [(uid(31), 'Talus ZEC Ourton', 'AH de test')]
-        catalog['patrimoines'] = {'ah_ouvrage': catalog['patrimoine'], 'ah_stockage': [], 'sites_zones': []}
+        catalog['patrimoines'] = {'ah_ouvrage': catalog['patrimoine'], 'ah_stockage': [], 'vegetation': []}
         return catalog
 
     def named_draft(self, catalog, fields, matches):
@@ -234,8 +234,8 @@ class AssistantTests(unittest.TestCase):
 
     def test_mistral_complete_unique_names_are_accepted_after_local_membership_checks(self):
         catalog = self.name_catalog()
-        for family in ('ah_ouvrage', 'ah_stockage', 'sites_zones'):
-            catalog['patrimoines'] = {key: [] for key in ('ah_ouvrage', 'ah_stockage', 'sites_zones')}
+        for family in ('ah_ouvrage', 'ah_stockage', 'mobilier', 'cheminements', 'vegetation'):
+            catalog['patrimoines'] = {key: [] for key in ('ah_ouvrage', 'ah_stockage', 'mobilier', 'cheminements', 'vegetation')}
             catalog['patrimoines'][family] = catalog['patrimoine']
             fields = {'famille': family, 'technicien': 'Benoît Quentin',
                       'patrimoine': 'Talus ZEC Ourton — AH de test', 'prestataire': 'Veolia'}
@@ -328,7 +328,7 @@ class AssistantTests(unittest.TestCase):
             self.assertEqual(draft.names.get(field), before['names'].get(field))
 
     def test_exact_priority_also_applies_to_companies_and_all_patrimonial_families(self):
-        for family in ('ah_ouvrage', 'ah_stockage', 'sites_zones'):
+        for family in ('ah_ouvrage', 'ah_stockage', 'mobilier', 'cheminements', 'vegetation'):
             catalog = self.name_catalog()
             catalog['prestataire'].append((uid(70), 'Véollia', ''))
             catalog['patrimoine'].append((uid(71), 'Talus ZEC Hurton', 'AH de test'))
@@ -363,8 +363,8 @@ class AssistantTests(unittest.TestCase):
                 queries.append(query)
                 return [(uid(1), 'Nom fictif', 'Parent fictif')]
         catalog = load_catalog(Connection(), None, for_interpretation=True)
-        self.assertEqual(set(catalog['patrimoines']), {'ah_ouvrage', 'ah_stockage', 'sites_zones'})
-        self.assertEqual(len(queries), 7)
+        self.assertEqual(set(catalog['patrimoines']), {'ah_ouvrage', 'ah_stockage', 'mobilier', 'cheminements', 'vegetation'})
+        self.assertEqual(len(queries), 9)
         self.assertTrue(all(query.startswith('SELECT ') for query in queries))
         payload = request_payload(Draft(), 'Une intervention sur Hurton.', catalog)
         context = json.loads(payload['messages'][1]['content'])['referentiels']
@@ -417,6 +417,16 @@ class AssistantTests(unittest.TestCase):
         draft.apply(proposal(patrimoine="Un autre ouvrage"))
         self.assertNotIn("patrimoine", draft.choices)
 
+    def test_site_homonyms_keep_the_parent_and_require_a_local_choice(self):
+        catalog = copy.deepcopy(CATALOG)
+        catalog["patrimoine"] = [(uid(71), "Haie", "Prairie"), (uid(72), "Haie", "Verger")]
+        draft = self.full(famille="vegetation", patrimoine="Haie")
+        result = draft.resolve(catalog)
+        self.assertIsNone(result["values"])
+        self.assertEqual({row[2] for row in result["pending"]["patrimoine"]}, {"Prairie", "Verger"})
+        draft.choices["patrimoine"] = uid(72)
+        self.assertEqual(draft.resolve(catalog)["associations"], [("vegetation", uid(72))])
+
     def test_approximate_match_requires_confirmation(self):
         self.assertIn("patrimoine", self.full(patrimoine="rivière du Buisson").resolve(CATALOG)["pending"])
         draft = self.full(prestataire="Veollia")
@@ -431,7 +441,7 @@ class AssistantTests(unittest.TestCase):
         for family in ("cours_eau", "digues", "ah_sections", "sites_terrestres", "inconnue"):
             with self.subTest(family=family):
                 self.assertIsNone(self.full(famille=family).resolve(CATALOG)["values"])
-        for family in ("ah_ouvrage", "ah_stockage", "sites_zones"):
+        for family in ("ah_ouvrage", "ah_stockage", "mobilier", "cheminements", "vegetation"):
             self.assertEqual(self.full(famille=family).resolve(CATALOG)["associations"], [(family, uid(6))])
         self.assertIsNone(self.full(plusieurs_objets=True).resolve(CATALOG)["values"])
         drawing = self.full()

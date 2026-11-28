@@ -22,7 +22,7 @@ from gemapi_app.creation import CreationDialog
 from gemapi_app.digitize import geometry_from_vertices
 from gemapi_app.patrimony_spatial import (ProjectionSettings, candidate_query,
                                               resolve_watercourse, _samples, _sections)
-from test_postgres_integration import ROOT, command, sql
+from test_postgres_integration import ROOT, command, load_demo_rows, sql
 
 
 AUDITS = ROOT / "audits"
@@ -41,20 +41,8 @@ def _timed(action, repeats=1):
 def _project_copy(target, port, source_path=None):
     with ZipFile(source_path or ROOT / "demo/prestations_demo.qgz") as source:
         members = [(name, source.read(name)) for name in source.namelist()]
-    document = ElementTree.fromstring(next(data for name, data in members
-                                           if name.endswith(".qgs")))
-    for layer in document.findall("./projectlayers/maplayer"):
-        if layer.findtext("provider") == "postgres":
-            source = layer.find("datasource")
-            uri = QgsDataSourceUri(source.text)
-            uri.setConnection("127.0.0.1", port, "postgres", "postgres", "")
-            source.text = uri.uri(False)
-    for element in document.iter():
-        for key, value in list(element.attrib.items()):
-            if value.startswith("dbname="):
-                uri = QgsDataSourceUri(value)
-                uri.setConnection("127.0.0.1", port, "postgres", "postgres", "")
-                element.set(key, uri.uri(False))
+    from test_mod_geom_project import local_document
+    document = local_document(source_path or ROOT / "demo/prestations_demo.qgz", port)
     document.find("./properties/Paths/Absolute").text = "true"
     with ZipFile(target, "w") as destination:
         for name, data in members:
@@ -78,11 +66,8 @@ def main():
             raise RuntimeError("PostGIS jetable indisponible")
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text())
-        sources = sorted((ROOT / "demo/data").glob("[0-9][0-9]_*.sql"))
-        sql(container, "\n".join(
-            [*(source.read_text() for source in sources if source.name < "15_"),
-             (ROOT / "demo/data/digues.sql").read_text(),
-             *(source.read_text() for source in sources if source.name >= "15_")]))
+        load_demo_rows(container)
+
         river_id, digue_id = str(uuid4()), str(uuid4())
         sql(container, f"BEGIN; INSERT INTO milieux.cours_eau(id,nom,type_ecoulement,source,direction,geom) "
                        f"VALUES ('{river_id}','Rivière des Bancs','rivière','TEST',TRUE,"
@@ -108,6 +93,7 @@ def main():
                 def __init__(self):
                     self.window = QMainWindow()
                     self.canvas = QgsMapCanvas()
+                    self.canvas.setDestinationCrs(QgsCoordinateReferenceSystem("EPSG:3950"))
                 def mainWindow(self): return self.window
                 def mapCanvas(self): return self.canvas
             iface = Interface()
@@ -117,24 +103,24 @@ def main():
             assert not form.nearbyOnly.isChecked() and not form.nearbyOnly.isEnabled()
             assert form.objectList.count() > 0
             assert {table for table, *_ in form.objects} == {
-                "digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"}
+                "digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "mobilier", "cheminements", "vegetation"}
             # A missing family must not empty the remaining families.
             form._object_layers["digues"] = None
             form._load_objects()
             assert {table for table, *_ in form.objects} == {
-                "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"}
+                "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "mobilier", "cheminements", "vegetation"}
             assert "Lecture patrimoniale incomplète : digues" in form.statusLabel.text()
             form._object_layers.pop("digues")
             form._load_objects()
             assert {table for table, *_ in form.objects} == {
-                "digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"}
+                "digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "mobilier", "cheminements", "vegetation"}
             connection = form._connection
             def unavailable_connection():
                 raise RuntimeError("Connexion SQL séparée indisponible")
             form._connection = unavailable_connection
             form._load_objects()
             assert {table for table, *_ in form.objects} == {
-                "digues", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"}
+                "digues", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "mobilier", "cheminements", "vegetation"}
             form._connection = connection
             form._load_objects()
             source = QgsGeometry.fromWkt("POINT(1700300 9300080)")
@@ -148,6 +134,7 @@ def main():
             form._capture = type("Capture", (), {"kind": "point"})()
             form._capture_finished(captured, "Géométrie définie en EPSG:3950.")
             assert form.geometry is not None and form._geometry_error() is None
+            form.nearbyOnly.setChecked(True)
             radius_counts = []
             for value, unit in ((10, 0), (500, 0), (500, 1)):
                 form.distanceSpin.setValue(value)
@@ -157,7 +144,7 @@ def main():
                     form.geometry.asWkt(17), radius_m))
                 if radius_m == 500000:
                     assert set(Counter(str(row[0]) for row in raw)) == {
-                        "digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"}
+                        "digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "mobilier", "cheminements", "vegetation"}
                 visible = {(item.data(0x0100)[0], uid)
                            for item in (form.objectList.item(i)
                                         for i in range(form.objectList.count()))
@@ -268,9 +255,9 @@ def main():
             assert form.geometryGroup.y() == form.associationGroup.y()
             assert form._associations() == [("cours_eau", river_id)]
             for family, table in (("ah_stockage", "ah_stockage"),
-                                  ("sites_zones", "sites_zones")):
+                                  ("vegetation", "vegetation")):
                 uid, wkt = sql(container,
-                    f"SELECT id::text,ST_AsText(ST_PointOnSurface(geom)) FROM milieux.{table} "
+                    f"SELECT id::text,ST_AsText(ST_PointOnSurface({'geometry' if family=='vegetation' else 'geom'})) FROM {'public' if family=='vegetation' else 'milieux'}.{table} "
                     "ORDER BY id LIMIT 1").stdout.strip().split("|", 1)
                 form.geometry = QgsGeometry.fromWkt(wkt)
                 form._spatial_cache = None
@@ -311,13 +298,13 @@ def main():
                        candidate_query(cases[0][1], 500)).stdout
             for index in ("cours_eau_geom_idx", "sites_terrestres_geom_idx",
                           "ah_stockage_geom_idx", "ah_ouvrage_geom_idx",
-                          "sites_zones_geom_idx"):
+                          "vegetation_geometry_idx"):
                 assert index in plan, (index, plan)
             default_plan = sql(container, "EXPLAIN " + candidate_query(cases[0][1], 500)).stdout
             default_index_count = sum(index in default_plan for index in
                                       ("cours_eau_geom_idx", "sites_terrestres_geom_idx",
                                        "ah_stockage_geom_idx", "ah_ouvrage_geom_idx",
-                                       "sites_zones_geom_idx"))
+                                       "vegetation_geometry_idx"))
             project.clear()
         AUDITS.mkdir(exist_ok=True)
         with (AUDITS / "patrimoine_spatial_01_benchmark.csv").open("w", newline="", encoding="utf-8") as target:

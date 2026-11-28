@@ -40,8 +40,8 @@ class FakeConnection:
             return ((STORAGE, "ZEC du Bois — Stockage principal"),)
         if "FROM milieux.ah_ouvrage o" in query:
             return ((WORKS, "ZEC du Bois — Ouvrage de régulation"),)
-        if "FROM milieux.sites_zones o" in query:
-            return ((ZONE, "Marais des Saules — Mare nord"),)
+        if "FROM milieux.sites_terrestres ORDER BY" in query:
+            return ((ZONE, "Marais des Saules"),)
         if "FROM milieux.cours_eau" in query:
             return ((RIVER, "La Clarence"),)
         if "FROM milieux.digues" in query:
@@ -66,7 +66,7 @@ def main():
         dialog.familyCombo.setCurrentIndex(dialog.familyCombo.findData(family))
         assert dialog.objectPicker.list.count() == count, family
         assert not any(dialog.filters().get(key) for key in
-                       ("cours_eau", "digues", "ah_stockage", "ah_ouvrage", "sites_zones"))
+                       ("cours_eau", "digues", "ah_stockage", "ah_ouvrage", "site_terrestre"))
     dialog.familyCombo.setCurrentIndex(dialog.familyCombo.findData("ah"))
     items = [dialog.objectPicker.list.item(i) for i in range(2)]
     assert {item.data(Qt.UserRole) for item in items} == {
@@ -96,9 +96,9 @@ def main():
     assert dialog.objectPicker.geometry().x() > dialog.pickers["communes"].geometry().x()
     dialog.familyCombo.setCurrentIndex(dialog.familyCombo.findData("site_terrestre"))
     assert "ah_stockage" not in dialog.filters() and "ah_ouvrage" not in dialog.filters()
-    assert dialog.objectPicker.list.item(0).text() == "Marais des Saules — Mare nord"
+    assert dialog.objectPicker.list.item(0).text() == "Marais des Saules"
     dialog.objectPicker.list.item(0).setCheckState(Qt.Checked)
-    assert dialog.filters()["sites_zones"] == (ZONE,)
+    assert dialog.filters()["site_terrestre"] == (ZONE,)
     dialog.clear_filters()
     assert dialog.familyCombo.currentData() == "" and not dialog.objectPicker.values()
     assert not dialog.filters()["years"] and not dialog.filters()["providers"]

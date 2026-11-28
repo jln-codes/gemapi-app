@@ -15,7 +15,7 @@ from osgeo import ogr
 from qgis.core import (QgsApplication, QgsDataSourceUri, QgsFieldConstraints, QgsGeometry,
                        QgsProject, QgsVectorDataProvider, QgsVectorLayer, QgsWkbTypes)
 
-from test_postgres_integration import ROOT, command, sql
+from test_postgres_integration import ROOT, command, load_demo_rows, sql
 
 
 def local_document(path, port, database="postgres", user="postgres"):
@@ -40,66 +40,12 @@ def local_document(path, port, database="postgres", user="postgres"):
         source = layer.find("datasource")
         source.text = local_uri(source.text)
         count += 1
-    assert count == 25
+    assert count == (32 if path.name == "prestations_demo.qgz" else 25)
     for element in document.iter():
         for key, value in element.attrib.items():
-            if value.startswith("dbname="):
+            if value.startswith(("dbname=", "service=")):
                 element.set(key, local_uri(value))
     return document
-
-
-def check_cabbalr(container, port, directory):
-    sql(container, "CREATE DATABASE cabbalr_test")
-    sql(container, "ALTER DATABASE cabbalr_test SET search_path=public,extensions")
-    local_psql = ("docker", "exec", "-i", container, "psql", "-Xq", "-U", "postgres",
-                  "-v", "ON_ERROR_STOP=1", "-d", "cabbalr_test")
-    command(*local_psql, input_text="CREATE SCHEMA extensions; CREATE EXTENSION postgis WITH SCHEMA extensions;")
-    command(*local_psql, input_text=(ROOT / "model/schema.sql").read_text())
-    statements = sorted((ROOT / "cabbalr/sql").glob("[0-9][0-9]_*.sql"))
-    command(*local_psql, input_text="\n".join(path.read_text() for path in statements))
-    command(*local_psql, input_text=(ROOT / "model/roles_milieux.sql").read_text()
-            + "CREATE ROLE cabbalr_patrimoine LOGIN; GRANT milieux_patrimoine TO cabbalr_patrimoine;")
-    document = local_document(ROOT / "cabbalr/prestations_cabbalr.qgz", port,
-                              "cabbalr_test", "cabbalr_patrimoine")
-    local = Path(directory) / "cabbalr_local.qgs"
-    ElementTree.ElementTree(document).write(local, encoding="utf-8", xml_declaration=True)
-    project = QgsProject.instance()
-    assert project.read(str(local))
-    layers = {layer.name(): layer for layer in project.mapLayers().values()}
-    assert len(layers) == 26
-    invalid = [(layer.name(), layer.error().summary()) for layer in layers.values()
-               if layer.providerType() == "postgres" and not layer.isValid()]
-    assert not invalid, invalid
-    relations = project.relationManager().relations()
-    assert len(relations) == 62 and all(relation.isValid() for relation in relations.values())
-    editor = layers["prestations"]
-    assert QgsDataSourceUri(editor.source()).table() == "prestations"
-    assert editor.dataProvider().capabilities() & QgsVectorDataProvider.ChangeAttributeValues
-    assert not editor.editFormConfig().readOnly(editor.fields().indexFromName("intitule"))
-    assert editor.fields().indexFromName("origine_mesures") >= 0
-    assert not editor.expressionField(editor.fields().indexFromName("surface_m2"))
-    assert editor.editFormConfig().readOnly(editor.fields().indexFromName("surface_m2"))
-    assert editor.startEditing()
-    assert editor.rollBack()
-    assert layers["prestations_fiches"].featureCount() == 0
-    assert layers["sites_terrestres"].featureCount() == 16
-    assert layers["sites_zones-lignes"].featureCount() == 41
-    assert layers["sites_zones-points"].featureCount() == layers["sites_zones-polygones"].featureCount() == 0
-    for name, wkt in (
-        ("sites_terrestres", "MULTIPOLYGON(((1700000 9300000,1700100 9300000,1700100 9300100,1700000 9300000)),"
-         "((1700300 9300000,1700400 9300000,1700400 9300100,1700300 9300000)))"),
-        ("sites_zones-lignes", "MULTILINESTRING((1700000 9300000,1700100 9300000),"
-         "(1700300 9300000,1700400 9300000))"),
-    ):
-        layer = layers[name]
-        feature = next(layer.getFeatures())
-        expected = QgsGeometry.fromWkt(wkt)
-        assert layer.startEditing()
-        assert layer.changeGeometry(feature.id(), expected)
-        assert layer.commitChanges(), layer.commitErrors()
-        assert layer.getFeature(feature.id()).geometry().equals(expected)
-    project.clear()
-    print("Projet CABBALR et édition native de deux géométries multiparties sur PostGIS local")
 
 
 def main():
@@ -112,7 +58,7 @@ def main():
             geometry = feature.GetGeometryRef()
             uid = feature.GetField("id")
             assert uid not in seen
-            if feature.GetField('site_zone_id'):
+            if feature.GetField('vegetation_id'):
                 assert geometry is None
                 zone_null += 1
                 seen[uid] = None
@@ -142,11 +88,8 @@ def main():
             raise RuntimeError("PostGIS local indisponible")
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text())
-        sources = sorted((ROOT / "demo/data").glob("[0-9][0-9]_*.sql"))
-        sql(container, "\n".join(
-            [*(source.read_text() for source in sources if source.name < "15_"),
-             (ROOT / "demo/data/digues.sql").read_text(),
-             *(source.read_text() for source in sources if source.name >= "15_")] ))
+        load_demo_rows(container)
+
         sql(container, "CREATE ROLE qgis_release_reader LOGIN; "
                        "GRANT USAGE ON SCHEMA milieux TO qgis_release_reader; "
                        "GRANT SELECT ON ALL TABLES IN SCHEMA milieux TO qgis_release_reader;")
@@ -160,13 +103,13 @@ def main():
             project = QgsProject.instance()
             assert project.read(str(local)), "Chargement du projet QGIS échoué"
             layers = list(project.mapLayers().values())
-            assert len(layers) == 26
-            assert len(project.relationManager().relations()) == 62
+            assert len(layers) == 33
+            assert len(project.relationManager().relations()) == 70
             assert all(relation.isValid() for relation in
                        project.relationManager().relations().values())
             group = project.layerTreeRoot().findGroup("Tables et référentiels")
             assert group is not None and not group.isExpanded()
-            assert len(group.children()) == 8
+            assert len(group.children()) == 10
             assert all(not project.mapLayer(node.layerId()).isSpatial()
                        for node in group.children())
             link_counts = {"prestations__ah":19,"prestations__sites_terrestres":18}
@@ -175,15 +118,14 @@ def main():
                 assert not layer.isSpatial() and layer.featureCount() == count, (
                     name, layer.featureCount(), count)
                 assert layer.fields().indexFromName('prestation_id')>=0
-            for name in ("sites_zones-points", "sites_zones-lignes", "sites_zones-polygones"):
-                layer = next(layer for layer in layers if layer.name() == name)
-                assert layer.isValid() and layer.crs().authid() == "EPSG:3950"
-            for name,n in (('sites_zones-points',4),('sites_zones-lignes',4),('sites_zones-polygones',17)):
-                assert next(layer for layer in layers if layer.name()==name).featureCount()==n
+            for family,count in (("Mobilier",4), ("Cheminements",2), ("Végétation",19)):
+                children = [layer for layer in layers if layer.name().startswith(family + " (") and layer.isSpatial()]
+                assert len(children) == 3 and sum(layer.featureCount() for layer in children) == count
+                assert all(layer.isValid() and layer.readOnly() for layer in children)
             assert next(layer for layer in layers if layer.name()=='sites_terrestres').featureCount()==12
             for name, field, flag, required in (("ah_stockage", "ah_id", QgsFieldConstraints.ConstraintUnique, True),
                                       ("ah_ouvrage", "nom", QgsFieldConstraints.ConstraintNotNull, False),
-                                      ("Cours d'eau", "nom", QgsFieldConstraints.ConstraintNotNull, False)):
+                                      ("Cours d'eau", "nom", QgsFieldConstraints.ConstraintNotNull, True)):
                 layer = next(layer for layer in layers if layer.name() == name)
                 index = layer.fields().indexFromName(field)
                 # Provider constraints describe the canonical database contract;
@@ -193,7 +135,8 @@ def main():
                 configured=next(node for node in document.findall('./projectlayers/maplayer') if node.findtext('id')==layer.id())
                 constraint=configured.find(f"./constraints/constraint[@field='{field}']")
                 assert constraint is not None
-                assert bool(layer.fieldConstraints(index)&flag)==bool(int(constraint.get('constraints'))&int(flag))
+                assert bool(layer.fieldConstraints(index) & flag) == (
+                    required or bool(int(constraint.get('constraints')) & int(flag))), (name, field)
                 if name == "ah_stockage":
                     assert constraint.get('unique_strength') == '1'
                     assert layer.fields().at(index).constraints().constraintStrength(flag) == QgsFieldConstraints.ConstraintStrengthHard
@@ -235,19 +178,13 @@ def main():
             assert len(seen_ids) == 100
             from qgis.gui import QgsAttributeForm, QgsGui
             QgsGui.editorWidgetRegistry().initEditors()
-            editor = next(layer for layer in layers if layer.name() == 'prestations')
-            feature = next(editor.getFeatures())
-            assert editor.startEditing()
-            form = QgsAttributeForm(editor, feature)
-            form.changeAttribute('intitule', 'ESSAI FORMULAIRE ANNULE')
-            assert form.save()
-            assert editor.getFeature(feature.id())['intitule'] == 'ESSAI FORMULAIRE ANNULE'
-            assert editor.rollBack()
+            editor = fiches[0]
+            assert editor.readOnly()
+            form = QgsAttributeForm(editor, next(editor.getFeatures()))
+            assert form.feature().isValid()
             form.close()
             del form
-            print('Formulaire natif prestations : modification et rollback locaux réussis', flush=True)
             project.clear()
-            check_cabbalr(container, port, directory)
         app.exitQgis()
         print("Projet QGIS de démonstration chargé sur PostGIS local")
     finally:

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gemapi_app.report_data import build_management_query  # noqa: E402
-from test_postgres_integration import ROOT, command, sql  # noqa: E402
+from test_postgres_integration import ROOT, command, load_demo_rows, sql  # noqa: E402
 
 
 def main():
@@ -24,11 +24,7 @@ def main():
             raise RuntimeError("PostGIS de test indisponible")
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text())
-        sources = sorted((ROOT / "demo/data").glob("[0-9][0-9]_*.sql"))
-        sql(container, "\n".join(
-            [*(source.read_text() for source in sources if source.name < "15_"),
-             (ROOT / "demo/data/digues.sql").read_text(),
-             *(source.read_text() for source in sources if source.name >= "15_")] ))
+        load_demo_rows(container)
 
         def one(query):
             return sql(container, query).stdout.strip()
@@ -69,8 +65,8 @@ def main():
                        f"INSERT INTO milieux.sites_terrestres (id,nom,geom) VALUES "
                        f"('{uid['site_parent']}','Site parent UX06',ST_GeomFromText("
                        "'MULTIPOLYGON(((0 0,20 0,20 20,0 20,0 0)))',3950)); "
-                       f"INSERT INTO milieux.sites_zones (id,site_terrestre_id,nom,geom) VALUES "
-                       f"('{uid['site']}','{uid['site_parent']}','Site UX06',"
+                       f"INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES "
+                       f"('ARBRES','{uid['site']}','{uid['site_parent']}','Site UX06',"
                        "ST_GeomFromText('MULTIPOINT((10 10))',3950)); COMMIT;")
         rows = (
             ("own", "Travaux géométrie", "type", "PLANIFIE", "POINT(0 0)"),
@@ -93,7 +89,7 @@ def main():
                            f"{geometry_sql});")
         statements.append(f"UPDATE milieux.prestations SET ah_stockage_id='{uid['zec2']}' WHERE id='{uid['own']}'; "
                        f"UPDATE milieux.prestations SET ah_stockage_id='{uid['zec1']}' WHERE id='{uid['via_zec']}'; "
-                       f"UPDATE milieux.prestations SET site_zone_id='{uid['site']}',geom=NULL "
+                       f"UPDATE milieux.prestations SET vegetation_id='{uid['site']}',geom=NULL "
                        f"WHERE id='{uid['linked']}'; "
                        f"UPDATE milieux.prestations SET cours_eau_id='{river}' WHERE id IN ('{uid['nearby']}','{uid['outside']}'); COMMIT;")
         sql(container, "\n".join(statements))
@@ -123,7 +119,7 @@ def main():
         assert by_storage and by_ouvrage
         assert set(ids({"ah_stockage": [uid["zec1"]], "ah_ouvrage": [ouvrage]})) == (
             by_storage | by_ouvrage)
-        assert ids({"ah_stockage": [uid["zec1"]], "sites_zones": [uid["site"]]}) == []
+        assert ids({"ah_stockage": [uid["zec1"]], "vegetation": [uid["site"]]}) == []
         assert ids({"ah_stockage": [uid["zec1"]], "cours_eau": [river]}) == []
         assert set(ids({"communes": [uid["commune"]]})) == {
             uid["own"], uid["linked"], uid["via_zec"], uid["nearby"]}

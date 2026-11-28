@@ -33,13 +33,13 @@ from gemapi_app.report_synthetic_portrait import (
     export_synthetic_portrait_report, terminal_groups,
 )
 from gemapi_app.session_data import SessionData
-from test_postgres_integration import ROOT, command, sql
+from test_postgres_integration import ROOT, command, load_demo_rows, sql
 
 
 DEMO_COUNT = 100
 ATTACHMENTS = (
     "cours_eau_id", "digue_id", "ah_stockage_id", "ah_ouvrage_id",
-    "site_terrestre_id", "site_zone_id",
+    "site_terrestre_id", "vegetation_id",
 )
 LONG_GROUPINGS = (
     ("cours_eau",), ("digues",), ("ah",), ("site_terrestre",), (),
@@ -69,7 +69,7 @@ def check_patrimony_groups(connection, records):
             "FROM milieux.prestations p "
             "LEFT JOIN milieux.ah_stockage s ON s.id=p.ah_stockage_id "
             "LEFT JOIN milieux.ah_ouvrage o ON o.id=p.ah_ouvrage_id "
-            "LEFT JOIN milieux.sites_zones z ON z.id=p.site_zone_id")
+            "LEFT JOIN milieux.prestations__sites_terrestres z ON z.prestation_id=p.id")
     }
     proofs = defaultdict(lambda: defaultdict(set))
     for uid, parent, section in connection.executeSql(
@@ -138,7 +138,7 @@ def check_measures(connection, records):
             "SELECT id::text,quantite::text,COALESCE(unite,''),"
             "CASE WHEN ST_Dimension(geom)=1 THEN ST_Length(geom) END,"
             "CASE WHEN ST_Dimension(geom)=2 THEN ST_Area(geom) END,"
-            "CASE WHEN site_terrestre_id IS NOT NULL AND ST_Dimension(geom)=0 "
+            "CASE WHEN ST_Dimension(geom)=0 "
             "THEN ST_NumGeometries(geom) END FROM milieux.prestations")
     }
     for row in records:
@@ -398,14 +398,11 @@ def run_suite(suite):
             raise RuntimeError("PostGIS de test indisponible")
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model" / "schema.sql").read_text(encoding="utf-8"))
-        sources = sorted((ROOT / "demo/data").glob("[0-9][0-9]_*.sql"))
-        sql(container, "\n".join(
-            [*(source.read_text(encoding="utf-8") for source in sources if source.name < "15_"),
-             (ROOT / "demo/data/digues.sql").read_text(encoding="utf-8"),
-             *(source.read_text(encoding="utf-8") for source in sources if source.name >= "15_")] ))
+        load_demo_rows(container)
+
         sql(container, "CREATE ROLE report_read LOGIN; "
                        "GRANT USAGE ON SCHEMA milieux TO report_read; "
-                       "GRANT SELECT ON ALL TABLES IN SCHEMA milieux TO report_read;")
+                       "GRANT SELECT ON ALL TABLES IN SCHEMA milieux,public TO report_read;")
         mapping = command("docker", "port", container, "5432").stdout.strip()
         port = mapping.rsplit(":", 1)[-1]
         print("Port PostGIS temporaire :", mapping, flush=True)

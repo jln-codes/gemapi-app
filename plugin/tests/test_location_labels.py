@@ -13,6 +13,7 @@ from qgis.gui import QgsMapCanvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gemapi_app.creation import CreationDialog
+from gemapi_app.patrimony_spatial import resolve_candidates
 from gemapi_app.record import LINKS, build_insert, build_update
 from gemapi_app.watercourse_labels import location_label
 from test_record import REQUIRED, OBJECT
@@ -71,10 +72,6 @@ class LocationLabels(unittest.TestCase):
         self.assertEqual(self.form.objectList.count(), 1)
         return self.form.objectList.item(0)
 
-    def section(self, name='AH métier'):
-        self.form._location_sections = ((AH, RIVER, name,
-                                         QgsGeometry.fromWkt('LINESTRING(20 0,80 0)')),)
-
     def test_course_without_structure(self):
         self.form.geometry = QgsGeometry.fromWkt('POINT(50 0)')
         self.assertEqual(self.row().text(), 'Rivière test')
@@ -82,20 +79,18 @@ class LocationLabels(unittest.TestCase):
 
     def test_near_levee_is_only_a_candidate(self):
         self.form.geometry = QgsGeometry.fromWkt('POINT(50 1)')
-        self.form._location_levees = {DIGUE: (RIVER, 'Digue métier')}
         self.form.nearbyOnly.setChecked(True)
         allowed = {family: set() for family in LINKS}
         allowed['cours_eau'].add(RIVER)
         allowed['digues'].add(DIGUE)
         with patch.object(self.form, '_spatial_candidates', return_value=allowed):
-            self.assertEqual(self.row().text(), 'Rivière test (Digue métier) — candidats spatiaux')
+            self.assertEqual(self.row().text(), 'Rivière test')
         self.assertEqual(self.form._associations(), [])
 
     def test_section_intersection_and_explicit_course_selection(self):
-        self.section()
         self.form.geometry = QgsGeometry.fromWkt('POINT(50 0)')
         row = self.row()
-        self.assertEqual(row.text(), 'Rivière test (AH métier) — candidats spatiaux')
+        self.assertEqual(row.text(), 'Rivière test')
         self.assertIn('ne constitue pas un rattachement', row.toolTip())
         family, ids, label, _, _ = row.data(Qt.UserRole)
         before = build_insert(REQUIRED, [(family, ids[0])], 'POINT(50 0)')
@@ -105,13 +100,13 @@ class LocationLabels(unittest.TestCase):
         self.assertEqual(build_insert(REQUIRED, self.form._associations(), 'POINT(50 0)'), before)
 
     def test_multiple_candidates_are_context_not_multiple_links(self):
-        self.section('AH B')
-        self.form.geometry = QgsGeometry.fromWkt('POINT(50 0)')
-        self.form._location_levees = {DIGUE: (RIVER, 'Digue A')}
-        allowed = {family: set() for family in LINKS}
-        allowed['digues'].add(DIGUE)
-        self.assertEqual(self.form._candidate_location_names((RIVER,), self.form.geometry, allowed),
-                         ('AH B', 'Digue A'))
+        allowed, _ = resolve_candidates(QgsGeometry.fromWkt('POINT(50 0)'), [
+            ('cours_eau', RIVER, 'LINESTRING(0 0,100 0)', None, None, None, None),
+            ('ah_sections', AH, None, RIVER, 0.2, 0.8, True),
+            ('digues', DIGUE, None, RIVER, 0.2, 0.8, True),
+        ])
+        self.assertEqual(allowed['ah_sections'], {AH})
+        self.assertEqual(allowed['digues'], {DIGUE})
         self.assertEqual(location_label('Rivière test', ('Digue A', 'AH B', 'Digue A')),
                          'Rivière test (Digue A, AH B)')
         self.assertEqual(self.form._associations(), [])
@@ -133,7 +128,6 @@ class LocationLabels(unittest.TestCase):
                                       'POINT(50 0)', 'POINT(50 0)'))
 
     def test_uncertain_location_has_no_invented_context(self):
-        self.section()
         for wkt in (None, 'POINT(50 5)'):
             self.form.geometry = QgsGeometry.fromWkt(wkt) if wkt else None
             self.assertEqual(self.row().text(), 'Rivière test')
@@ -166,7 +160,7 @@ class LocationLabels(unittest.TestCase):
             CreationDialog._load_objects(self.form)
         labels = {(family, ids[0]): text for family, ids, text, _, _, _ in self.form.objects}
         self.assertEqual(labels['digues', DIGUE], 'Rivière test (Digue métier)')
-        self.assertEqual(labels['ah_stockage', OBJECT], 'Rivière test (AH parent métier)')
+        self.assertEqual(labels['ah_stockage', OBJECT], 'AH parent métier — Stockage AH : Enfant technique')
         self.assertEqual(self.form._associations(), [])
 
 

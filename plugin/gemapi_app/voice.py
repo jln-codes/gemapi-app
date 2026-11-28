@@ -371,7 +371,7 @@ def context_vocabulary(names, resolution=None):
             if key in resolution['verified']:
                 entries.append(resolution['verified'][key][1])
             entries.extend(row[1] for row in resolution['pending'].get(key, [])[:3])
-    entries.extend(('ouvrage hydraulique', 'stockage hydraulique', 'zone terrestre', 'débroussaillage',
+    entries.extend(('ouvrage hydraulique', 'stockage hydraulique', 'mobilier', 'cheminement', 'végétation', 'débroussaillage',
                     'prestation', 'prestataire', 'technicien', 'date de début', 'date de fin', 'Terminé'))
     result, seen = [], set()
     for entry in entries:

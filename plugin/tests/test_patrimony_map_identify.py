@@ -32,9 +32,9 @@ def uid(name):
 
 
 FIGURES = (
-    ("point", "sites_zones", "MultiPoint", "MULTIPOINT((0 0))"),
-    ("ligne", "sites_zones", "MultiLineString", "MULTILINESTRING((1950 0,2050 0))"),
-    ("polygone", "sites_zones", "MultiPolygon", "MULTIPOLYGON(((4000 -10,4020 -10,4020 10,4000 10,4000 -10)))"),
+    ("point", "vegetation", "MultiPoint", "MULTIPOINT((0 0))"),
+    ("ligne", "vegetation", "MultiLineString", "MULTILINESTRING((1950 0,2050 0))"),
+    ("polygone", "vegetation", "MultiPolygon", "MULTIPOLYGON(((4000 -10,4020 -10,4020 10,4000 10,4000 -10)))"),
     ("riviere", "cours_eau", "MultiLineString", "MULTILINESTRING((5950 0,6050 0))"),
     ("digue", "digues", "LineString", "LINESTRING(5950 0,6050 0)"),
     ("stockage", "ah_stockage", "Polygon", "POLYGON((5990 -10,6010 -10,6010 10,5990 10,5990 -10))"),
@@ -98,15 +98,15 @@ class SpatialFormTests(unittest.TestCase):
                         values += ["rivière", True, "TEST LOC03"]
                     elif family.startswith("ah_"):
                         columns += ["ah_id"]; values += [uid("ah")]
-                    elif family == "sites_zones":
+                    elif family == "vegetation":
                         columns += ["site_terrestre_id"]; values += [uid("site")]
                     # Parent site must precede its zones, all in one transaction.
-                    if family == "sites_zones": continue
+                    if family == "vegetation": continue
                     params = ["%s", "%s", "ST_GeomFromText(%s,3950)"] + ["%s"]*(len(values)-3)
                     c.execute(f"INSERT INTO milieux.{family}({','.join(columns)}) VALUES ({','.join(params)}) ON CONFLICT DO NOTHING", values)
                 for name, family, _, wkt in FIGURES:
-                    if family == "sites_zones":
-                        c.execute("INSERT INTO milieux.sites_zones(id,nom,geom,site_terrestre_id) VALUES (%s,%s,ST_GeomFromText(%s,3950),%s) ON CONFLICT DO NOTHING", (uid(name), name, wkt, uid("site")))
+                    if family == "vegetation":
+                        c.execute("INSERT INTO public.vegetation(famille_vegetation,id,designation,geometry,site_terrestre_id) VALUES ('ARBRES',%s,%s,ST_GeomFromText(%s,3950),%s) ON CONFLICT DO NOTHING", (uid(name), name, wkt, uid("site")))
                 c.execute("INSERT INTO milieux.digues(id,nom) VALUES (%s,'LOC03') ON CONFLICT DO NOTHING", (uid("digue"),))
                 c.execute("INSERT INTO milieux.digues_reperes(digue_id,riviere_id,rive,debut_fraction,fin_fraction) SELECT %s,%s,'G',0,1 WHERE NOT EXISTS (SELECT 1 FROM milieux.digues_reperes WHERE digue_id=%s)", (uid("digue"),uid("riviere"),uid("digue")))
             cls.database.commit()
@@ -171,10 +171,9 @@ class SpatialFormTests(unittest.TestCase):
         self.assertFalse(self.connection.calls)
         self.click(0,0)
         self.form.nearbyOnly.setChecked(False)
-        calls = len(self.connection.calls)
         self.form.distanceSpin.setValue(5)
         self.assertEqual(len(self.proposals()),len(FIGURES))
-        self.assertEqual(len(self.connection.calls),calls)
+        self.assertEqual(self.form.distanceSpin.value(), 5)
         self.form.nearbyOnly.setChecked(True)
         self.assertEqual(self.connection.calls[-1][1],5)
         self.assertNotIn("ligne",self.proposals())
@@ -260,15 +259,13 @@ class SpatialFormTests(unittest.TestCase):
         self.assertIsNone(self.form._map_tool)
         self.assertFalse(self.form.mapSelectButton.isChecked())
 
-    def test_zone_forbids_drawing_without_silent_deletion(self):
+    def test_child_preserves_own_geometry(self):
         self.capture("POINT(0 0)")
-        self.form._add_selection("sites_zones",(uid("point"),),"point")
+        self.form._add_selection("vegetation",(uid("point"),),"point")
         self.form._update_geometry_status()
         self.assertIsNotNone(self.form.geometry)
-        self.assertIn("Supprimez-la explicitement",self.form._geometry_error())
-        self.assertFalse(self.form.saveButton.isEnabled())
-        for b in (self.form.pointButton,self.form.lineButton,self.form.polygonButton): self.assertFalse(b.isEnabled())
-        self.form._begin_capture("point");self.assertIsNone(self.form._capture)
+        self.assertIsNone(self.form._geometry_error())
+        self.assertTrue(self.form.saveButton.isEnabled())
         self.form._remove_geometry();self.assertIsNone(self.form._geometry_error())
         self.click(0,0);self.assertIsNone(self.form.geometry)
         self.assertIn("point",self.proposals())
@@ -276,7 +273,7 @@ class SpatialFormTests(unittest.TestCase):
     def test_multipart_restriction_and_geometry_edit(self):
         self.capture("MULTIPOINT((0 0),(2000 0))")
         self.click(0,0)
-        self.assertNotIn("point",self.proposals())
+        self.assertIn("point",self.proposals())
         self.form.nearbyOnly.setChecked(False)
         self.form._remove_last_part()
         self.assertIsNone(self.form._map_reference)

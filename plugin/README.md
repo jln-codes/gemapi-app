@@ -1,4 +1,4 @@
-# GEMAPI-App — plugin QGIS 0.8.5
+# GEMAPI-App — plugin QGIS 0.8.6
 
 L’assistant IA ajoute un assistant conversationnel Mistral à la création standard.
 Le plugin utilise le schéma canonique actuel sans le modifier.
@@ -33,11 +33,11 @@ La fermeture de la fenêtre conserve aussi la conversation jusqu'au déchargemen
 du plugin ou à la fermeture de QGIS.
 
 Le prototype accepte un seul ouvrage hydraulique (`ah_ouvrage`), stockage hydraulique
-(`ah_stockage`) ou zone terrestre (`sites_zones`). La géométrie propre reste `NULL`.
+(`ah_stockage`) ou enfant direct de site (`mobilier`, `cheminements`, `vegetation`). La géométrie propre reste `NULL`.
 Type, prestataire, technicien, statut et dates de début et de fin sont obligatoires.
 Les UUID sont résolus localement dans PostgreSQL. Avant chaque message, les types
 actifs et leurs catégories sont relus sur la connexion courante. Les noms complets
-actifs des prestataires et techniciens, les statuts et les noms des trois familles
+actifs des prestataires et techniciens, les statuts et les noms des cinq familles
 patrimoniales sont transmis intégralement, avec la famille et le parent AH ou site.
 Aucun UUID, secret ou géométrie n'est transmis. Un seul appel Mistral effectue
 l'extraction, la comparaison des noms et la description.
@@ -174,7 +174,7 @@ brouillon disponibles. Le formulaire habituel conserve sa validation humaine.
 
 Le [compte rendu DYSTOPIC-02](../audits/DYSTOPIC-02.md) décrit la recette et ses limites.
 
-Les sections AH constituent un septième rattachement direct, identifié par
+Les sections AH constituent un rattachement direct, identifié par
 `ah_sections.id`, avec géométrie propre obligatoire de l'intervention. Une digue
 ou section AH admissible remplace le cours d'eau sur sa portion longitudinale.
 Les libellés suivent `Cours d'eau (Patrimoine)`. Les stockages et ouvrages AH
@@ -185,7 +185,7 @@ sans priorité arbitraire. Le formulaire conserve l'organisation de 0.7.29.
 Plugin pour QGIS 3.44 (Windows et Linux). Il permet de créer une prestation
 avec exactement un rattachement patrimonial. La géométrie propre est obligatoire
 pour les cours d'eau, digues, sections AH et sites terrestres, facultative pour les stockages et ouvrages AH,
-et interdite pour les zones terrestres, dont la géométrie sert de référence.
+et pour les enfants des sites terrestres.
 Il génère aussi
 un rapport détaillé PDF A4 portrait portant uniquement sur les prestations.
 
@@ -204,7 +204,7 @@ L’espace des photographies s’adapte en conservant leurs proportions.
 ## Installation et dépendances
 
 Depuis la racine du dépôt, exécuter `python3 plugin/tools/build_plugin.py`, puis installer
-`plugin/dist/gemapi-app-0.8.5.zip` dans **Extensions > Installer/Gérer les
+`plugin/dist/gemapi-app-0.8.6.zip` dans **Extensions > Installer/Gérer les
 extensions > Installer depuis un ZIP**. Le plugin n'ajoute aucune dépendance
 Python externe : PyQGIS, Qt et la bibliothèque standard suffisent. Le script
 contrôle les fonctions requises et vérifie que chaque fichier du ZIP correspond
@@ -233,7 +233,7 @@ par UUID.
 
 Le ZIP installe uniquement `gemapi_app`, nommé **GEMAPI-App**, avec son
 icône habituelle dans la barre partagée **SIG-Milieux**. L’assistant fait partie
-de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.5.zip` et contient
+de cette installation unique. Le ZIP s’appelle `gemapi-app-0.8.6.zip` et contient
 `gemapi_app/`. Désactiver puis retirer l’ancien plugin `sig_prestations` lors de
 cette première installation sous le nouveau nom ; les anciennes archives gardent
 leur nom et leur contenu. Le chemin de clé existant est repris automatiquement. Désactiver puis retirer l’ancienne extension
@@ -270,7 +270,7 @@ La recherche UX-06 porte sur l'intitulé, le type, le prestataire, le statut,
 le technicien et la date affichée. Une prestation sans intitulé reste
 recherchable par ces autres valeurs et apparaît sous son type et sa date.
 Les huit listes multisélection des années, statuts, techniciens, prestataires,
-communes, stockages AH, ouvrages AH, cours d'eau et zones terrestres sont visibles dès
+communes, stockages AH, ouvrages AH, cours d'eau et enfants de sites sont visibles dès
 l’ouverture. Elles se répartissent sur trois, deux ou une colonne selon la
 largeur ; le séparateur vertical ajuste la place laissée aux résultats. Les
 grandes listes possèdent leur propre recherche ; **Réinitialiser** efface aussi
@@ -360,10 +360,7 @@ couches concernées de la même connexion, même si leur nom affiché a été
 personnalisé ; il ne crée pas de couche pour cet affichage.
 
 Les couches cartographiques de la démonstration lisent `milieux.prestations_carte`
-(vue de consultation) : pour une zone, sa géométrie est utilisée exclusivement.
-La numérisation est désactivée lorsqu'une zone est retenue. Une géométrie propre
-déjà dessinée est conservée et bloque l'enregistrement avec un message : elle
-doit être retirée explicitement. Les rapports détaillés et synthétiques affichent
+(vue de consultation). La géométrie de la prestation est prioritaire. En son absence, la carte affiche celle de l'enfant du site. Les rapports détaillés et synthétiques affichent
 les références ponctuelles, linéaires et surfaciques sans recopier leur géométrie.
 
 En édition, les champs modifiés et les différences de rattachements sont
@@ -609,7 +606,7 @@ QGIS 3.44.15, PostgreSQL 16/PostGIS 3.4 et `pdftotext` disponibles.
 | Intégration PDF complète sur 104 prestations | Réussi : 77 pages avec photos, 14 compactes, 10 cartographiques, hiérarchies de 30 et 105 pages |
 | Cartes avec photos, pagination et projet intact | Réussi, 30 prestations |
 | Import complet de la démonstration, PostGIS dans `public` et `extensions` | Réussi, effectifs vérifiés dans les deux bases |
-| Démonstration importée | 100 prestations, 100 rattachements ; 12 géométries propres NULL sur zone, 100 géométries cartographiques |
+| Démonstration importée | 100 prestations, 100 rattachements ; 12 géométries propres NULL sur végétation, 100 géométries cartographiques |
 | Sections AH et qualification fictive documentée | 1 section conforme, 1 rivière qualifiée par convention DEMO-AH-01, 57 directions NULL |
 | GPKG, SQL neuf et Supabase | 16 couches GPKG contrôlées ; 16 tables métier SQL/Supabase concordantes |
 
@@ -672,7 +669,7 @@ et le [catalogue IGN](https://cartes.gouv.fr/).
 
 Le cadrage d'une prestation sur site terrestre englobe le site et toutes les
 composantes de la prestation, y compris celles situées hors du site. Les
-prestations sur zone utilisent la géométrie de la zone pour la carte. Les
+prestations sur enfant de site utilisent sa géométrie en l’absence de dessin propre. Les
 longueurs, surfaces et nombres de points cartographiés portent sur la géométrie
 propre, sans découpe aux limites du patrimoine. La quantité déclarée reste distincte. L'emprise est calculée à partir
 d'EPSG:3950, agrandie de 75 m, transformée en EPSG:2154 puis ajustée au rapport

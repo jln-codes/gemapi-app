@@ -132,7 +132,7 @@ class DetailedReportTests(unittest.TestCase):
             "technician": "Technicien", "provider": "Prestataire",
             "communes": "Commune", "quantite": 7, "unite": "arbres",
             "description": "Description courte du contrôle.",
-            "objects": "sites_zones : Zone fictive", "parent_zone_area": 1250,
+            "objects": "vegetation : Zone fictive", "site_child_area": 1250,
             "reference_geometries": [], "own_wkt": None,
             "photo_1": None, "photo_2": None,
         }
@@ -152,7 +152,7 @@ class DetailedReportTests(unittest.TestCase):
                     labels = [item for item in layouts[0].items()
                               if isinstance(item, QgsLayoutItemLabel)]
                     by_text = {item.text(): item for item in labels}
-                    measure = "Surface de la zone (géométrie parente) : 1 250,0 m²"
+                    measure = "Surface du patrimoine (géométrie parente) : 1 250,0 m²"
                     self.assertIn(measure, " ".join(by_text))
                     self.assertEqual(by_text["7 arbres"].pos().y(),
                                      by_text["Quantité déclarée"].pos().y())

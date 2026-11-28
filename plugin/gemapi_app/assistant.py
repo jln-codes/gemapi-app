@@ -10,11 +10,12 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from uuid import UUID
 
-from .record import validate
+from .record import SITE_CHILDREN, TARGETS, validate
 
 ENDPOINT = "https://api.mistral.ai/v1/chat/completions"
 MODEL = "mistral-small-latest"
-ALLOWED_FAMILIES = ("ah_ouvrage", "ah_stockage", "sites_zones")
+
+ALLOWED_FAMILIES = ("ah_ouvrage", "ah_stockage", *SITE_CHILDREN)
 FAMILIES = ALLOWED_FAMILIES + ("cours_eau", "digues", "ah_sections", "sites_terrestres", "inconnue")
 LABELS = {
     "famille": "famille patrimoniale", "patrimoine": "objet patrimonial",
@@ -131,7 +132,7 @@ formulation utilisateur en cas d'ambiguïté/absence. Une correction sans nouvea
 nom laisse l'entrée correspondances de ce champ à null, pour la conserver.
 
 Familles : ah_ouvrage pour ouvrage hydraulique, AH ouvrage ou A H ouvrage ;
-ah_stockage pour stockage hydraulique ; sites_zones pour zone terrestre.
+ah_stockage pour stockage hydraulique ; mobilier, cheminements ou vegetation pour un enfant direct de site terrestre.
 Identifie aussi cours_eau, digues, ah_sections et sites_terrestres pour signaler leur
 exclusion, ou inconnue. Un seul objet est autorisé : plusieurs_objets=true si plusieurs
 sont demandés, false uniquement après correction explicite. geometrie_demandee=true
@@ -434,7 +435,9 @@ REFERENCE_QUERIES = {
 OBJECT_QUERIES = {
     "ah_ouvrage": "SELECT o.id::text,o.nom,a.nom FROM milieux.ah_ouvrage o JOIN milieux.ah a ON a.id=o.ah_id ORDER BY o.nom,o.id",
     "ah_stockage": "SELECT o.id::text,o.nom,a.nom FROM milieux.ah_stockage o JOIN milieux.ah a ON a.id=o.ah_id ORDER BY o.nom,o.id",
-    "sites_zones": "SELECT o.id::text,o.nom,s.nom FROM milieux.sites_zones o JOIN milieux.sites_terrestres s ON s.id=o.site_terrestre_id ORDER BY o.nom,o.id",
+    **{key: (f"SELECT o.id::text,o.{TARGETS[key].name},s.nom FROM {TARGETS[key].schema}.{key} o "
+             "JOIN milieux.sites_terrestres s ON s.id=o.site_terrestre_id "
+             f"ORDER BY o.{TARGETS[key].name},o.id") for key in SITE_CHILDREN},
 }
 
 
@@ -943,9 +946,9 @@ class Draft:
         issues, pending, verified = [], {}, {}
         family = self.names.get("famille")
         if not family:
-            issues.append("Précisez la famille : ouvrage hydraulique, stockage hydraulique ou zone terrestre.")
+            issues.append("Précisez la famille : ouvrage hydraulique, stockage hydraulique ou enfant de site (mobilier, cheminement, végétation).")
         elif family not in ALLOWED_FAMILIES:
-            issues.append("Famille hors périmètre : seuls ah_ouvrage, ah_stockage et sites_zones sont autorisés.")
+            issues.append("Famille hors périmètre : choisissez un ouvrage AH, un stockage AH ou un enfant direct de site.")
         if self.names.get("plusieurs_objets"):
             issues.append("Choisissez un seul objet patrimonial.")
         if self.names.get("geometrie_demandee"):

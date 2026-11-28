@@ -58,7 +58,7 @@ de l'assistant arrêtent l'ancienne réponse. Aucun audio n'est écrit sur disqu
 Sans clé, réseau ou sortie audio utilisable, continuer au clavier : le brouillon
 et le formulaire restent disponibles. Une réponse vocale ne sauvegarde jamais la prestation.
 
-Seuls les ouvrages hydrauliques, stockages hydrauliques et zones terrestres sont acceptés,
+Seuls les ouvrages hydrauliques, stockages hydrauliques et enfants directs de sites (mobilier, cheminements et végétation) sont acceptés,
 avec un seul objet et une géométrie propre `NULL`. Aucun champ obligatoire n'est déduit
 arbitrairement. Les messages et noms complets des référentiels actifs et des trois
 familles patrimoniales, avec leurs parents AH/sites, sont transmis à Mistral.
@@ -97,13 +97,13 @@ relue à sa réouverture pour respecter le contrôle de version.
 
 **1. Localiser l'intervention**
 
-Dessinez un point, une ligne ou un polygone. Les géométries multiples (multipoints, multilignes, multipolygones) sont également autorisées, **sauf pour les prestations rattachées aux zones terrestres (`sites_zones`)**.
+Dessinez un point, une ligne ou un polygone. Les géométries multiples (multipoints, multilignes, multipolygones) sont également autorisées.
 
 La géométrie est :
 
 - **Obligatoire** pour les cours d'eau, digues, sections AH et sites terrestres parents.
 - **Recommandée** pour les aménagements hydrauliques.
-- **Interdite** pour les zones terrestres (`sites_zones`) : la carte et les rapports utilisent exclusivement la géométrie de la zone. Une géométrie déjà dessinée doit être retirée explicitement avant l'enregistrement ; elle n'est jamais supprimée automatiquement.
+- **Facultative** pour le mobilier, les cheminements et la végétation. La carte utilise la géométrie du patrimoine lorsque celle de la prestation est vide.
 
 Le plugin assure le tracé Point, Ligne, Polygone et multipartie. L'accrochage
 aux sommets et segments relève de la configuration native du projet QGIS : il
@@ -117,7 +117,7 @@ Chaque prestation doit être rattachée à **un seul objet patrimonial**.
 
 - **Cours d'eau et digues :** rattachement direct à l'objet concerné.
 - **Aménagements hydrauliques (AH) :** rattachement direct à une section précise, un stockage ou un ouvrage, et non à l'AH parent. Une section nécessite une géométrie propre d'intervention ; sa référence complète n'est jamais copiée.
-- **Sites terrestres :** rattachement au site parent ou à une zone enfant (`sites_zones`). Si plusieurs zones sont concernées, choisissez le site parent.
+- **Sites terrestres :** rattachement au site parent ou à un mobilier, un cheminement ou une végétation du site. Si plusieurs enfants sont concernées, choisissez le site parent.
 
 Pour un site parent, le plugin enregistre le dessin en MultiPoint, MultiLineString
 ou MultiPolygon, même avec une seule partie. La mesure cartographiée couvre

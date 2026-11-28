@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 from copy import deepcopy
 from io import StringIO
 import importlib.util
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -37,9 +38,33 @@ class ProjectSyncTest(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name)
         self.paths = {}
+        # The synchronization utility only accepts identical table/layer contracts.
+        # Exercise its success paths on two disposable, structurally matched projects.
+        source = sync.archive(sync.PROJECTS['cabbalr'])
         for env in ('demo','cabbalr'):
-            self.paths[env] = self.folder/(env+'.qgz')
-            self.paths[env].write_bytes(sync.PROJECTS[env].read_bytes())
+            path = self.folder / (env + '.qgz')
+            self.paths[env] = path
+            with ZipFile(path, 'w') as archive:
+                for entry, data in source['members']:
+                    if entry.filename == source['name'] and env == 'demo':
+                        data = re.sub(rb'host=[^ ]+ port=5432', b'host=demo.invalid port=5432', data)
+                        archive.writestr('prestations_demo.qgs', data)
+                    else:
+                        archive.writestr(entry,data)
+        def clear_course_filter(root):
+            for element in root.iter():
+                values = {**element.attrib, '#text': element.text or ''}
+                for key, value in values.items():
+                    if not value.startswith('dbname='):
+                        continue
+                    uri = QgsDataSourceUri(value)
+                    if uri.table() == 'cours_eau':
+                        uri.setSql('')
+                        if key == '#text':
+                            element.text = uri.uri(False)
+                        else:
+                            element.set(key,uri.uri(False))
+        edit_project(self.paths['demo'], clear_course_filter)
         self.backups = self.folder/'sauvegardes'
 
     def root(self,env):
@@ -55,41 +80,43 @@ class ProjectSyncTest(unittest.TestCase):
         self.assertEqual(sync.relation_ids(before),sync.relation_ids(after))
         self.assertEqual(sync.layers(before).keys(),sync.layers(after).keys())
 
+    def test_distributed_projects_require_separate_configuration(self):
+        for source, destination in (('demo','cabbalr'), ('cabbalr','demo')):
+            with self.assertRaisesRegex(ValueError, 'identifiants de couches'):
+                sync.compare(sync.PROJECTS[source], sync.PROJECTS[destination])
+
     def test_embedded_python_actions_target_current_plugin(self):
         for env in ('demo', 'cabbalr'):
             with self.subTest(env=env):
-                xml = ET.tostring(self.root(env), encoding='unicode')
+                xml = ET.tostring(sync.archive(sync.PROJECTS[env])['root'], encoding='unicode')
                 self.assertIn('gemapi_app', xml)
                 self.assertNotIn('sig_prestations', xml)
 
     def test_projects_use_one_direct_postgres_connection(self):
         for env in ('demo', 'cabbalr'):
             with self.subTest(env=env):
-                root = self.root(env)
+                root = sync.archive(sync.PROJECTS[env])['root']
                 postgres = [QgsDataSourceUri(layer.findtext('datasource'))
                             for layer in sync.layers(root).values()
                             if layer.findtext('provider') == 'postgres']
-                # The hidden SQL zone reference remains after PERF-QGIS-09A.
-                self.assertEqual(len(postgres), 25)
-                technical_id = 'Zones_terrestres_libelles_sql_PERF_QGIS_03B'
-                technical = sync.layers(root)[technical_id]
-                self.assertEqual(technical.findtext('provider'), 'postgres')
-                self.assertEqual(QgsDataSourceUri(technical.findtext('datasource')).keyColumn(), 'id')
-                self.assertIsNone(root.find(f'./layer-tree-group//layer-tree-layer[@id="{technical_id}"]'))
+                self.assertEqual(len(postgres), 32 if env == 'demo' else 25)
                 self.assertFalse(any(uri.schema() == 'milieux' and uri.table() == 'prestations'
                                      for uri in postgres))
                 self.assertEqual(sum(uri.table() == 'prestations_carte' for uri in postgres), 3)
                 self.assertEqual(sum(uri.table() == 'prestations_fiches' for uri in postgres), 1)
-                self.assertEqual(len(sync.relation_ids(root)), 66)
+                self.assertEqual(len(sync.relation_ids(root)), 70 if env == 'demo' else 66)
                 connections = {uri.connectionInfo(False) for uri in postgres}
                 self.assertEqual(len(connections), 1)
                 for element in root.iter():
                     for value in element.attrib.values():
-                        if value.startswith('dbname='):
+                        if value.startswith(('dbname=', 'service=')):
                             self.assertIn(QgsDataSourceUri(value).connectionInfo(False), connections)
                 for uri in postgres:
-                    if env == 'cabbalr':
-                        self.assertFalse(uri.username())
+                    if env == 'demo':
+                        self.assertEqual(uri.service(), 'gemapi_demo')
+                        self.assertFalse(uri.host() or uri.password())
+                        continue
+                    self.assertFalse(uri.username())
                     self.assertTrue(uri.host())
                     self.assertEqual(uri.port(), '5432')
                     self.assertEqual(uri.database(), 'postgres')
@@ -107,7 +134,7 @@ class ProjectSyncTest(unittest.TestCase):
         }
         signatures = []
         for env in ('demo', 'cabbalr'):
-            root = self.root(env)
+            root = sync.archive(sync.PROJECTS[env])['root']
             for name in ('prestations-points', 'prestations-lignes', 'prestations-polygones'):
                 layer, = [item for item in sync.layers(root).values()
                           if item.findtext('layername') == name]
@@ -125,10 +152,10 @@ class ProjectSyncTest(unittest.TestCase):
     def test_removed_native_prestation_layer_is_not_reintroduced(self):
         for env in ('demo', 'cabbalr'):
             with self.subTest(env=env):
-                root = self.root(env)
+                root = sync.archive(sync.PROJECTS[env])['root']
                 self.assertFalse(any(layer.findtext('layername') == 'prestations'
                                      for layer in sync.layers(root).values()))
-                self.assertEqual(len(sync.relation_ids(root)), 66)
+                self.assertEqual(len(sync.relation_ids(root)), 70 if env == 'demo' else 66)
 
     def test_sync_rejects_project_with_reintroduced_layer(self):
         def add_obsolete_layer(root):

@@ -227,7 +227,7 @@ class QtAssistantTests(unittest.TestCase):
             self.assertTrue(self.dialog.new_prestation())
         self.assertTrue(old.aborted)
         self.assertIsNone(self.dialog._reply)
-        new = self.send('Nouvelle prestation sur une zone terrestre.', response(famille='sites_zones'))
+        new = self.send('Nouvelle prestation sur une zone terrestre.', response(famille='vegetation'))
         body = json.loads(self.manager.post.call_args.args[1])
         context = json.loads(body['messages'][1]['content'])
         self.assertEqual(context['brouillon'], {})
@@ -242,7 +242,7 @@ class QtAssistantTests(unittest.TestCase):
         self.assertEqual(self.dialog.draft.names, {})
         self.assertEqual(self.dialog._raw, bytearray())
         new.complete()
-        self.assertEqual(self.dialog.draft.names, {'famille': 'sites_zones'})
+        self.assertEqual(self.dialog.draft.names, {'famille': 'vegetation'})
         self.assertNotIn('date_fin', self.dialog.draft.names)
         self.assertNotIn('Ancienne observation unique', self.dialog.history.toPlainText())
         self.session.db.executeSql.assert_not_called()
@@ -475,7 +475,7 @@ class QtAssistantTests(unittest.TestCase):
                 self.session.db.executeSql.assert_not_called()
 
     def test_unique_mistral_phonetic_names_auto_resolve_all_families_in_one_request(self):
-        for family in ('ah_ouvrage', 'ah_stockage', 'sites_zones'):
+        for family in ('ah_ouvrage', 'ah_stockage', 'mobilier', 'cheminements', 'vegetation'):
             catalog = copy.deepcopy(CATALOG)
             catalog['technicien'] = [(uid(30), 'Benoît Quentin', '')]
             catalog['patrimoine'] = [(uid(31), 'Talus ZEC Ourton', 'Parent de test')]

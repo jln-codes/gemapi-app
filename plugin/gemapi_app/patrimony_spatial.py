@@ -12,7 +12,7 @@ from uuid import UUID
 
 from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle, QgsWkbTypes
 
-from .record import LINKS, literal
+from .record import SITE_CHILDREN, TARGETS, LINKS, literal
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class ProjectionSettings:
 
 
 def candidate_query(wkt, radius_m, watercourse_id=None):
-    """Prefilter seven modes, then read complete intervals of nearby courses.
+    """Prefilter selectable modes, then read complete intervals of nearby courses.
 
     A distance hit identifies a course, never a priority. All admissible
     intervals of that course are needed to construct its uncovered complement.
@@ -60,8 +60,9 @@ def candidate_query(wkt, radius_m, watercourse_id=None):
          "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
         ("ah_ouvrage", "milieux.ah_ouvrage o", "o.geom", "", "NULL::text",
          "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
-        ("sites_zones", "milieux.sites_zones o", "o.geom", "", "NULL::text",
-         "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
+        *((key, f"{TARGETS[key].schema}.{key} o", f"o.{TARGETS[key].geometry}",
+           "AND o.site_terrestre_id IS NOT NULL", "NULL::text", "NULL::text", "NULL::float8",
+           "NULL::float8", "NULL::boolean") for key in SITE_CHILDREN),
         ("sites_terrestres", "milieux.sites_terrestres o", "o.geom", "", "NULL::text",
          "NULL::text", "NULL::float8", "NULL::float8", "NULL::boolean"),
     ]

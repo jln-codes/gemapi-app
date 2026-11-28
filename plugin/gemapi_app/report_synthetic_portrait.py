@@ -15,7 +15,7 @@ from qgis.core import (
 )
 
 from .report_data import (GROUPS, ah_recognition_lines, direct_attachment_label,
-                          distinct_records, format_measure, parent_zone_measure,
+                          distinct_records, format_measure, site_child_measure,
                           group_label,
                           grouped_entries, normalized_filters,
                           own_totals, report_context, report_warnings)
@@ -221,9 +221,9 @@ def _cell_lines(record, grouped):
         territory.append("Surface cartographiée : " + format_measure(record["own_area"]) + " m²")
     if record.get("own_points") is not None:
         territory.append(f"Nombre de points cartographiés : {record['own_points']}")
-    zone_measure = parent_zone_measure(record)
-    if zone_measure:
-        territory.append(zone_measure)
+    child_measure = site_child_measure(record)
+    if child_measure:
+        territory.append(child_measure)
     dates = [str(record.get("date_debut") or "—"),
              str(record.get("date_fin") or "—")]
     return (pieces(dates, TABLE_COLUMNS[0][2]),

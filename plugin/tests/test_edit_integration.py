@@ -52,7 +52,7 @@ def main():
               ('{ids['provider_1']}', 'Entreprise A'), ('{ids['provider_2']}', 'Entreprise B');
             INSERT INTO milieux.types_prestations(id, code, libelle, categorie_id) VALUES
               ('{ids['type_1']}', 'ENTRETIEN', 'Entretien', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa'),
-              ('{ids['type_2']}', 'RESTAURATION', 'Restauration', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa');
+              ('{ids['type_2']}', 'EDIT_RESTAURATION', 'Restauration', 'cf2572fb-9365-5ac5-bdf4-0d66581d9aaa');
             INSERT INTO milieux.ah(id,nom) VALUES
               ('{ids['ah_1']}', 'AH A'), ('{ids['ah_2']}', 'AH B');
             INSERT INTO milieux.ah_stockage(id, ah_id, nom, geom) VALUES
@@ -68,8 +68,8 @@ def main():
               ('{ids['riviere']}', 'Rivière A', 'rivière', 'TEST', ST_Multi(ST_GeomFromText('LINESTRING(0 0,10 10)',3950)));
             INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES
               ('{ids['site_parent']}','Site parent',ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 10,0 0)))',3950));
-            INSERT INTO milieux.sites_zones(id, site_terrestre_id, nom, geom) VALUES
-              ('{ids['site']}', '{ids['site_parent']}', 'Site A', ST_GeomFromText('MULTIPOINT((0 0))',3950));
+            INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES
+              ('ARBRES','{ids['site']}', '{ids['site_parent']}', 'Site A', ST_GeomFromText('MULTIPOINT((0 0))',3950));
             COMMIT;
         """)
         status = dict(line.split("|", 1) for line in sql(container,
@@ -104,7 +104,7 @@ def main():
         prestations = make_layer("prestations", "geom")
         make_layer("prestataires")
         make_layer("types_prestations")
-        for table in ("ah_stockage", "ah_ouvrage", "cours_eau", "sites_zones"):
+        for table in ("ah_stockage", "ah_ouvrage", "cours_eau"):
             make_layer(table, "geom")
         canvas.setDestinationCrs(prestations.crs())
         canvas.setLayers([prestations])
@@ -161,7 +161,7 @@ def main():
             "POINT(0 0)")).stdout.strip().split("|")[0]
         second = sql(container, build_insert(
             {**values, "intitule": "Seconde fiche", "photo_1": ""},
-            [("sites_zones", ids["site"])], None)).stdout.strip().split("|")[0]
+            [("vegetation", ids["site"])], None)).stdout.strip().split("|")[0]
 
         from gemapi_app.management import connection_from_project
         connection = connection_from_project()
@@ -321,7 +321,7 @@ def main():
         dialog = plugin.creation
         assert dialog.mode == "edit" and dialog.current_prestation_id == second
         assert dialog.intituleEdit.text() == "Seconde fiche"
-        assert dialog._associations() == [("sites_zones", ids["site"])]
+        assert dialog._associations() == [("vegetation", ids["site"])]
         assert dialog.positionCombo.currentData() == "Indéfini"
         assert not dialog.positionCombo.isEnabled()
         assert dialog.riveCombo.currentData() == "Indéfinie"
@@ -349,7 +349,7 @@ def main():
             assert dialog.positionCombo.isEnabled() and dialog.riveCombo.isEnabled()
             assert dialog._values()["position"] == "Crête"
             assert dialog._values()["rive"] == "Gauche"
-        for family in ("ah_stockage", "sites_zones"):
+        for family in ("ah_stockage", "vegetation"):
             dialog.selectedList.clear()
             dialog._add_selection(family, (str(uuid4()),), family)
             dialog._update_position_state()
@@ -371,7 +371,7 @@ def main():
         assert dialog.geometry.asWkt() == old_geometry
         dialog.load_existing(manager.connection, second)
         assert dialog.current_prestation_id == second
-        assert dialog._associations() == [("sites_zones", ids["site"])]
+        assert dialog._associations() == [("vegetation", ids["site"])]
         assert dialog.typeCombo.currentData() == ids["type_1"]
         picker = dialog.typeCombo
         picker.showPopup()
@@ -447,7 +447,7 @@ def main():
             combo.setCurrentIndex(combo.findData(uid))
         form.debutDate.setDate(QDate(2027, 5, 1))
         form.finDate.setDate(QDate(2027, 5, 2))
-        form._add_selection("sites_zones", (ids["site"],), "Site A")
+        form._add_selection("vegetation", (ids["site"],), "Site A")
         form._update_save_state()
         assert form.saveButton.isEnabled(), form.statusLabel.text()
         form.saveButton.click()

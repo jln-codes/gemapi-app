@@ -31,11 +31,11 @@ TRIALS = (
     ("Prévoir une étude sur le bassin ZEC Val des Prés du 1er au 3 février 2027. L'entreprise Ecologie Terrain réalisera cette prestation, avec Eric Martin comme technicien responsable. Statut planifié. Il faudra examiner les possibilités d'amélioration de l'infiltration dans le bassin.",
      'ah_stockage', 'Bassin ZEC Val des Prés', 'Étude', 'Écologie Terrain', 'Eric Martin', 'Planifié',
      '2027-02-01', '2027-02-03', 'du 1er au 3 février 2027', 'previsionnelle', 'bassin ZEC Val des Prés'),
-    ("Je souhaite planifier une restauration écologique sur la zone naturelle du secteur 01, dans l'espace naturel du Bois des Aulnes, du 15 au 26 décembre 2026. La régie technique des milieux interviendra avec Julien Dubois comme responsable. Plusieurs secteurs présentent une végétation dégradée.",
-     'sites_zones', 'Zone naturelle du secteur 01', 'Restauration écologique', 'Régie technique des milieux', 'Julien Dubois', 'Planifié',
-     '2026-12-15', '2026-12-26', 'du 15 au 26 décembre 2026', 'previsionnelle', 'Zone secteur un du Bois des Aulnes'),
-    ("La haie du secteur 06, dans le bois du Petit Marais, on l'a fait élaguer par Paysages et Milieux. C'était du 10 au 12 novembre 2026, avec Jean Dupont pour le suivi. C'est terminé. Certaines branches débordaient sur le chemin voisin.",
-     'sites_zones', 'Haie du secteur 06', 'Élagage', 'Paysages et Milieux', 'Jean Dupont', 'Terminé',
+    ("Je souhaite planifier une restauration écologique sur la fourré humide · zone naturelle du secteur 01, dans l'espace naturel du Bois des Aulnes, du 15 au 26 décembre 2026. La régie technique des milieux interviendra avec Julien Dubois comme responsable. Plusieurs secteurs présentent une végétation dégradée.",
+     'vegetation', 'Fourré humide · Zone naturelle du secteur 01', 'Restauration écologique', 'Régie technique des milieux', 'Julien Dubois', 'Planifié',
+     '2026-12-15', '2026-12-26', 'du 15 au 26 décembre 2026', 'previsionnelle', 'Fourré secteur un du Bois des Aulnes'),
+    ("La haie · haie du secteur 06, dans le bois du Petit Marais, on l'a fait élaguer par Paysages et Milieux. C'était du 10 au 12 novembre 2026, avec Jean Dupont pour le suivi. C'est terminé. Certaines branches débordaient sur le chemin voisin.",
+     'vegetation', 'Haie · Haie du secteur 06', 'Élagage', 'Paysages et Milieux', 'Jean Dupont', 'Terminé',
      '2026-11-10', '2026-11-12', 'du 10 au 12 novembre 2026', 'periode', 'Haie secteur six du Petit Marais'),
 )
 
@@ -55,14 +55,14 @@ def demo_catalog(family):
         'prestataire': rows('referentiels', "SELECT id,nom,'' FROM prestataires WHERE actif"),
         'type_prestation': rows('referentiels', 'SELECT t.id,t.libelle,c.libelle FROM types_prestations t '
                                'JOIN prestations_categorie c ON c.id=t.categorie_id WHERE t.actif'),
-        'statut': re.findall(r"\('([0-9a-f-]{36})','[A-Z_]+','([^']+)'\)", statuses),
+        'statut': re.findall(r"\('([0-9a-f-]{36})',\s*'[A-Z_]+',\s*'([^']+)'\)", statuses),
     }
     catalog['statut'] = [(uid, label, '') for uid, label in catalog['statut']]
     catalog['patrimoines'] = {
         'ah_ouvrage': rows('ah', 'SELECT o.id,o.nom,a.nom FROM ah_ouvrage o JOIN ah a ON a.id=o.ah_id'),
         'ah_stockage': rows('ah', 'SELECT o.id,o.nom,a.nom FROM ah_stockage o JOIN ah a ON a.id=o.ah_id'),
-        'sites_zones': rows('sites_terrestres', 'SELECT o.id,o.nom,s.nom FROM sites_zones o '
-                            'JOIN sites_terrestres s ON s.id=o.site_terrestre_id'),
+        **{key: rows('sites_terrestres', f'SELECT o.id,o.designation,s.nom FROM {key} o '
+                            'JOIN sites_terrestres s ON s.id=o.site_terrestre_id') for key in ('vegetation', 'mobilier', 'cheminements')},
     }
     catalog['patrimoine'] = catalog['patrimoines'][family]
     return catalog
@@ -109,15 +109,15 @@ class EntityResolutionTests(unittest.TestCase):
                 self.assertIsNotNone(result['values'])
 
     def test_parent_linking_words_and_spacing_are_identity_not_approximation(self):
-        for index, source in ((6, "zone naturelle du secteur 01, dans l'espace naturel du Bois des Aulnes"),
-                              (7, 'haie du secteur 06, dans le bois du Petit Marais'),
+        for index, source in ((6, "fourré humide · zone naturelle du secteur 01, dans l'espace naturel du Bois des Aulnes"),
+                              (7, 'haie · haie du secteur 06, dans le bois du Petit Marais'),
                               (1, 'remblai 2, ZEC Clarence'), (4, 'bassin RC Prévert')):
             with self.subTest(source=source):
                 draft, result = self.resolved_trial(index, source)
                 self.assertIn('patrimoine', result['verified'])
 
     def test_parent_link_and_negated_observation_do_not_exclude_the_target(self):
-        source = 'haie du secteur 06, au bois du Petit Marais'
+        source = 'haie · haie du secteur 06, au bois du Petit Marais'
         message = 'Élagage sur la ' + source + ', qui ne gêne pas le passage.'
         draft, result = self.resolved_trial(7, source, text=message)
         self.assertIn('patrimoine', result['verified'])
@@ -125,7 +125,7 @@ class EntityResolutionTests(unittest.TestCase):
 
     def test_rejected_prior_name_cannot_validate_itself_on_an_independent_turn(self):
         text, catalog, fields = trial_proposal(6)
-        bad = 'Zone naturelle du secteur 01 — Bois du Petit Marais'
+        bad = 'Fourré humide · Zone naturelle du secteur 01 — Bois du Petit Marais'
         fields['patrimoine'] = bad
         fields['correspondances']['patrimoine'] = {'source': bad, 'nature': 'exacte', 'candidats': [bad]}
         draft = Draft()
@@ -141,7 +141,7 @@ class EntityResolutionTests(unittest.TestCase):
 
     def test_wrong_canonical_parent_and_wrong_family_never_recovered(self):
         text, catalog, fields = trial_proposal(6)
-        for bad in ('Zone naturelle du secteur 01 — Bois du Petit Marais',
+        for bad in ('Fourré humide · Zone naturelle du secteur 01 — Bois du Petit Marais',
                     'Zone naturelle du secteur 06 — Bois du Petit Marais'):
             fields['patrimoine'] = bad
             fields['correspondances']['patrimoine'] = {
@@ -162,8 +162,8 @@ class EntityResolutionTests(unittest.TestCase):
         text, catalog, fields = trial_proposal(7)
         canonical = fields['patrimoine']
         for message in ('Changer uniquement le suivi.',
-                        'Ne pas sélectionner la haie du secteur 06, dans le bois du Petit Marais.',
-                        'La haie du secteur 06 est voisine. Le bois du Petit Marais est un autre site.'):
+                        'Ne pas sélectionner la haie · haie du secteur 06, dans le bois du Petit Marais.',
+                        'La haie · haie du secteur 06 est voisine. Le bois du Petit Marais est un autre site.'):
             with self.subTest(message=message):
                 draft, result = self.resolved_trial(7, canonical, text=message)
                 self.assertNotIn('patrimoine', result['verified'])
@@ -172,15 +172,15 @@ class EntityResolutionTests(unittest.TestCase):
     def test_repeated_identity_anchors_stay_pending_without_pairwise_search(self):
         text, catalog, fields = trial_proposal(7)
         canonical = fields['patrimoine']
-        fragment = 'La haie du secteur 06, dans le bois du Petit Marais. '
+        fragment = 'La haie · haie du secteur 06, dans le bois du Petit Marais. '
         draft, result = self.resolved_trial(7, canonical, text=fragment * 30)
         self.assertNotIn('patrimoine', result['verified'])
         self.assertIn('patrimoine', draft.reference_diagnostics)
 
     def test_approximation_and_invented_citation_keep_human_confirmation(self):
-        for source, nature in [('Zone naturelle du secteur 01 — Espace naturel du Bois des Aulnes', 'approximative'),
+        for source, nature in [('Fourré humide · Zone naturelle du secteur 01 — Espace naturel du Bois des Aulnes', 'approximative'),
                                ('Nom source inventé', 'exacte'),
-                               ('zone naturelle du secteur', 'phonetique_complete')]:
+                               ('fourré du secteur', 'phonetique_complete')]:
             with self.subTest(source=source):
                 draft, result = self.resolved_trial(6, source, nature)
                 self.assertNotIn('patrimoine', result['verified'])

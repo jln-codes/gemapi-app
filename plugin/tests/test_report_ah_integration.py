@@ -224,7 +224,7 @@ class ReportAhIntegration(unittest.TestCase):
 
     def test_09_read_only_role_and_snapshot(self):
         self.q('CREATE ROLE report_reader; GRANT USAGE ON SCHEMA milieux,extensions TO report_reader; '
-               'GRANT SELECT ON ALL TABLES IN SCHEMA milieux TO report_reader; SET ROLE report_reader')
+               'GRANT SELECT ON ALL TABLES IN SCHEMA milieux,public TO report_reader; SET ROLE report_reader')
         self.assertEqual(self.names({'ah':[uid('A')]}),self.expected_a())
         self.q('RESET ROLE')
         self.assertEqual(self.fingerprint(),self.initial)

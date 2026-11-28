@@ -24,8 +24,8 @@ def fixture(container):
         "FROM milieux.ah LIMIT 1; "
         "INSERT INTO milieux.sites_terrestres(nom,geom) "
         "VALUES ('Site jetable',ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 10,0 0)))',3950)); "
-        "INSERT INTO milieux.sites_zones(site_terrestre_id,nom,geom) "
-        "SELECT id,'Zone jetable',ST_GeomFromText('MULTIPOINT((1 1))',3950) "
+        "INSERT INTO public.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
+        "SELECT 'ARBRES',id,'Zone jetable',ST_GeomFromText('MULTIPOINT((1 1))',3950) "
         "FROM milieux.sites_terrestres LIMIT 1;")
 
 
@@ -35,7 +35,7 @@ def values(container, photo):
         "(SELECT id::text FROM milieux.types_prestations WHERE code='PERF09B'),"
         "(SELECT id::text FROM milieux.statuts_prestations WHERE code='PLANIFIE'),"
         "(SELECT id::text FROM milieux.ah_stockage LIMIT 1),"
-        "(SELECT id::text FROM milieux.sites_zones LIMIT 1)").stdout.strip().split('|')
+        "(SELECT id::text FROM public.vegetation LIMIT 1)").stdout.strip().split('|')
     assert len(ids) == 6 and all(ids)
     return dict(intitule='Essai de suppression', prestataire_id=ids[0],
                 technicien_id=ids[1], type_prestation_id=ids[2], statut_id=ids[3],
@@ -58,6 +58,7 @@ def main():
     command('docker', 'run', '--rm', '-d', '--name', container,
             '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', 'postgis/postgis:16-3.4')
     photo = ROOT / 'audits/PERF-QGIS-09B/photo-preservee.txt'
+    photo.parent.mkdir(exist_ok=True, parents=True)
     photo.write_text('La suppression SQL ne touche pas ce fichier.', encoding='utf-8')
     try:
         for _ in range(60):
@@ -99,13 +100,13 @@ def main():
         gone = sql(container, 'SET ROLE milieux_prestations; ' +
                    build_delete(uid, before), check=False)
         assert gone.returncode != 0 and 'SIG_PRESTATIONS_NOT_FOUND' in gone.stderr
-        zone_id = insert(container, data, 'sites_zones', zone)
+        zone_id = insert(container, data, 'vegetation', zone)
         assert sql(container, f"SELECT geom IS NULL FROM milieux.prestations WHERE id='{zone_id}'").stdout.strip() == 't'
         sql(container, 'SET ROLE milieux_patrimoine; ' + build_delete(zone_id, version(container, zone_id)))
         assert not version(container, zone_id)
         assert sql(container, "SELECT (SELECT count(*) FROM milieux.ah_stockage),"
             "(SELECT count(*) FROM milieux.ah),"
-            "(SELECT count(*) FROM milieux.sites_zones),"
+            "(SELECT count(*) FROM public.vegetation),"
             "(SELECT count(*) FROM milieux.sites_terrestres),"
             "(SELECT count(*) FROM milieux.prestataires),"
             "(SELECT count(*) FROM milieux.techniciens)").stdout.strip() == '1|1|1|1|1|1'

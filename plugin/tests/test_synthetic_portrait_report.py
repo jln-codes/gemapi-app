@@ -53,14 +53,14 @@ class SyntheticPortraitTests(unittest.TestCase):
         self.assertEqual(sum(len(members) for _, members in terminal), 4)
         self.assertEqual(len({row["id"] for row in records}), 3)
 
-    def test_parent_zone_measure_is_separate_from_declared_quantity(self):
+    def test_site_child_measure_is_separate_from_declared_quantity(self):
         polygon = record(1)
-        polygon.update(objects="sites_zones : Zone fictive", parent_zone_area=1250)
+        polygon.update(objects="vegetation : Zone fictive", site_child_area=1250)
         text = " ".join(_cell_lines(polygon, ())[3])
-        self.assertIn("Surface de la zone (géométrie parente) : 1 250,0 m²", text)
+        self.assertIn("Surface du patrimoine (géométrie parente) : 1 250,0 m²", text)
         self.assertIn("Quantité déclarée : 1 interventions", text)
         point = record(2)
-        point.update(objects="sites_zones : Point fictif")
+        point.update(objects="vegetation : Point fictif")
         self.assertNotIn("Surface de la zone", " ".join(_cell_lines(point, ())[3]))
 
     def test_business_scope_reflects_combined_filters_and_group_order(self):

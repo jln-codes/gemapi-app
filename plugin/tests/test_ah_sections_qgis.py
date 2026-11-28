@@ -11,7 +11,6 @@ import time
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5, uuid4
 from xml.etree import ElementTree as E
-from zipfile import ZipFile
 
 import psycopg2
 from qgis.PyQt.QtCore import Qt
@@ -19,7 +18,7 @@ from qgis.PyQt.QtWidgets import QMainWindow, QApplication, QDialogButtonBox
 from qgis.core import QgsApplication, QgsDataSourceUri, QgsFeatureRequest, QgsProject
 from qgis.gui import QgsMapCanvas, QgsMessageBar, QgsAttributeDialog, QgsRelationEditorWidget, QgsGui
 
-from test_postgres_integration import ROOT,command,sql
+from test_postgres_integration import ROOT,command,load_demo_rows,sql
 sys.path.insert(0,str(ROOT/'plugin'))
 from gemapi_app import ah_sections as actions
 
@@ -42,9 +41,7 @@ def database():
         else:raise RuntimeError('PostGIS local indisponible')
         sql(name,'CREATE SCHEMA extensions;CREATE EXTENSION postgis WITH SCHEMA extensions;')
         sql(name,(ROOT/'model/schema.sql').read_text())
-        sources=sorted((ROOT/'demo/data').glob('[0-9][0-9]_*.sql'))
-        for source in [*[p for p in sources if p.name<'15_'],ROOT/'demo/data/digues.sql',*[p for p in sources if p.name>='15_']]:
-            sql(name,source.read_text())
+        load_demo_rows(name)
         sql(name,'ALTER DATABASE postgres SET search_path=pg_catalog,public,extensions,milieux;')
         port=command('docker','port',name,'5432').stdout.strip().rsplit(':',1)[-1]
         db=psycopg2.connect(host='127.0.0.1',port=port,dbname='postgres',user='postgres')
@@ -73,17 +70,8 @@ def database():
 
 def project_copy(port, target=None, user='postgres'):
     target=target or OUTPUT/'local.qgs'
-    with ZipFile(ROOT/'demo/prestations_demo.qgz') as z:r=E.fromstring(z.read('prestations_demo.qgs'))
-    for layer in r.findall('./projectlayers/maplayer'):
-        if layer.findtext('provider')!='postgres':continue
-        node=layer.find('datasource');uri=QgsDataSourceUri(node.text)
-        uri.setConnection('127.0.0.1',str(port),'postgres',user,'')
-        node.text=uri.uri(False)
-        for reference in layer.findall('./referencedLayers/relation'):
-            if reference.get('providerKey')=='postgres' and reference.get('dataSource'):
-                cached=QgsDataSourceUri(reference.get('dataSource'))
-                cached.setConnection('127.0.0.1',str(port),'postgres',user,'')
-                reference.set('dataSource',cached.uri(False))
+    from test_mod_geom_project import local_document
+    r = local_document(ROOT / 'demo/prestations_demo.qgz', str(port), user=user)
     E.ElementTree(r).write(target,encoding='utf-8',xml_declaration=True)
     return target
 

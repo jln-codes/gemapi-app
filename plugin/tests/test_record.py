@@ -28,7 +28,7 @@ class RecordTests(unittest.TestCase):
         query = build_insert(values, links, "POINT(0 0)")
         self.assertIn("ah_section_id", query)
         self.assertEqual(query.count(OBJECT), 1)
-        for other in ("cours_eau", "digues", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"):
+        for other in ("cours_eau", "digues", "ah_stockage", "ah_ouvrage", "sites_terrestres", "vegetation"):
             with self.subTest(other=other), self.assertRaises(ValueError):
                 validate(values, links + [(other, OBJECT)], "POINT(0 0)")
 
@@ -66,7 +66,7 @@ class RecordTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_insert(values, [("ah_stockage", OBJECT)], "POINT(0 0)")
 
-    def test_all_six_attachment_mappings(self):
+    def test_ten_attachment_mappings(self):
         values = dict(REQUIRED)
         for category, foreign_key in (
             ("ah_stockage", "ah_stockage_id"),
@@ -74,10 +74,12 @@ class RecordTests(unittest.TestCase):
             ("cours_eau", "cours_eau_id"),
             ("digues", "digue_id"),
             ("sites_terrestres", "site_terrestre_id"),
-            ("sites_zones", "site_zone_id"),
+            ("vegetation", "vegetation_id"), ("mobilier", "mobilier_id"),
+            ("cheminements", "cheminement_id"), ("troncons", "troncon_id"),
+            ("ah_sections", "ah_section_id"),
         ):
             sql = build_insert(values, [(category, OBJECT)],
-                               None if category == "sites_zones" else "POINT(0 0)")
+                               None if category == "vegetation" else "POINT(0 0)")
             self.assertIn(foreign_key, sql)
             self.assertEqual(sql.count("INSERT INTO"), 1)
 
@@ -95,17 +97,17 @@ class RecordTests(unittest.TestCase):
 
     def test_single_patrimony_including_zones(self):
         second = "66666666-6666-6666-6666-666666666666"
-        for family in ("cours_eau", "digues", "ah_stockage", "ah_ouvrage", "sites_zones"):
+        for family in ("cours_eau", "digues", "ah_stockage", "ah_ouvrage", "vegetation"):
             with self.subTest(family=family), self.assertRaisesRegex(ValueError, "seul"):
                 validate(REQUIRED, [(family, OBJECT), (family, second)],
-                         None if family == "sites_zones" else "POINT(0 0)")
+                         None if family == "vegetation" else "POINT(0 0)")
 
-    def test_zone_uses_only_reference_geometry(self):
-        self.assertIn("NULL", build_insert(REQUIRED, [("sites_zones", OBJECT)]))
+    def test_child_accepts_own_or_reference_geometry(self):
+        self.assertIn("NULL", build_insert(REQUIRED, [("vegetation", OBJECT)]))
         for geometry in ("POINT(0 0)", "LINESTRING(0 0,1 1)",
                          "POLYGON((0 0,1 0,1 1,0 0))", "MULTIPOINT((0 0),(1 1))"):
-            with self.subTest(geometry=geometry), self.assertRaisesRegex(ValueError, "Supprimez-la explicitement"):
-                build_insert(REQUIRED, [("sites_zones", OBJECT)], geometry)
+            with self.subTest(geometry=geometry):
+                build_insert(REQUIRED, [("vegetation", OBJECT)], geometry)
 
     def test_rattachement_obligatoire_et_geometrie(self):
         values = dict(REQUIRED)

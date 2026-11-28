@@ -149,7 +149,7 @@ def main(package_root=None, package_name="gemapi_app"):
     filter_option_queries = report_data.filter_option_queries
 
     options = filter_option_queries(include_statuses=True, include_providers=True)
-    assert set(("ah_stockage", "ah_ouvrage", "cours_eau", "sites_zones")) <= set(options)
+    assert set(("ah_stockage", "ah_ouvrage", "cours_eau", "mobilier", "cheminements", "vegetation")) <= set(options)
     assert "type_ecoulement" not in options["cours_eau"]
     assert options["cours_eau"] == "SELECT c.id::text,c.nom FROM milieux.cours_eau c ORDER BY 2,1"
     assert "FROM milieux.prestations" in build_management_query({})

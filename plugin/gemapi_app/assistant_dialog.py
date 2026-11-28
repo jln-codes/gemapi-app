@@ -12,6 +12,7 @@ from qgis.PyQt.QtWidgets import (QAction, QCheckBox, QComboBox, QDialog, QFileDi
                                 QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
                                 QTextBrowser, QToolButton, QVBoxLayout, QWidget)
 
+from .record import TARGETS
 from .assistant import (ALLOWED_FAMILIES, Draft, ENDPOINT, KEY_PATH_SETTING, LABELS, REFERENCES, candidates, configured_key_path, load_catalog, parse_response,
                         read_api_key, request_payload, spoken_result)
 from .window_geometry import initialize_window
@@ -163,8 +164,8 @@ class AssistantDialog(QDialog):
         self._sync_speech_controls()
         initialize_window(self, "assistant", parent)
         self._append("Assistant IA", "Décrivez une prestation sur un ouvrage hydraulique, un stockage hydraulique "
-                     "ou une zone terrestre. Vos messages et les noms du brouillon sont transmis à Mistral. "
-                     "Les noms complets des référentiels et des trois familles patrimoniales avec leurs parents sont aussi transmis ; les UUID et géométries restent locaux. Vérifiez ensuite le formulaire et cliquez "
+                     "ou un enfant direct de site (mobilier, cheminement, végétation). Vos messages et les noms du brouillon sont transmis à Mistral. "
+                     "Les noms complets des référentiels et des familles patrimoniales autorisées avec leurs parents sont aussi transmis ; les UUID et géométries restent locaux. Vérifiez ensuite le formulaire et cliquez "
                      "vous-même sur Enregistrer. La conversation reste disponible pendant cette session.")
 
     def _append(self, role, message):
@@ -637,7 +638,7 @@ class AssistantDialog(QDialog):
             return
         self._correction_label("Complétez les champs ci-dessous, puis validez ensemble.")
         family = self.draft.names.get("famille")
-        family_labels = dict(zip(ALLOWED_FAMILIES, ("Ouvrage hydraulique", "Stockage hydraulique", "Zone terrestre")))
+        family_labels = {key: TARGETS[key].label for key in ALLOWED_FAMILIES}
         if family not in ALLOWED_FAMILIES:
             self.family_box = QComboBox(self.choices_widget)
             self.family_box.addItem("— Choisir la famille —", None)

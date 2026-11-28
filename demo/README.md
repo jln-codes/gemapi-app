@@ -1,6 +1,15 @@
 # Démonstration patrimoniale GEMAPI-App-SIRS v0.6.1
 
-Le jeu fictif se reconstruit sur une base PostgreSQL/PostGIS locale neuve avec le schéma de la branche SIRS. Le projet QGIS livré et le plugin ciblent encore les anciennes zones. Leur adaptation relève de SIG-FUSION-10.
+Le jeu fictif se reconstruit sur une base PostgreSQL/PostGIS locale neuve avec le schéma de la branche SIRS. Le projet QGIS résout ses couches PostgreSQL avec le service libpq `gemapi_demo`. Dans le fichier de services de l’utilisateur (ou celui désigné par `PGSERVICEFILE`), ajouter la section suivante et adapter la connexion à la base reconstruite :
+
+```ini
+[gemapi_demo]
+host=localhost
+port=5432
+dbname=demo_sirs_locale
+```
+
+Utiliser son compte PostgreSQL de consultation ou de saisie. Ouvrir ensuite `prestations_demo.qgz`. Les couches de mobilier, cheminements et végétation affichent les enfants directs des sites en lecture seule.
 
 ## Reconstruction
 
@@ -75,7 +84,7 @@ déclarée 96 m²). Rapport stockage : 8 directes. Rapport Remblai1 : 1 directe
 Rapport Ruisseau du Pré Neuf : 1 prestation, conservant sa FK rivière et sa
 géométrie propre. Rapport global : 100 UUID distincts.
 
-Les appartenances attendues pour les futurs rapports QGIS servent de témoins fonctionnels pour SIG-FUSION-10. La qualification de cette version porte sur l’import, les géométries et les relations PostgreSQL.
+Le contrôle QGIS compare les appartenances du rapport et de la gestion à celles de la vue PostgreSQL. Le site témoin compte huit prestations, enfants directs compris. Voir [la qualification du plugin](../audits/SIG-FUSION-10-qgis-compatibility.md).
 
 Pour obtenir des **propositions sans écriture**, utiliser
 `SELECT * FROM milieux.ah_sections_candidates(:ah_id)`. L’intersection de
@@ -167,7 +176,7 @@ CABBALR pour générer les imports fictifs. Les sauvegardes restent hors Git.
 Chaque table métier conserve automatiquement `modifie_par` (compte PostgreSQL `session_user`) et `date_modification`. Chaque prestation porte un `technicien_id` obligatoire, indépendant du compte auteur.
 
 
-## Repères de digues et projet QGIS à adapter (DIG-02)
+## Repères de digues et projet QGIS (DIG-02)
 
 La création d’un repère ou un changement de rivière/fractions exige le même
 contrôle de qualification que les sections AH. Les changements attributaires

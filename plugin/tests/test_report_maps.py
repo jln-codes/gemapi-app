@@ -46,14 +46,14 @@ class ReportMapTests(unittest.TestCase):
                                    MAP_WIDTH_MM / MAP_HEIGHT_MM, places=5)
             self.assertEqual(len(location(record)), 1)
 
-    def test_zone_is_exclusive_reference_for_all_three_geometry_types(self):
+    def test_child_fallback_for_all_three_geometry_types(self):
         for wkt in ("POINT(1700000 9300000)",
                     "LINESTRING(1700000 9300000,1700100 9300000)",
                     "POLYGON((1700000 9300000,1700100 9300000,1700100 9300100,1700000 9300000))"):
             with self.subTest(wkt=wkt):
-                record = {"own_wkt": "POINT(1800000 9400000)", "quantite": 7,
+                record = {"own_wkt": None, "quantite": 7,
                           "unite": "arbres", "reference_geometries": [{
-                              "famille": "sites_zones", "objet_id": "zone", "nom": "Zone fictive",
+                              "famille": "vegetation", "objet_id": "zone", "nom": "Zone fictive",
                               "direct": True, "wkt": wkt}]}
                 before = dict(record)
                 self.assertEqual(location(record)[0][0], wkt)
@@ -68,9 +68,9 @@ class ReportMapTests(unittest.TestCase):
                 self.assertIsNotNone(grouped_extent)
                 self.assertEqual(grouped_layers[0].name(),"Patrimoine de référence")
                 self.assertEqual(record, before)
-        # A broken zone reference must never fall back to a forbidden own geom.
+        # Own geometry takes precedence even if the child geometry is unavailable.
         self.assertEqual(location({"own_wkt":"POINT(0 0)","reference_geometries":[{
-            "famille":"sites_zones","objet_id":"zone","wkt":None}]}), [])
+            "famille":"vegetation","objet_id":"zone","wkt":None}]})[0][:2], ("POINT(0 0)", "propre"))
 
     def test_offline_basemap_falls_back(self):
         with patch("gemapi_app.report_maps.urlopen", side_effect=OSError("offline")):

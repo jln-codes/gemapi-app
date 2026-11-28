@@ -79,12 +79,12 @@ def run_matrix(db):
                 cases[uid] = (original, MEASURES[kind])
 
         for kind in MEASURES:
-            cur.execute("INSERT INTO milieux.sites_zones(site_terrestre_id,nom,geom) "
-                        "VALUES (%s,%s,ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000)) "
-                        "RETURNING id,ST_AsText(geom)", (site, f"Zone {kind}", parts(kind, 20, 420)))
+            cur.execute("INSERT INTO public.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
+                        "VALUES ('ARBRES',%s,%s,ST_Translate(ST_GeomFromText(%s,3950),1700000,9300000)) "
+                        "RETURNING id,ST_AsText(geometry)", (site, f"Zone {kind}", parts(kind, 20, 420)))
             zone, shape = cur.fetchone()
             cur.execute("INSERT INTO milieux.prestations(intitule,type_prestation_id,prestataire_id,"
-                        "technicien_id,statut_id,date_debut,date_fin,quantite,unite,site_zone_id) "
+                        "technicien_id,statut_id,date_debut,date_fin,quantite,unite,vegetation_id) "
                         "VALUES (%s,%s,%s,%s,%s,'2026-01-01','2026-01-02',7,'unités',%s) RETURNING id",
                         (f"Zone {kind}", prestation_type, provider, technician, status, zone))
             uid = cur.fetchone()[0]
@@ -115,9 +115,9 @@ def run_matrix(db):
                 assert record["reference_geometries"][0]["wkt"] == expected_shape
                 assert record["reference_measures"] is None
                 label = {
-                    'MULTIPOINT': 'Géométrie ponctuelle de la zone',
-                    'MULTILINESTRING': 'Longueur de la zone (géométrie parente) : 75,0 m',
-                    'MULTIPOLYGON': 'Surface de la zone (géométrie parente) : 800,0 m²',
+                    'MULTIPOINT': 'Géométrie ponctuelle du patrimoine',
+                    'MULTILINESTRING': 'Longueur du patrimoine (géométrie parente) : 75,0 m',
+                    'MULTIPOLYGON': 'Surface du patrimoine (géométrie parente) : 800,0 m²',
                 }[expected_shape.partition('(')[0]]
                 assert measure_lines(record) == [label, 'Quantité déclarée : 7 unités']
             for layer in layers:
@@ -135,7 +135,7 @@ def run_matrix(db):
             ("MULTIPOINT((0 0))", 2154),
             ("MULTIPOLYGON(((0 0,1 1,1 0,0 1,0 0)))", 3950),
         )
-        for table, id_filter in (("prestations", "site_terrestre_id"), ("sites_zones", "site_terrestre_id"),
+        for table, id_filter in (("prestations", "site_terrestre_id"),
                                  ("sites_terrestres", "id")):
             for wkt, srid in negatives:
                 cur.execute("SAVEPOINT invalid_geometry")

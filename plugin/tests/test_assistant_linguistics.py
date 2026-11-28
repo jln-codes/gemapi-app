@@ -32,7 +32,7 @@ CATALOG = {
 }
 CATALOG['patrimoines'] = {'ah_ouvrage': [CATALOG['patrimoine'][0]],
                            'ah_stockage': [CATALOG['patrimoine'][1]],
-                           'sites_zones': [CATALOG['patrimoine'][2]]}
+                           'vegetation': [CATALOG['patrimoine'][2]]}
 
 BASE = {'famille': 'ah_ouvrage', 'patrimoine': 'Talus ZEC Ourton', 'type_prestation': 'Débroussaillage',
         'prestataire': 'Noeux Environnement', 'technicien': 'Benoît Quentin', 'statut': 'Terminé',
@@ -94,7 +94,7 @@ CASES = [
          {'type_prestation': 'Fauche', 'famille': 'ah_stockage', 'patrimoine': 'Stockage Démo'},
          prior=CONTEXT, local_type='prestation de fauche', expected_type='Fauche'),
     case('zone', "Travaux d'élagage sur la zone terrestre Zone Démo.",
-         {'type_prestation': 'Élagage', 'famille': 'sites_zones', 'patrimoine': 'Zone Démo'},
+         {'type_prestation': 'Élagage', 'famille': 'vegetation', 'patrimoine': 'Zone Démo'},
          prior=CONTEXT, local_type="travaux d'élagage", expected_type='Élagage'),
     case('unknown_type', 'Créer une intervention de traitement par laser sur cet ouvrage.',
          {'type_prestation': 'traitement par laser'}, prior=CONTEXT, expected_type=None, absent='type_prestation'),
@@ -211,9 +211,9 @@ NAME_CASES.append(name_case('stockage_ah_parent', NAMES_TEXT.replace('ouvrage hy
                     'candidats': ['Bassin Ourton — AH de test']}}, stock_catalog))
 zone_catalog = copy.deepcopy(CATALOG)
 zone_catalog['patrimoine'] = [(uid(507), 'Prairie Ourton', 'Site Nord'), (uid(508), 'Prairie Ourton', 'Site Sud')]
-zone_catalog['patrimoines']['sites_zones'] = zone_catalog['patrimoine']
+zone_catalog['patrimoines']['vegetation'] = zone_catalog['patrimoine']
 NAME_CASES.append(name_case('zone_site_parent', NAMES_TEXT.replace('ouvrage hydraulique Talus ZEC Hurton',
-    'zone terrestre Prairie Hurton du site Site Nord'), {'famille': 'sites_zones', 'patrimoine': 'Prairie Ourton — Site Nord'},
+    'zone terrestre Prairie Hurton du site Site Nord'), {'famille': 'vegetation', 'patrimoine': 'Prairie Ourton — Site Nord'},
     {'patrimoine': {'source': 'Prairie Hurton', 'nature': 'phonetique_complete',
                     'candidats': ['Prairie Ourton — Site Nord']}}, zone_catalog))
 parent_catalog = copy.deepcopy(CATALOG)

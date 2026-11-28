@@ -304,7 +304,7 @@ class FocusTests(unittest.TestCase):
         self.assertFalse(self.db.writes)
 
     def test_focus_is_shared_by_all_seven_direct_attachment_families(self):
-        for family in ('ah_ouvrage', 'ah_stockage', 'sites_zones', 'cours_eau', 'digues', 'ah_sections', 'sites_terrestres'):
+        for family in ('ah_ouvrage', 'ah_stockage', 'mobilier', 'cheminements', 'vegetation', 'cours_eau', 'digues', 'ah_sections', 'sites_terrestres'):
             with self.subTest(family=family):
                 self.plugin.show_creation()
                 form = self.plugin.creation
@@ -317,7 +317,7 @@ class FocusTests(unittest.TestCase):
                 self.assertTrue(self.plugin.home.isVisible())
                 self.assertTrue(self.iface.canvas.extent().contains(QgsGeometry.fromWkt(LINE).boundingBox()))
                 self.assertIn('FROM milieux.prestations_carte', self.db.queries[-1])
-        self.assertEqual(len(self.db.writes), 7)
+        self.assertEqual(len(self.db.writes), 9)
 
     def test_cancel_returns_to_correct_previous_window(self):
         manager = Manager(self.iface.window)

@@ -33,7 +33,7 @@ def project_copy(target, port):
     root = etree.fromstring(next(data for info, data in entries
                                  if info.filename.endswith(".qgs")))
     layers = root.findall("./projectlayers/maplayer")
-    assert len(layers) == 26
+    assert len(layers) == 33
     sections = next(layer for layer in layers if layer.findtext("id") == LAYER_ID)
     river = next(layer for layer in layers if '"milieux"."cours_eau"'
                  in layer.findtext("datasource", ""))
@@ -61,7 +61,7 @@ def project_copy(target, port):
         if layer.findtext("provider") != "postgres":
             continue
         if layer.findtext("id") in (LAYER_ID, river_id):
-            source = QgsDataSourceUri(layer.findtext("datasource"))
+            source = QgsDataSourceUri(layer.findtext("datasource").replace("service='gemapi_demo'", ""))
             source.setConnection("127.0.0.1", port, "postgres", "dig02_read", "")
             layer.find("datasource").text = source.uri(False)
         else:
@@ -70,7 +70,7 @@ def project_copy(target, port):
     for node in root.findall(".//layer-tree-layer"):
         if node.get("id") not in (LAYER_ID, river_id):
             continue
-        source = QgsDataSourceUri(node.get("source"))
+        source = QgsDataSourceUri(node.get("source").replace("service='gemapi_demo'", ""))
         source.setConnection("127.0.0.1", port, "postgres", "dig02_read", "")
         node.set("source", source.uri(False))
     assert etree.tostring(river.find("renderer-v2")) == old_river_style
@@ -173,7 +173,7 @@ def main():
             project_copy(Path(directory) / "dig02_test.qgz", port)
             project = QgsProject.instance()
             assert project.read(str(Path(directory) / "dig02_test.qgz"))
-            assert len(project.mapLayers()) == 26
+            assert len(project.mapLayers()) == 33
             sections = project.mapLayer(LAYER_ID)
             river_layer = next(layer for layer in project.mapLayers().values()
                                if QgsDataSourceUri(layer.source()).table() == "cours_eau")

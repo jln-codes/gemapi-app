@@ -22,7 +22,7 @@ from gemapi_app.report_data import build_management_query, build_report_query, p
 from gemapi_app.report_pdf import export_detailed_report  # noqa: E402
 from gemapi_app.report_synthetic_portrait import export_synthetic_portrait_report  # noqa: E402
 from gemapi_app.report_maps import background, location_layers  # noqa: E402
-from test_postgres_integration import ROOT, command, sql  # noqa: E402
+from test_postgres_integration import ROOT, command, load_demo_rows, sql  # noqa: E402
 
 
 def main():
@@ -41,11 +41,7 @@ def main():
             raise RuntimeError("PostGIS de test indisponible")
         sql(container, "CREATE EXTENSION IF NOT EXISTS postgis;")
         sql(container, (ROOT / "model/schema.sql").read_text())
-        sources = sorted((ROOT / "demo/data").glob("[0-9][0-9]_*.sql"))
-        sql(container, "\n".join(
-            [*(source.read_text() for source in sources if source.name < "15_"),
-             (ROOT / "demo/data/digues.sql").read_text(),
-             *(source.read_text() for source in sources if source.name >= "15_")] ))
+        load_demo_rows(container)
         river_ids = [str(uuid4()) for _ in range(4)]
         river_rows = (
             (river_ids[0], "Rivière des Trois Saules", "MULTILINESTRING((1682600 9232400,1682700 9232500))"),
@@ -80,8 +76,8 @@ def main():
             return result
 
         for table in ("prestations", "types_prestations", "prestataires",
-                      "ah_stockage", "ah_ouvrage", "sites_zones"):
-            layer(table, "geom" if table in ("prestations", "ah_stockage", "ah_ouvrage", "sites_zones") else "")
+                      "ah_stockage", "ah_ouvrage"):
+            layer(table, "geom" if table in ("prestations", "ah_stockage", "ah_ouvrage") else "")
         hydro_layer = layer("cours_eau", "geom")
 
         class Interface:
@@ -101,14 +97,14 @@ def main():
         manager.familyCombo.setCurrentIndex(manager.familyCombo.findData("cours_eau"))
         grouped = [manager.objectPicker.list.item(i)
                    for i in range(manager.objectPicker.list.count())
-                   if "Trois Saules" in manager.objectPicker.list.item(i).text()]
+                   if "Rivière des Trois Saules" in manager.objectPicker.list.item(i).text()]
         assert sorted(len(item.data(Qt.UserRole)) for item in grouped) == [1, 2]
         manager.familyCombo.setCurrentIndex(manager.familyCombo.findData("ah"))
         assert "cours_eau" not in manager.filters()
         manager.close()
         create = CreationDialog(iface)
         original = [create.objectList.item(i) for i in range(create.objectList.count())]
-        triples = [item for item in original if "Trois Saules" in item.text()
+        triples = [item for item in original if "Rivière des Trois Saules" in item.text()
                    and item.data(Qt.UserRole)[0] == "cours_eau"]
         assert len(triples) == 3 and all(len(item.data(Qt.UserRole)[1]) == 1 for item in triples)
         group = [item for item in triples if "tronçon" in item.text()]
@@ -155,7 +151,7 @@ def main():
         create.geometry_kind = "point"
         create._update_geometry_status()
         create._save()
-        assert "enregistrées" in create.statusLabel.text(), create.statusLabel.text()
+        assert create.saved_prestation_id, create.statusLabel.text()
         created_id = sql(container, "SELECT id::text FROM milieux.prestations "
                          "WHERE intitule='UX-HYDRO création fictive';").stdout.strip()
         created_links = set(sql(container, "SELECT cours_eau_id::text FROM "
@@ -265,7 +261,7 @@ def main():
         shot.parent.mkdir(exist_ok=True)
         assert without_geom.grab().save(str(shot))
         without_geom._save()
-        assert "enregistrées" in without_geom.statusLabel.text(), without_geom.statusLabel.text()
+        assert without_geom.saved_prestation_id, without_geom.statusLabel.text()
         no_geom_id = sql(container, "SELECT id::text FROM milieux.prestations "
                          "WHERE intitule='UX-HYDRO sans géométrie' AND geom IS NULL;").stdout.strip()
         assert no_geom_id

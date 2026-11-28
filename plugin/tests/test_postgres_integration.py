@@ -55,6 +55,23 @@ def sql(container, statement, check=True):
     raise RuntimeError("PostgreSQL de test n'est pas stabilisé après son initialisation")
 
 
+def install_demo(container):
+    """Build the canonical demonstration in a new database inside this test container."""
+    command("docker", "exec", container, "createdb", "-U", "postgres", "demo_qualification")
+    command("docker", "exec", container, "mkdir", "-p", "/tmp/demo", "/tmp/model")
+    command("docker", "cp", str(ROOT / "demo/data"), container + ":/tmp/demo/data")
+    command("docker", "cp", str(ROOT / "model/schema.sql"), container + ":/tmp/model/schema.sql")
+    command("docker", "exec", "-e", "PGUSER=postgres", container, "bash",
+            "/tmp/demo/data/importer_base_neuve.sh", "demo_qualification")
+
+
+def load_demo_rows(container):
+    for source in ("01_techniciens", "03_communes", "04_prestataires", "09_ah",
+                   "10_sites_terrestres", "11_cours_eau", "12_ah_sections", "digues",
+                   "14_patrimoine", "15_prestations", "16_suivi"):
+        sql(container, (ROOT / f"demo/data/{source}.sql").read_text())
+
+
 def check_ah_relations(container):
     """Validate independent optional storage (0..1) and works (0..N)."""
     parent_ids = [str(uuid4()) for _ in range(4)]
@@ -106,17 +123,17 @@ def check_site_relations(container):
     assert sql(container, f"SELECT count(*) FROM milieux.sites_terrestres "
                f"WHERE id='{parent}'").stdout.strip() == "1"
     for zone in (first, second):
-        sql(container, "INSERT INTO milieux.sites_zones(id,site_terrestre_id,nom,geom) "
-                       f"VALUES ('{zone}','{parent}','Zone',{point})")
-    assert sql(container, "SELECT count(*) FROM milieux.sites_zones "
+        sql(container, "INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) "
+                       f"VALUES ('ARBRES','{zone}','{parent}','Zone',{point})")
+    assert sql(container, "SELECT count(*) FROM public.vegetation "
                f"WHERE site_terrestre_id='{parent}'").stdout.strip() == "2"
-    for owner, message in (("NULL", "null value"), (f"'{missing}'", "foreign key")):
-        refused = sql(container, "INSERT INTO milieux.sites_zones(site_terrestre_id,nom,geom) "
-                      f"VALUES ({owner},'Orpheline',{point})", check=False)
+    for owner, message in (("NULL", "check constraint"), (f"'{missing}'", "foreign key")):
+        refused = sql(container, "INSERT INTO public.vegetation(famille_vegetation,site_terrestre_id,designation,geometry) "
+                      f"VALUES ('ARBRES',{owner},'Orpheline',{point})", check=False)
         assert refused.returncode != 0 and message in refused.stderr.lower(), refused.stderr
     refused = sql(container, f"DELETE FROM milieux.sites_terrestres WHERE id='{parent}'", check=False)
     assert refused.returncode != 0 and "foreign key" in refused.stderr.lower(), refused.stderr
-    sql(container, f"DELETE FROM milieux.sites_zones WHERE site_terrestre_id='{parent}'")
+    sql(container, f"DELETE FROM public.vegetation WHERE site_terrestre_id='{parent}'")
     sql(container, f"UPDATE milieux.sites_terrestres SET nom='À nouveau sans zone' WHERE id='{parent}'")
     assert sql(container, f"SELECT count(*) FROM milieux.sites_terrestres WHERE id='{parent}'").stdout.strip() == "1"
     sql(container, f"DELETE FROM milieux.sites_terrestres WHERE id='{parent}'")
@@ -128,7 +145,7 @@ def check_cartographic_ah(container, values, ouvrage):
         ('cours_eau', FOSSE, 'POINT(3 4)', 'POINT(3 4)'),
         ('digues', DIGUE, 'LINESTRING(0 0,3 4)', 'LINESTRING(0 0,3 4)'),
         ('sites_terrestres', SITE, 'MULTIPOINT((3 4))', 'MULTIPOINT((3 4))'),
-        ('sites_zones', SITE, None, 'MULTIPOINT((0 0))'),
+        ('vegetation', SITE, None, 'MULTIPOINT((0 0))'),
         ('ah_stockage', ZEC, None, 'POLYGON((0 0,1 0,1 1,0 1,0 0))'),
         ('ah_ouvrage', ouvrage, None, 'LINESTRING(0 0,1 0)'),
         # Both children may have a different, optional work geometry. Keep it.
@@ -224,7 +241,7 @@ def main():
                        f"('{RIVIERE}', 'Test', 'rivière', 'TEST', "
                        "ST_Multi(ST_GeomFromText('LINESTRING(0 0,1 1)',3950))); "
                        "INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES ('66666666-6666-6666-6666-666666666666','Site test',ST_GeomFromText('MULTIPOLYGON(((0 0,1 0,1 1,0 0)))',3950)); "
-                       f"INSERT INTO milieux.sites_zones (id, site_terrestre_id, nom, geom) VALUES ('{SITE}', '66666666-6666-6666-6666-666666666666', 'Test', "
+                       f"INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES ('ARBRES','{SITE}', '66666666-6666-6666-6666-666666666666', 'Test', "
                        "ST_GeomFromText('MULTIPOINT((0 0))',3950)); "
                        f"INSERT INTO milieux.digues(id,nom) VALUES ('{DIGUE}','Digue de contrôle'); "
                        f"UPDATE milieux.cours_eau SET direction=TRUE WHERE id='{RIVIERE}'; "
@@ -243,7 +260,7 @@ def main():
         counts = sql(container, "SELECT (SELECT count(*) FROM milieux.prestations), "
                                 "(SELECT count(ah_stockage_id) FROM milieux.prestations), "
                                 "(SELECT count(cours_eau_id) FROM milieux.prestations), "
-                                "(SELECT count(site_zone_id) FROM milieux.prestations);")
+                                "(SELECT count(vegetation_id) FROM milieux.prestations);")
         assert counts.stdout.strip() == "1|0|1|0", counts.stdout
         assert sql(container, "SELECT photo_1,photo_1_commentaire FROM milieux.prestations "
                    "WHERE intitule='Test d''atomicité';").stdout.strip() == "essais/une-photo.jpg|Avant travaux"
@@ -319,7 +336,7 @@ def main():
                       "WHERE ah_id='55555555-5555-5555-5555-555555555555'").stdout.strip()
         for title, family, object_id in (("Sans géométrie stockage", "ah_stockage", ZEC),
                                           ("Sans géométrie ouvrage", "ah_ouvrage", ouvrage),
-                                          ("Sans géométrie zone", "sites_zones", SITE)):
+                                          ("Sans géométrie zone", "vegetation", SITE)):
             result = sql(container, build_insert({**values, "intitule": title},
                                                  [(family, object_id)]))
             assert result.stdout.strip().endswith("|0"), result.stdout

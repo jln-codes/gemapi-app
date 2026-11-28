@@ -345,7 +345,7 @@ def main():
                     return [(patrimony_ids[0], "ZEC proche"),
                             (patrimony_ids[1], "ZEC distante")]
                 return []
-            assert query.count("ST_DWithin(") == 7, query
+            assert query.count("ST_DWithin(") == 9, query
             reference = dialog._reference_geometry()
             radius = dialog.distanceSpin.value() * dialog.distanceUnitCombo.currentData()
             return [("ah_stockage", patrimony_ids[f.id()], None, None, None, None, None)
@@ -357,7 +357,7 @@ def main():
     dialog._object_layer = lambda table: FakeLayer() if table == "ah_stockage" else None
     dialog._load_objects()
     assert set(dialog._object_load_failures) == {
-        "cours_eau", "digues", "ah_sections", "ah_ouvrage", "sites_terrestres", "sites_zones"}
+        "cours_eau", "digues", "ah_sections", "ah_ouvrage", "sites_terrestres", "vegetation", "mobilier", "cheminements"}
     # The stand-in deliberately provides one family. Test filtering separately
     # from the incomplete-loading warning asserted above.
     dialog._object_load_failures = ()
@@ -557,7 +557,7 @@ def main():
             if query.startswith("SELECT o.id::text"):
                 if "FROM milieux.ah_stockage" in query:
                     return [[first_object, "AH — ZEC Alpha"]]
-                if "FROM milieux.sites_zones" in query:
+                if "FROM public.vegetation" in query:
                     return [[first_object, "Site — Zone Alpha"]]
                 return []
             uid = first_id if first_id in query else second_id

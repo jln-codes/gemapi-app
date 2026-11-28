@@ -44,7 +44,7 @@ from .digitize import (GeometryCapture, KINDS, append_geometry_part, geometry_fr
 from .hydro_groups import build_options, search_key
 from .watercourse_labels import section_label_sql, location_label
 from .patrimony_spatial import candidate_query, resolve_candidates
-from .record import CATEGORIES, LINKS, POSITIONS, RIVES, build_insert, build_update, validate
+from .record import SITE_CHILDREN, TARGETS, CATEGORIES, LINKS, POSITIONS, RIVES, build_insert, build_update, validate
 from .photo_paths import reference_for, resolve_photo
 from .management import load_prestation
 from .perf import connect, measure, profiled
@@ -241,7 +241,7 @@ class CreationDialog(QDialog):
             "Sur la carte : clic pour un point, clic droit pour terminer une ligne "
             "ou un polygone. Ajoutez une partie pour une géométrie multiple ; "
             "Échap annule le dessin en cours.")
-        geometry_help = QLabel("La géométrie propre est obligatoire pour les cours d'eau, les digues, les sections AH et les sites terrestres, facultative pour les stockages et ouvrages AH et interdite pour les zones terrestres, dont la géométrie sert de référence.")
+        geometry_help = QLabel("La géométrie propre est obligatoire pour les cours d'eau, les digues, les sections AH et les sites terrestres, facultative pour les stockages et ouvrages AH et pour les enfants des sites. Sans dessin, la carte localise la prestation sur son patrimoine.")
         geometry_help.setWordWrap(True)
         self.geometryLayout.insertWidget(0, geometry_help)
         patrimony_help = QLabel("Sélectionnez directement un patrimoine ou dessinez une géométrie"
@@ -365,11 +365,8 @@ class CreationDialog(QDialog):
         geometry = self.geometry
         if geometry is None or geometry.isNull() or geometry.isEmpty():
             families = {table for table, _ in self._associations()}
-            return ("Géométrie obligatoire pour un cours d'eau, une digue, une section AH ou un site terrestre."
-                    if families.intersection(("cours_eau", "digues", "ah_sections", "sites_terrestres")) else None)
-        if any(family == "sites_zones" for family, _ in self._associations()):
-            return ("Une prestation sur zone terrestre ne peut pas avoir de géométrie propre. "
-                    "Supprimez-la explicitement ou changez le rattachement ; la géométrie de la zone sera utilisée.")
+            return ("Géométrie obligatoire pour un cours d'eau, une digue, une section AH, un tronçon ou un site terrestre."
+                    if families.intersection(("cours_eau", "digues", "ah_sections", "troncons", "sites_terrestres")) else None)
         allowed = (QgsWkbTypes.Point, QgsWkbTypes.MultiPoint,
                    QgsWkbTypes.LineString, QgsWkbTypes.MultiLineString,
                    QgsWkbTypes.Polygon, QgsWkbTypes.MultiPolygon)
@@ -386,12 +383,12 @@ class CreationDialog(QDialog):
         present = self.geometry is not None and not self.geometry.isNull() and not self.geometry.isEmpty()
         drawing = self._capture is not None
         editable = self.mode != "view"
-        zone_mode = self._assistant_draft or any(family == "sites_zones" for family, _ in self._associations())
+        drawing_allowed = editable and not self._assistant_draft
         for button in (self.pointButton, self.lineButton, self.polygonButton):
-            button.setEnabled(editable and not drawing and not zone_mode)
+            button.setEnabled(drawing_allowed and not drawing)
         self.saveButton.setEnabled(not self._save_completed and editable and valid and bool(self._associations())
                                    and not drawing and not self._geometry_building)
-        self.addPartButton.setEnabled(editable and not zone_mode and present and valid and not drawing)
+        self.addPartButton.setEnabled(drawing_allowed and present and valid and not drawing)
         self.removePartButton.setEnabled(editable and present and valid and not drawing and
                                          geometry_part_count(self.geometry) > 1)
         self.finishGeometryButton.setEnabled(editable and present and valid and not drawing and
@@ -406,8 +403,8 @@ class CreationDialog(QDialog):
             self.geometryStatusLabel.setText("Numérisation d'une partie en cours" + previous)
         elif self._geometry_error():
             self.geometryStatusLabel.setText(self._geometry_error())
-        elif not present and any(family == "sites_zones" for family, _ in self._associations()):
-            self.geometryStatusLabel.setText("Localisation : géométrie de la zone terrestre — aucune géométrie propre.")
+        elif not present and any(family in SITE_CHILDREN for family, _ in self._associations()):
+            self.geometryStatusLabel.setText("Localisation : géométrie du patrimoine — aucune géométrie propre.")
         elif not present:
             self.geometryStatusLabel.setText("Aucune géométrie dessinée — facultative selon le patrimoine.")
         else:
@@ -422,8 +419,7 @@ class CreationDialog(QDialog):
 
     @profiled("form.qgis.begin_capture")
     def _begin_capture(self, kind, append=False):
-        if any(family == "sites_zones" for family, _ in self._associations()):
-            self.statusLabel.setText("La géométrie de la zone terrestre sert de référence : la numérisation propre est interdite.")
+        if self._assistant_draft:
             return
         if self._map_tool is not None:
             self._stop_map_selection()
@@ -636,6 +632,41 @@ class CreationDialog(QDialog):
         self._object_layers[table] = layer
         return layer
 
+    def _site_child_layers(self, table):
+        # A PostgreSQL geometry column can contain all six simple/multi types.
+        # Read each dimension even when the project's visible layers are filtered.
+        target = TARGETS[table]
+        anchor = (self._canonical_layer("prestations_fiches") or self._canonical_layer("prestations_carte")
+                  or self._canonical_layer("prestations"))
+        if anchor is None:
+            raise ValueError("Connexion PostgreSQL des prestations indisponible.")
+        connection = QgsDataSourceUri(anchor.source()).connectionInfo(False)
+        available = {}
+        for layer in QgsProject.instance().mapLayers().values():
+            if not layer.isValid() or layer.providerType() != "postgres":
+                continue
+            uri = QgsDataSourceUri(layer.source())
+            if (uri.schema() == target.schema and uri.table() == table and
+                    uri.geometryColumn() == target.geometry and uri.connectionInfo(False) == connection):
+                available[layer.subsetString(), layer.wkbType()] = layer
+        layers = []
+        for dimension, kind in enumerate((QgsWkbTypes.MultiPoint, QgsWkbTypes.MultiLineString,
+                                          QgsWkbTypes.MultiPolygon)):
+            subset = f"site_terrestre_id IS NOT NULL AND ST_Dimension({target.geometry})={dimension}"
+            if (subset, kind) in available:
+                layers.append(available[subset, kind])
+                continue
+            uri = QgsDataSourceUri(anchor.source())
+            uri.setDataSource(target.schema, table, target.geometry, subset, "id")
+            uri.setSrid("3950")
+            uri.setWkbType(kind)
+            layer = QgsVectorLayer(uri.uri(False), target.label, "postgres")
+            if not layer.isValid():
+                raise ValueError(f"Couche {target.schema}.{table} inaccessible.")
+            layer.setReadOnly(True)
+            layers.append(layer)
+        return layers
+
     def _create_object_layer(self, table):
         source_table = {"digues": "digues_carte", "ah_sections": "ah_sections_carte"}.get(table, table)
         existing = self._canonical_layer(source_table)
@@ -783,7 +814,7 @@ class CreationDialog(QDialog):
             QgsMessageLog.logMessage("Libellés des sections AH indisponibles.", "GEMAPI-App", Qgis.Warning)
         self._location_details = {}
         failed = []
-        for table in ("digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", "sites_zones"):
+        for table in ("digues", "ah_sections", "cours_eau", "ah_stockage", "ah_ouvrage", "sites_terrestres", *SITE_CHILDREN):
             try:
                 family_objects = []
                 if table == "cours_eau":
@@ -799,14 +830,10 @@ class CreationDialog(QDialog):
                     self.objects.extend(family_objects)
                     _patrimony_trace(f"Chargement {table} : {len(family_objects)} objets")
                     continue
-                layers = ([layer for layer in QgsProject.instance().mapLayers().values()
-                           if layer.isValid() and layer.providerType() == "postgres"
-                           and layer.wkbType() != QgsWkbTypes.NoGeometry
-                           and QgsDataSourceUri(layer.source()).schema() == "milieux"
-                           and QgsDataSourceUri(layer.source()).table() == "sites_zones"]
-                          if table == "sites_zones" else [self._object_layer(table)])
+                layers = (self._site_child_layers(table) if table in SITE_CHILDREN
+                          else [self._object_layer(table)])
                 if not layers or any(layer is None for layer in layers):
-                    raise ValueError(f"Couche milieux.{table} indisponible.")
+                    raise ValueError(f"Couche {TARGETS[table].schema}.{table} indisponible.")
                 for layer in layers:
                     for feature in layer.getFeatures():
                         if table == "ah_sections":
@@ -827,7 +854,7 @@ class CreationDialog(QDialog):
                                 self._location_details[table, object_id] = '\nRive ' + side
                         else:
                             object_id = str(feature["id"])
-                            name = feature["nom"] if "nom" in feature.fields().names() else None
+                            name = feature[TARGETS[table].name]
                             label = str(name) if name else "Objet sans nom"
                             if table in ("ah_stockage", "ah_ouvrage"):
                                 parent = str(feature['ah_id'])
@@ -835,9 +862,9 @@ class CreationDialog(QDialog):
                                 name = parents['ah'].get(parent, 'AH')
                                 kind = 'Stockage AH' if table == 'ah_stockage' else 'Ouvrage AH'
                                 label = f"{name} — {kind} : {label}"
-                            elif table == "sites_zones":
+                            elif table in SITE_CHILDREN:
                                 label = (f"{parents['sites_terrestres'].get(str(feature['site_terrestre_id']), 'Site')}"
-                                         f" — {label}")
+                                         f" — {TARGETS[table].label} : {label}")
                         family_objects.append((table, (object_id,), label,
                                                (feature.id(),), search_key(label), layer))
                 self.objects.extend(family_objects)
@@ -884,8 +911,6 @@ class CreationDialog(QDialog):
         active = {table for table, _ in self._associations()}
         seen = set()
         for table, object_ids, label, fids, search, layer in self.objects:
-            if table == "sites_zones" and self.geometry is not None and self.geometry.isMultipart():
-                continue
             if active and table not in active:
                 continue
             if query not in search:
@@ -963,7 +988,7 @@ class CreationDialog(QDialog):
                                     if str(family) in ('cours_eau', 'digues', 'ah_sections')
                                     and str(uid) not in allowed[str(family)]}
             # Intersections can also establish multiple plausible carriers.
-            # A site and its zones count as one carrier for spatial ambiguity.
+            # A site and its children count as one carrier for spatial ambiguity.
             carriers = set()
             for family, ids, _, fids, _, layer in self.objects:
                 for oid, fid in zip(ids, fids):
@@ -971,7 +996,7 @@ class CreationDialog(QDialog):
                         continue
                     feature = layer.getFeature(fid)
                     if feature.hasGeometry() and reference.intersects(feature.geometry()):
-                        carriers.add(("site", str(feature["site_terrestre_id"])) if family=="sites_zones"
+                        carriers.add(("site", str(feature["site_terrestre_id"])) if family in SITE_CHILDREN
                                      else ("site", oid) if family=="sites_terrestres" else (family, oid))
             conflict |= len(carriers)>1
             self.spatialWarning.setText(
@@ -1043,13 +1068,8 @@ class CreationDialog(QDialog):
     def _add_objects(self, *_):
         chosen = self.objectList.selectedItems()
         if chosen and (len(chosen) > 1 or self._associations()):
-            table = chosen[0].data(Qt.UserRole)[0]
-            labels = {"cours_eau": "cours d'eau", "digues": "digue", "ah_sections": "section AH",
-                      "ah_stockage": "stockage hydraulique", "ah_ouvrage": "ouvrage hydraulique",
-                      "sites_terrestres": "site terrestre", "sites_zones": "zone terrestre"}
-            article = "une seule" if table in ("sites_zones", "ah_sections") else "un seul"
             self.statusLabel.setText(
-                f"Une prestation ne peut être associée qu'à {article} {labels[table]}. "
+                "Une prestation doit avoir un seul rattachement patrimonial. "
                 "Retirez le rattachement actuel pour le remplacer.")
             return
         for item in chosen:
@@ -1164,7 +1184,7 @@ class CreationDialog(QDialog):
         option_by_id = {uid: option for option in hydro_options for uid in option.ids}
         hydro_links = {}
         object_labels = {(table, uid): label for table, ids, label, _, _, _ in self.objects
-                         if table in ('digues', 'ah_stockage', 'ah_ouvrage', 'ah_sections') for uid in ids}
+                         if table in ('digues', 'ah_stockage', 'ah_ouvrage', 'ah_sections', *SITE_CHILDREN) for uid in ids}
         for table, object_id, label in links:
             table, object_id = str(table), str(object_id)
             if table not in labels:
@@ -1237,19 +1257,7 @@ class CreationDialog(QDialog):
         table, _, _, fids, layer = selected[0].data(Qt.UserRole)
         if not layer:
             return
-        extent = None
-        for fid in fids:
-            feature = layer.getFeature(fid)
-            if feature.hasGeometry() and not feature.geometry().isNull():
-                bounds = feature.geometry().boundingBox()
-                if not bounds.isEmpty():
-                    if extent is None:
-                        extent = bounds
-                    else:
-                        extent.combineExtentWith(bounds)
-        if extent is not None:
-            self.iface.mapCanvas().setExtent(extent)
-            self.iface.mapCanvas().refresh()
+        self.iface.mapCanvas().zoomToFeatureIds(layer, list(fids))
 
     def _values(self):
         return {
@@ -1365,7 +1373,7 @@ class CreationDialog(QDialog):
             if self._assistant_draft:
                 from .assistant import ALLOWED_FAMILIES
                 if geometry_wkt is not None or any(table not in ALLOWED_FAMILIES for table, _ in associations):
-                    raise ValueError("Assistant IA exige un ouvrage, stockage ou zone terrestre avec une géométrie propre NULL.")
+                    raise ValueError("Assistant IA exige un ouvrage AH, stockage AH ou enfant de site avec une géométrie propre NULL.")
             self._check_spatial_attachment(associations, geometry_wkt)
             query = build_insert(values, associations, geometry_wkt)
             connection = self._connection()

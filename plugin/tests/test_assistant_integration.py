@@ -38,8 +38,6 @@ def main(live=False):
         sql(container, (ROOT / 'model/schema.sql').read_text(encoding='utf-8'))
         print('Schéma canonique installé dans PostGIS jetable', flush=True)
         sql(container, f"""
-INSERT INTO milieux.types_prestations(id,categorie_id,code,libelle)
-VALUES ('{uid(1)}','cf2572fb-9365-5ac5-bdf4-0d66581d9aaa','ASSISTANT_TEST','Débroussaillage');
 INSERT INTO milieux.prestataires(id,nom) VALUES ('{uid(2)}','Veolia');
 INSERT INTO milieux.techniciens(id,prenom,nom) VALUES ('{uid(3)}','Jean','Dubois'),('{uid(4)}','Pierre','Martin');
 INSERT INTO milieux.ah(id,nom) VALUES ('{uid(10)}','AH fictif Assistant');
@@ -49,8 +47,8 @@ INSERT INTO milieux.ah_stockage(id,ah_id,nom,geom) VALUES
 ('{uid(8)}','{uid(10)}','Stockage fictif Assistant',ST_GeomFromText('POLYGON((1700000 9200000,1700010 9200000,1700010 9200010,1700000 9200000))',3950));
 INSERT INTO milieux.sites_terrestres(id,nom,geom) VALUES
 ('{uid(11)}','Site fictif Assistant',ST_GeomFromText('MULTIPOLYGON(((1700000 9200000,1700010 9200000,1700010 9200010,1700000 9200000)))',3950));
-INSERT INTO milieux.sites_zones(id,site_terrestre_id,nom,geom) VALUES
-('{uid(9)}','{uid(11)}','Zone fictive Assistant',ST_GeomFromText('MULTIPOINT((1700001 9200001))',3950));
+INSERT INTO public.vegetation(famille_vegetation,id,site_terrestre_id,designation,geometry) VALUES
+('ARBRES','{uid(9)}','{uid(11)}','Zone fictive Assistant',ST_GeomFromText('MULTIPOINT((1700001 9200001))',3950));
 """)
         port = command('docker', 'port', container, '5432').stdout.strip().rsplit(':', 1)[-1]
         audits = ROOT / 'audits'
@@ -76,11 +74,11 @@ INSERT INTO milieux.sites_zones(id,site_terrestre_id,nom,geom) VALUES
             project = QgsProject.instance()
             uri = QgsDataSourceUri()
             uri.setConnection('127.0.0.1', port, 'postgres', 'postgres', '')
-            for table in ('prestations', 'ah_ouvrage', 'ah_stockage', 'sites_zones'):
+            for table in ('prestations', 'ah_ouvrage', 'ah_stockage'):
                 uri.setDataSource('milieux', table, 'geom', '', 'id')
                 uri.setSrid('3950')
                 uri.setWkbType({'prestations': QgsWkbTypes.Point, 'ah_ouvrage': QgsWkbTypes.LineString,
-                                'ah_stockage': QgsWkbTypes.Polygon, 'sites_zones': QgsWkbTypes.MultiPoint}[table])
+                                'ah_stockage': QgsWkbTypes.Polygon, 'vegetation': QgsWkbTypes.MultiPoint}[table])
                 layer = QgsVectorLayer(uri.uri(False), table, 'postgres')
                 assert layer.isValid(), table
                 project.addMapLayer(layer)
@@ -152,7 +150,7 @@ INSERT INTO milieux.sites_zones(id,site_terrestre_id,nom,geom) VALUES
             # Native reference loading and the standard save on all three families.
             for family, name, object_id in [('ah_ouvrage', 'Rivière du Buissons', uid(6)),
                                             ('ah_stockage', 'Stockage fictif Assistant', uid(8)),
-                                            ('sites_zones', 'Zone fictive Assistant', uid(9))]:
+                                            ('vegetation', 'Zone fictive Assistant', uid(9))]:
                 draft = engine.Draft()
                 draft.apply(proposal(**{**FULL, 'famille': family, 'patrimoine': name}),
                             user_message=COMPLETE_PHRASE)

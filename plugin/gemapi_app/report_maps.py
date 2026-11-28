@@ -5,6 +5,7 @@ import hashlib
 from time import perf_counter
 from urllib.request import urlopen
 from .perf import measure
+from .record import TARGETS
 
 from qgis.PyQt.QtGui import QColor
 from qgis.core import (
@@ -121,18 +122,14 @@ def background(kind):
 def location(record):
     """Keep the complete work geometry and show its site as map context."""
     references = record.get("reference_geometries") or []
-    zones = [reference for reference in references
-             if reference.get("direct", True) and reference.get("famille") == "sites_zones"]
-    own = record.get("own_wkt") if not zones else None
+    own = record.get("own_wkt")
     if own:
         references = [reference for reference in references
                       if reference.get("famille") == "sites_terrestres"]
     seen = set()
     result = [(own, "propre", "Géométrie propre")] if own else []
-    for reference in zones or references:
-        if not reference.get("direct", True) or reference.get("famille") not in (
-                "ah_stockage", "ah_ouvrage", "ah_sections", "cours_eau", "digues", "sites_zones",
-                "sites_terrestres"):
+    for reference in references:
+        if not reference.get("direct", True) or reference.get("famille") not in TARGETS:
             continue
         key = (reference.get("famille"), reference.get("objet_id"))
         if key in seen or not reference.get("wkt"):

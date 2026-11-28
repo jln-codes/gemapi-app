@@ -26,10 +26,23 @@ class NativeUx(unittest.TestCase):
         self.project.clear()
 
     def test_zone_reference_labels_preserve_every_uuid(self):
-        for env in ('demo','cabbalr'):
-            with self.subTest(env=env):
-                self.check_selection(env)
-                self.project.clear()
+        self.check_selection('cabbalr')
+
+    def test_demo_references_each_child_family(self):
+        root = project_nodes('demo')
+        sources = {n.findtext('id'): n for n in root.findall('./projectlayers/maplayer')}
+        relations = {r.get('id'):r for r in root.findall('./relations/relation')}
+        for layer in sources.values():
+            if layer.findtext('layername') not in ('prestations_fiches','prestations-points','prestations-lignes','prestations-polygones'):
+                continue
+            for fk,family in [('mobilier_id','mobilier'),('cheminement_id','cheminements'),('vegetation_id','vegetation')]:
+                widget = layer.find(f"./fieldConfiguration/field[@name='{fk}']/editWidget")
+                self.assertEqual(widget.get('type'), 'RelationReference')
+                relation = relations[widget.find(".//Option[@name='Relation']").get('value')]
+                target = sources[relation.get('referencedLayer')]
+                self.assertEqual(target.get('readOnly'), '1')
+                self.assertIn(f'"public"."{family}"', target.findtext('datasource'))
+                self.assertIn('site_terrestre_id IS NOT NULL', target.findtext('datasource'))
 
     def check_selection(self,env):
         root=project_nodes(env);nodes=root.findall('./projectlayers/maplayer')

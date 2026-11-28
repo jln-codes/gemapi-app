@@ -4,29 +4,36 @@ The statement contains every write in a single data-modifying WITH query.
 No SQL identifier comes from user input; values are quoted or validated.
 """
 
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 
-LINKS = {
-    "ah_sections": ("prestations", "ah_section_id"),
-    "ah_stockage": ("prestations", "ah_stockage_id"),
-    "ah_ouvrage": ("prestations", "ah_ouvrage_id"),
-    "cours_eau": ("prestations", "cours_eau_id"),
-    "digues": ("prestations", "digue_id"),
-    "sites_terrestres": ("prestations", "site_terrestre_id"),
-    "sites_zones": ("prestations", "site_zone_id"),
+@dataclass(frozen=True)
+class Target:
+    label: str
+    fk: str
+    schema: str = "milieux"
+    name: str = "nom"
+    geometry: str = "geom"
+
+
+TARGETS = {
+    "ah_sections": Target("Section AH", "ah_section_id"),
+    "ah_stockage": Target("Stockage AH", "ah_stockage_id"),
+    "ah_ouvrage": Target("Ouvrage AH", "ah_ouvrage_id"),
+    "cours_eau": Target("Cours d'eau", "cours_eau_id"),
+    "digues": Target("Digue", "digue_id"),
+    "sites_terrestres": Target("Site terrestre", "site_terrestre_id"),
+    "troncons": Target("Tronçon", "troncon_id", "public", "designation", "geometry"),
+    "mobilier": Target("Mobilier", "mobilier_id", "public", "designation", "geometry"),
+    "cheminements": Target("Cheminement", "cheminement_id", "public", "designation", "geometry"),
+    "vegetation": Target("Végétation", "vegetation_id", "public", "designation", "geometry"),
 }
-CATEGORIES = (
-    ("Sections AH", "ah_sections"),
-    ("Stockages AH", "ah_stockage"),
-    ("Ouvrages AH", "ah_ouvrage"),
-    ("Cours d'eau", "cours_eau"),
-    ("Digues", "digues"),
-    ("Sites terrestres", "sites_terrestres"),
-    ("Zones terrestres", "sites_zones"),
-)
+SITE_CHILDREN = ("mobilier", "cheminements", "vegetation")
+LINKS = {table: ("prestations", target.fk) for table, target in TARGETS.items()}
+CATEGORIES = tuple((target.label, table) for table, target in TARGETS.items())
 POSITIONS = (
     "Indéfini", "Berge", "Talus côté rivière / stockage",
     "Crête", "Talus côté terre",
@@ -85,17 +92,10 @@ def validate(values, associations, geometry_wkt=None):
     if len(families) > 1:
         raise ValueError("Une seule catégorie patrimoniale est autorisée par prestation.")
     family = next(iter(families))
-    if family in ("cours_eau", "digues", "ah_sections", "sites_terrestres") and not str(geometry_wkt or "").strip():
-        raise ValueError("La géométrie propre est obligatoire pour un cours d'eau, une digue, une section AH ou un site terrestre.")
-    if family == "sites_zones" and str(geometry_wkt or "").strip():
-        raise ValueError("Une prestation sur zone terrestre ne peut pas avoir de géométrie propre. "
-                         "Supprimez-la explicitement pour utiliser la géométrie de la zone.")
+    if family in ("cours_eau", "digues", "ah_sections", "troncons", "sites_terrestres") and not str(geometry_wkt or "").strip():
+        raise ValueError("La géométrie propre est obligatoire pour un cours d'eau, une digue, une section AH, un tronçon ou un site terrestre.")
     if len(normalized) > 1:
-        labels = {"cours_eau": "cours d'eau", "digues": "digue", "ah_sections": "section AH",
-                  "ah_stockage": "stockage hydraulique", "ah_ouvrage": "ouvrage hydraulique",
-                  "sites_terrestres": "site terrestre", "sites_zones": "zone terrestre"}
-        article = "une seule" if family in ("sites_zones", "ah_sections") else "un seul"
-        raise ValueError(f"Une prestation ne peut être associée qu'à {article} {labels[family]}.")
+        raise ValueError("Une prestation doit avoir un seul rattachement patrimonial.")
     if values["position"] != "Indéfini" and not families.intersection(("cours_eau", "digues", "ah_sections", "ah_ouvrage")):
         raise ValueError("Cette position nécessite un cours d'eau, une digue, une section AH ou un ouvrage hydraulique.")
     if values["rive"] != "Indéfinie" and not families.intersection(("cours_eau", "digues", "ah_sections", "ah_ouvrage")):

@@ -20,12 +20,12 @@ class ReportDataTests(unittest.TestCase):
     def test_zone_localisation_and_commune_use_effective_geometry(self):
         query = build_report_query({"communes":[ID1]}, include_geometry=True)
         self.assertIn("milieux.prestations_carte carto WHERE carto.id=p.id", query)
-        self.assertIn("CASE WHEN p.site_zone_id IS NULL THEN ST_AsText(p.geom) END",query)
-        self.assertIn("p.site_zone_id IS NULL AND p.geom IS NOT NULL",query)
+        self.assertIn("ST_AsText(p.geom)",query)
+        self.assertIn("p.geom IS NOT NULL",query)
         self.assertIn("milieux.prestations_carte",build_management_query({"communes":[ID1]}))
         point={"has_geometry":False,"reference_measures":None,"reference_geometries":[{
-            "famille":"sites_zones","direct":True,"wkt":"POINT(0 0)"}],"quantite":7,"unite":"arbres"}
-        self.assertIn("Géométrie ponctuelle de la zone",measure_lines(point))
+            "famille":"vegetation","direct":True,"wkt":"POINT(0 0)"}],"quantite":7,"unite":"arbres"}
+        self.assertIn("Géométrie ponctuelle du patrimoine",measure_lines(point))
         self.assertIn("Quantité déclarée : 7 arbres",measure_lines(point))
 
     def test_filters_and_select_only(self):
@@ -143,13 +143,13 @@ class ReportDataTests(unittest.TestCase):
 
     def test_current_patrimonial_families_and_parent_deduplication(self):
         self.assertEqual(set(REPORT_FILTERS) &
-                         {"ah_stockage", "ah_ouvrage", "sites_zones"}, set())
+                         {"ah_stockage", "ah_ouvrage", "vegetation"}, set())
         self.assertTrue({"cours_eau", "digues", "ah", "site_terrestre"}
                         <= set(REPORT_FILTERS))
         options = filter_option_queries(include_statuses=True, include_providers=True)
-        for family in ("ah_stockage", "ah_ouvrage", "cours_eau", "digues", "sites_zones"):
+        for family in ("ah_stockage", "ah_ouvrage", "cours_eau", "digues", "vegetation"):
             self.assertIn(family, options)
-            self.assertIn(f"milieux.{family}", options[family])
+            self.assertIn(f"{'public' if family == 'vegetation' else 'milieux'}.{family}", options[family])
             self.assertIn("milieux.prestations l",
                           build_report_query({family: [ID1]}))
         for parent, parent_kind in (("ah", "ah"), ("site_terrestre", "site_terrestre")):
@@ -204,18 +204,18 @@ class ReportDataTests(unittest.TestCase):
             ({"own_area": 375.2, "quantite": 2, "unite": "ha"},
              ["Surface cartographiée : 375,2 m²", "Quantité déclarée : 2 ha"]),
             ({"own_length": 209.4}, ["Longueur cartographiée : 209,4 m"]),
-            ({"parent_zone_area": 1250, "quantite": 7, "unite": "arbres"},
-             ["Surface de la zone (géométrie parente) : 1 250,0 m²",
+            ({"site_child_area": 1250, "quantite": 7, "unite": "arbres"},
+             ["Surface du patrimoine (géométrie parente) : 1 250,0 m²",
               "Quantité déclarée : 7 arbres"]),
-            ({"parent_zone_length": 209.45, "quantite": 2, "unite": "ha"},
-             ["Longueur de la zone (géométrie parente) : 209,4 m",
+            ({"site_child_length": 209.45, "quantite": 2, "unite": "ha"},
+             ["Longueur du patrimoine (géométrie parente) : 209,4 m",
               "Quantité déclarée : 2 ha"]),
             ({"has_geometry": False, "reference_geometries": [
-                {"famille": "sites_zones", "direct": True, "wkt": "MULTIPOINT((0 0))"}]},
-             ["Géométrie ponctuelle de la zone"]),
-            ({"own_area": 375.2, "parent_zone_area": 1250},
+                {"famille": "vegetation", "direct": True, "wkt": "MULTIPOINT((0 0))"}]},
+             ["Géométrie ponctuelle du patrimoine"]),
+            ({"own_area": 375.2, "site_child_area": 1250},
              ["Surface cartographiée : 375,2 m²",
-              "Surface de la zone (géométrie parente) : 1 250,0 m²"]),
+              "Surface du patrimoine (géométrie parente) : 1 250,0 m²"]),
         )
         for record, expected in cases:
             with self.subTest(record=record):
@@ -223,9 +223,9 @@ class ReportDataTests(unittest.TestCase):
         overlapping = [dict(own_length=209.4), dict(own_length=209.4)]
         self.assertEqual(own_totals(overlapping), (418.8, 0))
         query = build_report_query({})
-        self.assertIn("ST_Dimension(zone.geom)=1 THEN p.longueur_m", query)
-        self.assertIn("ST_Dimension(zone.geom)=2 THEN p.surface_m2", query)
-        self.assertIn("LEFT JOIN milieux.sites_zones zone ON zone.id=p.site_zone_id", query)
+        self.assertIn("p.origine_mesures='Patrimoine de rattachement' THEN p.longueur_m", query)
+        self.assertIn("p.origine_mesures='Patrimoine de rattachement' THEN p.surface_m2", query)
+        self.assertIn("JOIN public.vegetation o ON o.id = l.vegetation_id", query)
 
     def test_hierarchies_count_distinct_uuids_and_keep_start_year(self):
         first = dict(id=ID1, date_debut="2025-12-15", date_fin="2027-02-01",
